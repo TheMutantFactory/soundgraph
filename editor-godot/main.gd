@@ -25,10 +25,37 @@ const MAX_PLUGIN_STATE_CHARS := 4 * 1024 * 1024
 
 const Scope := preload("res://scope.gd")
 const PatchGraph := preload("res://patch_graph.gd")
+## The Add Node browser.
+const NodeBrowser := preload("res://node_browser.gd")
+## The generated faceplate finishes, so a panel in the graph is grained like the same
+## panel on the rack.
+const Faceplate := preload("res://faceplate.gd")
+## The edges, the grain and the screws — everything about a faceplate that a stylebox
+## cannot draw.
+const PanelHardware := preload("res://panel_hardware.gd")
+
+## A panel's own geometry, which is not the editor's.
+##
+## The editor's node radius is 3 and its padding is set for a dense information view. A
+## faceplate is an object with a thickness: too little rounding and it is a sticker, too
+## much and it is a bubble. Six, and room around the lettering, is what the reference
+## boards are drawn at.
+const PANEL_RADIUS := 6
+const PANEL_PADDING := 15
 
 ## How many parameter cells share a line in a graph node.
+## How many knobs sit on a line before the next one starts.
+##
+## Two. Three was tried, for the Keyboard: three parameters and four outputs put the
+## controls in the top half and left the bottom half of a very large orange rectangle
+## holding four right-aligned words. Laying them three across did compact the rows — one
+## tall row instead of two — and made the module 678px wide doing it, wider than the
+## whole column pitch, so it ran straight through the panel beside it. Height was never
+## the problem. This module is wide because "0.000 semitones" is wide, and no repacking
+## of the same cells fixes that.
 const PARAMETERS_PER_LINE := 2
 const Layout := preload("res://layout.gd")
+const StructuralGeometry := preload("res://structural_geometry.gd")
 
 ## Layout grid. Everything auto-place produces lands on this, so a hand-aligned patch and
 ## a generated one look like they came from the same hand.
@@ -190,6 +217,30 @@ var graph_edit: GraphEdit
 ## The container turned over: the file's face, full size, in the Graph tab's slot.
 ## Same class as the side panel's face — one face, two mountings.
 var big_face: PatchFace
+
+## One patch, multiple representations. The view switch changes the lens, not the
+## object being worked on — that sentence is the whole architecture, and this enum is
+## its state. Rack, Graph, Schematic and Face are four drawings of the same patch;
+## everything else (Sandbox, Outline) is a different workspace, not a different lens.
+enum PatchView { RACK, GRAPH, SCHEMATIC, FACE }
+var patch_view: int = PatchView.GRAPH
+## Face's interaction state. Edit is a mode of Face, not a fifth view: it decides how
+## you touch the faceplates, not which representation you are looking at.
+var face_edit_mode := false
+## The semantic selection, shared by every lens. A view highlights this module in its
+## own vocabulary; none of them owns it.
+var selected_module := ""
+var rack_scroll: ScrollContainer
+var container_of_views: Control
+var view_switch: PanelContainer
+## The segments inside the switches. The track is a frame around them; anything that
+## wants the choices themselves wants these.
+var view_segments: HBoxContainer
+var face_mode_segments: HBoxContainer
+var lens_bar: HBoxContainer
+var face_mode_switch: PanelContainer
+var _view_buttons: Dictionary = {}
+var _face_mode_buttons: Dictionary = {}
 ## The third way of looking at a patch: not where somebody dragged things, and not the
 ## instrument, but the graph itself on a grid nobody has moved. See schematic.gd.
 var schematic: Schematic
@@ -284,8 +335,13 @@ var side_panel_open := true
 
 var split: HSplitContainer
 var side_panel: VBoxContainer
-var view_zoom_slider: HSlider
 var view_zoom_readout: Label
+## Whether the document is saved, said in a dot and a word.
+var save_dot: TextureRect
+var save_word: Label
+var view_zoom_out: Button
+var view_zoom_in: Button
+var view_fit_button: Button
 var _zoom_slider_syncing := false
 var scope_probe: ProbeScope
 var side_panel_body: VBoxContainer
@@ -322,6 +378,11 @@ var keyboard_mode := "full"
 var document_label: RichTextLabel
 var document_name := "untitled"
 var diagnostics_list: VBoxContainer
+## Node id -> NodeState.Health, for the nodes the last validation had something to say
+## about. Absent means well, which is the overwhelmingly normal case and the reason this
+## is a sparse dictionary rather than a field on every node.
+var _node_health := {}
+
 ## Round-robin state for the signal glow; see _update_port_levels().
 var _level_targets: Array = []
 var _level_cursor := 0
@@ -329,6 +390,8 @@ var _level_cursor := 0
 var health_label: Label
 var diagnostics_heading: Label
 var search_popup: PopupPanel
+## The Add Node browser. Its own surface, like the rack and the schematic.
+var node_browser: NodeBrowser
 var search_field: LineEdit
 var search_results: VBoxContainer
 var search_hint: Label
@@ -549,6 +612,33 @@ func _apply_theme() -> void:
 			Design.RADIUS_BUTTON, true))
 	Design.set_box(editor_theme, "panel", "PopupMenu",
 		Design.padded_panel(Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_S))
+	# A labelled separator is how a menu names a group of its items, and Godot draws it
+	# as a rule, the word, and another rule — which turns every group in a cascading
+	# menu into a fieldset from a 1998 web form. The word is kept and the rules are
+	# taken off; the plain separator between groups keeps its own line, which is the one
+	# that was carrying the hierarchy all along.
+	Design.set_box(editor_theme, "labeled_separator_left", "PopupMenu",
+		StyleBoxEmpty.new())
+	Design.set_box(editor_theme, "labeled_separator_right", "PopupMenu",
+		StyleBoxEmpty.new())
+	# And it reads as a label rather than as an unavailable command: a clear step above
+	# the disabled grey, a clear step under the ink of the items it names.
+	Design.set_colour(editor_theme, "font_separator_color", "PopupMenu", Design.INK_SECOND)
+	# The row under the pointer, and the row whose submenu is open, are the same row as
+	# far as a menu is concerned — and Godot paints both in a warm grey that belongs to
+	# no palette here. It is the editor's own raised surface now, which is the same cool
+	# charcoal a hovered row wears everywhere else in the program.
+	var menu_hover := StyleBoxFlat.new()
+	menu_hover.bg_color = Design.SURFACES[Design.Surface.ACTIVE]
+	menu_hover.set_corner_radius_all(Design.RADIUS_BUTTON)
+	Design.set_box(editor_theme, "hover", "PopupMenu", menu_hover)
+	# And the mint goes on the mark that says a setting is on, rather than across the
+	# row that happens to be under the pointer. Traversal is a surface; state is a
+	# colour; a row can be both at once and has to be able to say so.
+	editor_theme.set_icon("radio_checked", "PopupMenu",
+		Icons.get_icon(Icons.Kind.DOT, Design.scale(16), Design.ACCENT))
+	editor_theme.set_icon("checked", "PopupMenu",
+		Icons.get_icon(Icons.Kind.TICK, Design.scale(16), Design.ACCENT))
 
 	# ---- nodes ----------------------------------------------------------------------
 	# A node is one level above the canvas and its header one above that, so the header
@@ -679,7 +769,11 @@ func _build_ui() -> void:
 	_scan_examples()
 	toolbar = EditorToolbar.new(_examples, _build_description())
 	toolbar.is_muted = func() -> bool: return muted
-	toolbar.add_node_requested.connect(_open_search)
+	# Add node opens the browser; Ctrl+Space still opens the search palette. The browser
+	# is a shell until its own steps fill it, and retiring a working path in favour of a
+	# scaffold would make the editor worse in exchange for a screenshot. See
+	# docs/add-node-browser.md — the palette goes when the browser can do its job.
+	toolbar.add_node_requested.connect(_open_node_browser)
 	toolbar.feedback_requested.connect(_open_feedback)
 	toolbar.undo_requested.connect(_undo)
 	toolbar.redo_requested.connect(_redo)
@@ -692,7 +786,13 @@ func _build_ui() -> void:
 		elif id == 1:
 			_arrange_selection()
 		elif id == 2:
-			_collapse_selection())
+			_collapse_selection()
+		elif id == 3:
+			_legalize_layout()
+		elif id == 4:
+			_tidy_flow()
+		elif id == 5:
+			_tidy_routes())
 	toolbar.make_module_requested.connect(func() -> void: _begin_module_region())
 	toolbar.mute_toggled.connect(func() -> void:
 		if master_mute != null:
@@ -702,6 +802,7 @@ func _build_ui() -> void:
 	# The names the rest of this file and the tests already speak.
 	toolbar_menu_button = toolbar.toolbar_menu_button
 	toolbar_menu_popup = toolbar.toolbar_menu_popup
+	_sync_view_menu()
 	toolbar_qr = toolbar.toolbar_qr
 	transport_dot = toolbar.transport_dot
 	message_label = toolbar.message_label
@@ -742,7 +843,12 @@ func _build_ui() -> void:
 	# Thinner than the default. A cable is a relationship between two nodes, and at 4px
 	# it was drawing more attention than either of them; the path highlight is what
 	# makes a cable loud, and that only works if the resting state is quiet.
-	graph_edit.connection_lines_thickness = 2.5
+	# Zero: the CordLayer draws every cable as a cord along the same routes, and the
+	# native line cannot be layered under it — GraphEdit's internal connection layer
+	# renders after regular children, so any native width rides on top of the cord as
+	# a tramline stripe. The routes, the picking and the waypoints all still work;
+	# only GraphEdit's own drawing stands down.
+	graph_edit.connection_lines_thickness = 0.0
 	graph_edit.connection_lines_antialiased = true
 	# The minimap was a flat grey rectangle sitting over the canvas with no border and
 	# no relationship to anything else on screen — it read as a panel that had failed
@@ -767,22 +873,16 @@ func _build_ui() -> void:
 	# decides how much of a node is drawn, the number is genuinely worth reading: it
 	# is the difference between "the parameters have gone" and "the parameters have
 	# gone because I am at 40%".
-	graph_edit.show_zoom_label = true
+	# The canvas's own zoom controls are off: the strip beside the tabs says the same
+	# number in the same vocabulary, and two of anything is one of them being ignored.
+	graph_edit.show_zoom_label = false
+	graph_edit.show_zoom_buttons = false
 	# Face edit, beside the zoom controls it shares a bar with: a mode, so a toggle,
 	# and it lives on the graph because the graph is where the pointing happens.
 	# Face edit and Schematic used to live here, beside the zoom cluster. They are on the
 	# case band now, next to Face view: all three answer "how am I looking at this
 	# patch", and two of them above the canvas with the third on the case meant the set
 	# never read as a set. See _case_chip_rects in patch_graph.gd.
-	# Fit, beside the zoom controls: framing is a camera move, so it lives with the
-	# camera. It spent time in the toolbar and before that in the Arrange menu; this
-	# strip is the first home where its neighbours are also about looking.
-	var fit_button := Button.new()
-	fit_button.text = "Fit"
-	fit_button.tooltip_text = "Zoom and scroll so the whole patch is visible, clear of " \
-		+ "the minimap and the zoom controls."
-	fit_button.pressed.connect(func() -> void: graph_edit.fit_graph())
-	graph_edit.get_menu_hbox().add_child(_defocus(fit_button))
 	graph_edit.face_cell_toggled.connect(_on_face_cell_toggled)
 	graph_edit.face_port_toggled.connect(_on_face_port_toggled)
 	# And one button fewer. Arrange is in the toolbar menu now, so the icon beside the
@@ -825,16 +925,9 @@ func _build_ui() -> void:
 	# The container's own controls: its band switches which way you are looking at it,
 	# and dragging that band moves everything mounted in it.
 	graph_edit.case_move_started.connect(func() -> void: _begin_edit())
-	# One door, both ways. It used to only ever turn the case face-up, with a floating
-	# WIRES button in the corner as the way back; the button is gone and the chip does
-	# both, labelled with the side you will get.
-	graph_edit.case_flipped.connect(
-		func() -> void: await _flip_container(not graph_edit.face_up))
-	graph_edit.case_face_edit_toggled.connect(
-		func() -> void: _set_face_edit(not graph_edit.face_edit))
-	graph_edit.case_schematic_toggled.connect(
-		func() -> void: await _show_schematic(not schematic_up))
-	graph_edit.case_graph_requested.connect(func() -> void: await _show_graph())
+	# The case chips are gone: view switching lives in one stationary segmented control
+	# above the canvas, so changing lenses never means finding a different door in each
+	# room. See _set_patch_view.
 	graph_edit.group_flip_toggled.connect(func(module_name: String) -> void:
 		if flipped_modules.has(module_name):
 			flipped_modules.erase(module_name)
@@ -919,22 +1012,108 @@ func _build_ui() -> void:
 	crumb_row.offset_right = -float(Design.scale(Design.SPACE_M))
 	crumb_row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	crumb_row.add_theme_constant_override("separation", Design.SPACE_S)
-	# The zoom, as furniture: Ctrl+wheel exists, but a gesture nobody is told about
-	# is a feature that does not exist, and the strip beside the tabs is where the
-	# eye already is when choosing how to look. One slider serves whichever view is
-	# in front — the graph and the rack each keep their own value and range.
-	view_zoom_slider = HSlider.new()
-	view_zoom_slider.custom_minimum_size = Vector2(Design.scale(110), 0)
-	view_zoom_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	view_zoom_slider.step = 0.01
-	view_zoom_slider.visible = false
-	view_zoom_slider.tooltip_text = "How close you stand to this view. The graph and " \
-		+ "the rack each remember their own distance."
-	view_zoom_slider.value_changed.connect(_on_view_zoom_slider)
-	# Not through _defocus: its 44px hit floor would make this the tallest thing in
-	# a strip of tabs and shove the row over the canvas. The strip is the target.
-	view_zoom_slider.focus_mode = Control.FOCUS_NONE
-	crumb_row.add_child(view_zoom_slider)
+	# The lens switch: one segmented control, one place, every view. Navigation between
+	# representations rather than a row of actions, so it is quiet — the selected
+	# segment carries weight and an accent underline, the rest are muted text. Two cues
+	# beyond colour (weight and the underline), so the selection survives a monochrome
+	# screen and a colour-blind reader.
+	# One control rather than four words: a track holding four segments, the chosen one
+	# filled. Underlined text was restrained to the point of invisible — four labels in
+	# a row over a canvas, one of them slightly brighter, which is a caption and not a
+	# switch. The track is what says these four are one choice.
+	view_switch = PanelContainer.new()
+	var view_track := Design.padded_panel(Design.Surface.NODE, 2, 2,
+		Design.RADIUS_BUTTON)
+	view_track.border_color = Design.BORDERS[Design.Surface.RAISED]
+	view_switch.add_theme_stylebox_override("panel", view_track)
+	view_segments = HBoxContainer.new()
+	view_segments.add_theme_constant_override("separation", 0)
+	view_switch.add_child(view_segments)
+	var lens_group := ButtonGroup.new()
+	var lens_names := {PatchView.RACK: "Rack", PatchView.GRAPH: "Graph",
+		PatchView.SCHEMATIC: "Schematic", PatchView.FACE: "Face"}
+	for lens in [PatchView.RACK, PatchView.GRAPH, PatchView.SCHEMATIC, PatchView.FACE]:
+		var segment := Button.new()
+		segment.text = lens_names[lens]
+		segment.toggle_mode = true
+		segment.button_group = lens_group
+		# Not flat. A flat Button draws no stylebox at all, so the chosen segment's tile
+		# was being made, handed over, and thrown away — the switch looked exactly like
+		# the row of words it was replacing.
+		segment.flat = false
+		segment.tooltip_text = "%s — %d" % [lens_names[lens], int(lens) + 1] \
+			if lens != PatchView.RACK else "Rack — 1"
+		segment.add_theme_font_size_override("font_size",
+			Design.type(Design.SIZE_CONTROL))
+		segment.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var chosen := int(lens)
+		segment.pressed.connect(func() -> void: _set_patch_view(chosen))
+		view_segments.add_child(segment)
+		_view_buttons[lens] = segment
+	# Face's own mode, visibly subordinate: smaller, quieter, and only present while
+	# Face is the lens. View and Edit are how you touch the faceplates, not where you
+	# are.
+	face_mode_switch = PanelContainer.new()
+	var mode_track := Design.padded_panel(Design.Surface.NODE, 2, 2,
+		Design.RADIUS_BUTTON)
+	mode_track.border_color = Design.BORDERS[Design.Surface.RAISED]
+	face_mode_switch.add_theme_stylebox_override("panel", mode_track)
+	face_mode_segments = HBoxContainer.new()
+	face_mode_segments.add_theme_constant_override("separation", 0)
+	face_mode_switch.add_child(face_mode_segments)
+	face_mode_switch.visible = false
+	var mode_group := ButtonGroup.new()
+	for mode in ["View", "Edit"]:
+		var mode_button := Button.new()
+		mode_button.text = mode
+		mode_button.toggle_mode = true
+		mode_button.button_group = mode_group
+		mode_button.flat = false
+		mode_button.add_theme_font_size_override("font_size",
+			Design.type(Design.SIZE_SECONDARY))
+		mode_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var wants_edit: bool = mode == "Edit"
+		mode_button.pressed.connect(func() -> void: _set_face_mode(wants_edit))
+		face_mode_segments.add_child(mode_button)
+		_face_mode_buttons[mode] = mode_button
+	# Its own bar, centred over the canvas inside the Patch tab — not in the breadcrumb
+	# strip, which it overflowed straight across the workspace tabs the first time. The
+	# tab owns it, so it exists exactly when the Patch workspace does and sits in the
+	# same pixel through every lens change, which is the whole point of it.
+	lens_bar = HBoxContainer.new()
+	# Right-aligned: the canvas's own zoom cluster owns the top-left corner in every
+	# graph-camera lens, and a centred bar ran its first segment straight into it. The
+	# top-right corner belongs to nobody, in all four lenses.
+	lens_bar.alignment = BoxContainer.ALIGNMENT_END
+	lens_bar.anchor_left = 0.0
+	lens_bar.anchor_right = 1.0
+	lens_bar.anchor_top = 0.0
+	lens_bar.anchor_bottom = 0.0
+	lens_bar.offset_top = float(Design.scale(Design.SPACE_S))
+	lens_bar.offset_right = -float(Design.scale(Design.SPACE_M))
+	lens_bar.offset_bottom = float(Design.scale(44))
+	lens_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+	lens_bar.add_theme_constant_override("separation", Design.scale(Design.SPACE_S))
+	lens_bar.add_child(view_switch)
+	lens_bar.add_child(face_mode_switch)
+	# Dressed once, here. The switch only ever styled itself when a lens changed or a
+	# tab did, so on the way in it wore the theme's plain button box on all four
+	# segments and said nothing about which one you were looking through — which went
+	# unnoticed for as long as the chosen segment was only a slightly brighter word.
+	_sync_view_switch.call_deferred()
+	# The zoom, as furniture: Ctrl+wheel exists, but a gesture nobody is told about is a
+	# feature that does not exist, and the strip beside the tabs is where the eye already
+	# is when choosing how to look. One cluster serves whichever view is in front — the
+	# graph and the rack each keep their own value and range.
+	#
+	# It was two interfaces over one number. A slider and a readout sat here while the
+	# canvas carried GraphEdit's own minus, percentage, plus and a Fit — the same zoom,
+	# said twice, in two vocabularies, one of which only worked in the graph. The
+	# canvas's zoom controls are off now and this is the whole of it: minus, the number,
+	# plus, and the way to see everything. The grid toggle stays where it was, being
+	# about the grid.
+	view_zoom_out = _zoom_button("−", "Zoom out", -1)
+	crumb_row.add_child(view_zoom_out)
 	view_zoom_readout = Label.new()
 	view_zoom_readout.add_theme_font_override("font", Design.numeric_font())
 	view_zoom_readout.add_theme_font_size_override("font_size",
@@ -942,22 +1121,57 @@ func _build_ui() -> void:
 	view_zoom_readout.add_theme_color_override("font_color", Design.INK_SECOND)
 	view_zoom_readout.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	view_zoom_readout.custom_minimum_size.x = Design.scale(44)
+	view_zoom_readout.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	view_zoom_readout.visible = false
+	view_zoom_readout.tooltip_text = "How close you stand to this view. The graph and " \
+		+ "the rack each remember their own distance."
 	crumb_row.add_child(view_zoom_readout)
+	view_zoom_in = _zoom_button("+", "Zoom in", 1)
+	crumb_row.add_child(view_zoom_in)
+	view_fit_button = _zoom_button("Fit", "Zoom and scroll so the whole patch is "
+		+ "visible, clear of the minimap and the zoom controls.", 0)
+	crumb_row.add_child(view_fit_button)
 	crumb_row.add_child(document_label)
+	# Document, then a rule, then the zoom: two groups in one row, and the rule is what
+	# says they are two. The name and its state belong together and the camera controls
+	# belong to the view, not to the file.
+	save_dot = TextureRect.new()
+	save_dot.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	save_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	crumb_row.add_child(save_dot)
+	save_word = Label.new()
+	save_word.add_theme_font_size_override("font_size",
+		Design.type(Design.SIZE_SECONDARY))
+	save_word.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	crumb_row.add_child(save_word)
+	var crumb_rule := VSeparator.new()
+	crumb_rule.add_theme_constant_override("separation", Design.SPACE_M)
+	crumb_row.add_child(crumb_rule)
+
 	climb_button = Button.new()
 	climb_button.visible = false
 	climb_button.add_theme_font_size_override("font_size",
 		Design.type(Design.SIZE_SECONDARY))
 	climb_button.pressed.connect(_climb_up)
 	crumb_row.add_child(_defocus(climb_button))
+	# The row's order, said once and here rather than implied by the order the widgets
+	# happened to be built in. Left to right it answers the questions in the order they
+	# are asked: what am I looking at, is it safe, and how close am I standing.
+	var crumb_order: Array = [climb_button, document_label, save_dot,
+		save_word, crumb_rule, view_zoom_out, view_zoom_readout, view_zoom_in,
+		view_fit_button]
+	for index in crumb_order.size():
+		crumb_row.move_child(crumb_order[index] as Node, index)
 	views.get_tab_bar().add_child(crumb_row)
 	# One tab, one canvas, both sides of the container. The graph already owns zoom,
 	# pan and the grid, so the face is a tenant on that canvas rather than a rival
 	# view: flipping hides the wiring and mounts the face at the case's own spot, and
 	# every camera gesture keeps working because it is the same camera.
 	var container_tab := Control.new()
-	container_tab.name = "Graph"
+	# Patch, not Graph: this tab holds every representation of the patch — graph, rack,
+	# schematic, face — and the segmented switch chooses among them. Sandbox and Outline
+	# stay tabs, because they are different workspaces, not different lenses.
+	container_tab.name = "Patch"
 	# Clipped to the work area.
 	#
 	# GraphEdit clips its own nodes, but the face and the schematic are tenants of this
@@ -1021,9 +1235,10 @@ func _build_ui() -> void:
 	graph_edit.add_child(big_face)
 
 	# The way back, floating over the canvas while the face is up.
+	container_of_views = container_tab
 	views.add_child(container_tab)
 
-	var rack_scroll := ScrollContainer.new()
+	rack_scroll = ScrollContainer.new()
 	rack_scroll.name = "Rack"
 	rack_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	rack = Rack.new()
@@ -1053,7 +1268,13 @@ func _build_ui() -> void:
 	rack_scroll.add_child(rack_holder)
 	rack_holder.add_child(rack)
 	rack_holder.resized.connect(rack._relayout)
-	views.add_child(rack_scroll)
+	# Inside the Patch tab, not a tab of its own. The rack is a representation of the
+	# patch, and putting it beside Sandbox made two different kinds of thing look like
+	# peers. It sits over the canvas and shows when the switch says RACK.
+	rack_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	rack_scroll.visible = false
+	container_tab.add_child(rack_scroll)
+	container_tab.add_child(lens_bar)
 
 	# A third view, and a different kind of answer: not how a patch looks, but what it is
 	# for. Editing the jump patch in the Graph tab and hearing it change here, without a
@@ -1093,7 +1314,9 @@ func _build_ui() -> void:
 	# The rack lays out against the width it is given, so it has to be told when the tab
 	# is first shown — before that it has no size to flow modules into.
 	views.tab_changed.connect(func(_index: int) -> void:
-		rack.rebuild()
+		if patch_view == PatchView.RACK:
+			rack.rebuild()
+		_sync_view_switch()
 		_refresh_view_zoom_slider()
 		if sandbox != null and sandbox.is_visible_in_tree():
 			sandbox.ensure_sounds_loaded())
@@ -1135,6 +1358,11 @@ func _build_ui() -> void:
 	_fit_keyboard_dock.call_deferred()
 	_refresh_keyboard_range()
 	_build_search_popup()
+	node_browser = NodeBrowser.new()
+	node_browser.ranker = Callable(engine, "search_nodes")
+	node_browser.facts = _browser_facts
+	node_browser.item_activated.connect(_from_browser)
+	add_child(node_browser)
 
 	file_dialog = FileDialog.new()
 	file_dialog.access = FileDialog.ACCESS_FILESYSTEM
@@ -1213,34 +1441,323 @@ func _fit_toolbar(width: float = -1.0) -> void:
 
 
 ## Which of the zoomable views is in front, or "" when the front view has no zoom.
+## Changes the lens. The patch stays where it is; every path in here is "put away what
+## the old lens mounted, bring out what the new one draws", and the switch, the camera
+## and the selection all follow.
+##
+## Cameras are per-view and semantic context is shared: the graph, schematic and face
+## share one canvas camera by construction, the rack keeps its own zoom and scroll, and
+## none of them is forced into another's coordinates. What travels is the selection —
+## _reveal_selected asks the destination view to show the same module its own way.
+func _set_patch_view(view: int) -> void:
+	show_view("Patch")
+	patch_view = view
+	_sync_view_switch()
+	# A short dissolve — same patch, different representation. Content-only and brief,
+	# so rapid switching never waits on a spectacle.
+	if container_of_views != null:
+		container_of_views.modulate.a = 0.55
+		create_tween().tween_property(container_of_views, "modulate:a", 1.0, 0.12)
+	match view:
+		PatchView.RACK:
+			if graph_edit.face_edit:
+				await _set_face_edit(false)
+			await _show_graph()
+			graph_edit.visible = false
+			rack_scroll.visible = true
+			rack.rebuild()
+		PatchView.GRAPH:
+			rack_scroll.visible = false
+			graph_edit.visible = true
+			if graph_edit.face_edit:
+				await _set_face_edit(false)
+			await _show_graph()
+		PatchView.SCHEMATIC:
+			rack_scroll.visible = false
+			graph_edit.visible = true
+			await _show_schematic(true)
+		PatchView.FACE:
+			rack_scroll.visible = false
+			graph_edit.visible = true
+			if face_edit_mode:
+				await _show_graph()
+				await _set_face_edit(true)
+			else:
+				if graph_edit.face_edit:
+					await _set_face_edit(false)
+				await _flip_container(true)
+	_reveal_selected()
+	_refresh_view_zoom_slider()
+
+
+## Face's interaction state. Edit dresses the faceplates by clicking the controls on
+## the wiring — the fitting room — and View mounts the finished face. Choosing either
+## takes you to Face; they are its modes, not places of their own.
+func _set_face_mode(edit: bool) -> void:
+	face_edit_mode = edit
+	await _set_patch_view(PatchView.FACE)
+
+
+## The switch always tells the truth about the lens, whoever changed it.
+func _sync_view_switch() -> void:
+	var on_patch: bool = views != null \
+		and views.get_tab_title(views.current_tab) == "Patch"
+	if view_switch != null:
+		view_switch.visible = on_patch
+		for lens: int in _view_buttons:
+			var segment: Button = _view_buttons[lens]
+			var selected: bool = int(lens) == patch_view
+			segment.set_pressed_no_signal(selected)
+			_dress_segment(segment, selected)
+	if face_mode_switch != null:
+		face_mode_switch.visible = on_patch and patch_view == PatchView.FACE
+		for mode in _face_mode_buttons:
+			var mode_button: Button = _face_mode_buttons[mode]
+			var chosen: bool = (mode == "Edit") == face_edit_mode
+			mode_button.set_pressed_no_signal(chosen)
+			_dress_segment(mode_button, chosen)
+
+
+## The canonical node anatomy: header, body, perimeter, control region.
+##
+## Four parts and one idea — the node is an object lying on the canvas, and the eye
+## should find canvas, then body, then header, in that order, without any of them being
+## a card floating over the others. The three surfaces are the application's own, one
+## step apart each: canvas 0f1318, body 1b212a, header 252d38 on Lab, which is about five
+## points of luminance between neighbours.
+##
+## What it is not: a painted faceplate. The rack draws modules as hardware and that is
+## right there; the graph is a diagram of the same patch, and a diagram made of
+## photographs of panels is two languages in one window. Ports keep their sockets — a
+## cable has to look plugged into something — and everything else here is flat.
+##
+## The header is an identity region rather than a strip behind a word: it has a height of
+## its own, the name at the node-title size, and a hairline under it that says where it
+## stops. The body's padding is the control region, one figure on each axis, so two nodes
+## with different contents still line their contents up in the same place.
+func _dress_anatomy(widget: GraphNode, lit: bool, health: int) -> void:
+	var edge: Color = NodeState.perimeter(false, lit)
+
+	var head := Design.padded_panel(Design.Surface.RAISED, ANATOMY_GUTTER,
+		Design.SPACE_XS, Design.RADIUS_NODE)
+	head.bg_color = NodeState.header(false, lit, health)
+	head.corner_radius_bottom_left = 0
+	head.corner_radius_bottom_right = 0
+	head.border_color = edge
+	# The one rule inside the node, and it is the join: without it the header and the
+	# body are two greys meeting, which reads as a gradient rather than as two parts.
+	head.border_width_bottom = 1
+	head.border_color = edge
+	widget.add_theme_stylebox_override("titlebar", head)
+
+	var body := Design.padded_panel(Design.Surface.NODE, NodeGrid.INSET_X,
+		NodeGrid.INSET_TOP, Design.RADIUS_NODE)
+	# Top and bottom differ, so they are set rather than passed: the space under the
+	# header's rule and the space above the body's foot are two measurements that happen
+	# to be equal today and are not the same thing.
+	body.content_margin_top = Design.scale(NodeGrid.INSET_TOP)
+	body.content_margin_bottom = Design.scale(NodeGrid.INSET_BOTTOM)
+	body.corner_radius_top_left = 0
+	body.corner_radius_top_right = 0
+	body.border_width_top = 0
+	body.border_color = edge
+	body.bg_color = NodeState.body(false, lit)
+	widget.add_theme_stylebox_override("panel", body)
+	# One gap between rows, from the grid rather than from the editor's general spacing.
+	widget.add_theme_constant_override("separation", NodeGrid.row_gap())
+
+	# Selection, on the same anatomy: a continuous mint perimeter at twice the weight,
+	# and one step of lift under it. Two cues, one of which is not colour, because the
+	# node is already full of mint — a boundary is continuous and the marks inside it
+	# are not, and that is what the eye is actually separating.
+	#
+	# Health composes rather than replaces. A selected broken node is a lifted amber
+	# header inside a mint perimeter and both facts survive, which is the whole reason
+	# the two live on different parts of the node.
+	var chosen := NodeState.perimeter(true, lit)
+	var head_lit := head.duplicate() as StyleBoxFlat
+	head_lit.bg_color = NodeState.header(true, lit, health)
+	head_lit.set_border_width_all(NodeState.SELECTION_EDGE)
+	head_lit.border_width_bottom = 1
+	head_lit.border_color = chosen
+	widget.add_theme_stylebox_override("titlebar_selected", head_lit)
+	var body_lit := body.duplicate() as StyleBoxFlat
+	body_lit.bg_color = NodeState.body(true, lit)
+	body_lit.set_border_width_all(NodeState.SELECTION_EDGE)
+	body_lit.border_width_top = 0
+	body_lit.border_color = chosen
+	widget.add_theme_stylebox_override("panel_selected", body_lit)
+
+	# The header's own height, so a node with a long name and a node with a short one
+	# still have the same identity region — and so the region is a region rather than
+	# whatever the Label happened to need.
+	var bar := widget.get_titlebar_hbox()
+	if bar != null:
+		bar.custom_minimum_size.y = Design.scale(ANATOMY_HEADER)
+		bar.add_theme_constant_override("separation", Design.scale(Design.SPACE_S))
+		# The identity glyph, in a cell that is reserved whether or not the type has a
+		# glyph yet: every title on the pass starts at the same x, so rolling the rest of
+		# the library through it cannot make the graph jitter. Secondary ink — the mark
+		# is subordinate to the name, the same relationship the menu's doors have.
+		var mark: TextureRect = widget.get_meta("glyph") if widget.has_meta("glyph") 			else null
+		if mark == null:
+			mark = TextureRect.new()
+			mark.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+			mark.custom_minimum_size = Vector2(Design.scale(ANATOMY_GLYPH),
+				Design.scale(ANATOMY_GLYPH))
+			mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			bar.add_child(mark)
+			bar.move_child(mark, 0)
+			widget.set_meta("glyph", mark)
+		var kind := NodeIdentity.glyph_of(str(widget.get_meta("type", "")),
+			_identity_variant(widget))
+		# Step 11's activity prototype, on the one node whose activity has stages. The
+		# whole contour stays in the ordinary ink and the live segment is picked out in
+		# the accent — identity first, state on top of it, never state instead of it.
+		var stage := int(widget.get_meta("active_stage", -1))
+		if kind == Icons.Kind.ENVELOPE and stage >= 0:
+			mark.texture = Icons.envelope_stage(Design.scale(ANATOMY_GLYPH),
+				Design.INK_SECOND, Design.ACCENT, stage)
+		else:
+			mark.texture = Icons.get_icon(kind, Design.scale(ANATOMY_GLYPH),
+				Design.INK_SECOND) if kind >= 0 else null
+
+		# The validity mark, at the far end of the header, drawn only when there is
+		# something to say. Its cell is not reserved: an alert that is present on every
+		# node as an empty square is a permanent claim that something might be wrong.
+		#
+		# The tint under it is what carries the fact at a distance; this is the
+		# precision half, and it says which severity where the reader can still read.
+		var alert: TextureRect = widget.get_meta("alert") if widget.has_meta("alert") \
+			else null
+		if alert == null:
+			alert = TextureRect.new()
+			alert.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+			alert.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			bar.add_child(alert)
+			widget.set_meta("alert", alert)
+		alert.visible = health != NodeState.Health.WELL
+		alert.texture = Icons.get_icon(Icons.Kind.ALERT,
+			Design.scale(ANATOMY_GLYPH), NodeState.severity(health)) \
+			if alert.visible else null
+	var title_label := _title_label(widget)
+	if title_label != null:
+		title_label.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
+		title_label.add_theme_font_size_override("font_size",
+			Design.type(Design.SIZE_NODE_TITLE))
+		title_label.add_theme_color_override("font_color", Design.INK_BRIGHT)
+		title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		# The name as it was written, at the left, in its own case.
+		#
+		# Capitals and centring came from the panel pass, where a centred legend in
+		# capitals is what a faceplate has. This is the diagram rather than the panel: a
+		# name is identity, identity is read rather than admired, and AMPLIFIER is a
+		# label on a box while Amplifier is what the thing is called. Small capitals
+		# keep their job here — they are for the metadata under the name, not for the
+		# name.
+		title_label.text = widget.title
+		title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		# The name takes what is left, which puts the validity mark against the far edge
+		# instead of leaving it tucked against the last letter of a short name.
+		title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+## The node's internal gutter, and the height of its identity region. Two figures on the
+## editor's own eight-pixel rhythm, so that the three proving-ground types line up with
+## each other and with everything else drawn from these tokens.
+const ANATOMY_GUTTER := Design.SPACE_M
+const ANATOMY_HEADER := 28
+## The identity glyph's cell, inside the header rather than beside it: the region does
+## not grow to hold the mark.
+const ANATOMY_GLYPH := 18
+
+
+## One segment of a switch, chosen or not.
+##
+## Two cues and neither of them is colour alone: the chosen segment is a raised tile in
+## the track, and its label is semibold and bright where the others are regular and
+## muted. The accent is a hairline along the tile's foot rather than a wash across it —
+## mint is what this editor says "running" and "selected" with, and a mint slab under a
+## word is louder than the word.
+func _dress_segment(segment: Button, selected: bool) -> void:
+	segment.add_theme_font_override("font",
+		Design.font(Design.WEIGHT_SEMIBOLD if selected else Design.WEIGHT_REGULAR))
+	for state in ["font_color", "font_hover_color", "font_pressed_color",
+			"font_focus_color"]:
+		segment.add_theme_color_override(state,
+			Design.INK_BRIGHT if selected else Design.INK_SECOND)
+	var pad_h := Design.SPACE_M
+	var pad_v := Design.SPACE_XS
+	if selected:
+		var tile := Design.padded_panel(Design.Surface.ACTIVE, pad_h, pad_v,
+			Design.RADIUS_BUTTON)
+		tile.border_color = Design.ACCENT.lerp(
+			Design.SURFACES[Design.Surface.ACTIVE], 0.55)
+		tile.border_width_bottom = maxi(Design.scale(2), 2)
+		for state in ["normal", "hover", "pressed"]:
+			segment.add_theme_stylebox_override(state, tile)
+	else:
+		var quiet := Design.padded_panel(Design.Surface.NODE, pad_h, pad_v,
+			Design.RADIUS_BUTTON)
+		quiet.bg_color = Color(Design.SURFACES[Design.Surface.NODE], 0.0)
+		quiet.border_width_bottom = 0
+		quiet.set_border_width_all(0)
+		var over := quiet.duplicate() as StyleBoxFlat
+		over.bg_color = Design.SURFACES[Design.Surface.RAISED]
+		segment.add_theme_stylebox_override("normal", quiet)
+		segment.add_theme_stylebox_override("hover", over)
+		segment.add_theme_stylebox_override("pressed", over)
+
+
+## Shows the shared selection the way the current lens shows anything: the graph
+## centres the node, the rack scrolls to the module and marks it, the schematic
+## outlines its card. Context travels; camera coordinates do not.
+func _reveal_selected() -> void:
+	if schematic != null:
+		schematic.selected_id = selected_module
+		schematic.queue_redraw()
+	if selected_module == "":
+		return
+	match patch_view:
+		PatchView.GRAPH:
+			if widgets.has(selected_module):
+				_focus_node(selected_module)
+		PatchView.RACK:
+			rack.select(selected_module)
+			var module = rack.module_for(selected_module)
+			if module != null and rack_scroll != null:
+				rack_scroll.scroll_vertical = maxi(0,
+					int(module.position.y * rack.view_zoom) - Design.scale(40))
+
+
 func _zoomable_view() -> String:
-	if views == null:
+	if views == null or views.get_tab_title(views.current_tab) != "Patch":
 		return ""
-	var title := views.get_tab_title(views.current_tab)
-	return title if title == "Graph" or title == "Rack" else ""
+	# The rack has its own camera; the graph, schematic and face share the canvas's.
+	return "Rack" if patch_view == PatchView.RACK else "Graph"
 
 
 ## Points the slider at the front view's range and value. Hidden on views with no
 ## zoom, because a control that does nothing teaches that the whole strip does nothing.
 func _refresh_view_zoom_slider() -> void:
-	if view_zoom_slider == null:
+	if view_zoom_readout == null:
 		return
-	# Range setters clamp, and clamping emits value_changed: without the flag,
-	# pointing the slider at a view zooms that view to the slider's old floor.
 	_zoom_slider_syncing = true
 	var which := _zoomable_view()
-	view_zoom_slider.visible = which != ""
-	view_zoom_readout.visible = which != ""
-	if which == "Graph":
-		view_zoom_slider.min_value = graph_edit.zoom_min
-		view_zoom_slider.max_value = graph_edit.zoom_max
-		view_zoom_slider.set_value_no_signal(graph_edit.zoom)
-	elif which == "Rack":
-		view_zoom_slider.min_value = 0.25
-		view_zoom_slider.max_value = 1.0
-		view_zoom_slider.set_value_no_signal(rack.view_zoom)
+	var span := _view_zoom_span()
+	var at := _view_zoom()
+	for control: Control in [view_zoom_out, view_zoom_readout, view_zoom_in,
+			view_fit_button]:
+		if control != null:
+			control.visible = which != ""
 	if which != "":
-		view_zoom_readout.text = "%d%%" % roundi(view_zoom_slider.value * 100.0)
+		view_zoom_readout.text = "%d%%" % roundi(at * 100.0)
+		# A button that cannot do anything says so. The ends of the range are reachable
+		# and the press that would go past them is not.
+		if view_zoom_out != null:
+			view_zoom_out.disabled = at <= span.x + 0.001
+		if view_zoom_in != null:
+			view_zoom_in.disabled = at >= span.y - 0.001
 	_zoom_slider_syncing = false
 
 
@@ -1284,12 +1801,20 @@ func _set_module_theme(node_id: String, key: String) -> void:
 		target["theme"] = key
 	_commit_edit("panel")
 	_repaint_rack()
-	_say("%s: %s" % [node_id, "the rack's panels" if key == ""
+	_say("%s: %s" % [node_id, "the patch's panels" if key == ""
 		else ModuleThemes.display_name(key)])
 
 
 ## The rack draws from the document by reference, so a repaint is a rebuild.
 func _repaint_rack() -> void:
+	# The graph wears the styles too, so a change has to reach both views. Restyled in
+	# place rather than by rebuilding the graph: a rebuild would drop the selection and
+	# the camera, and repainting a node is not a change to the graph's structure.
+	for node_id in widgets:
+		_style_widget(widgets[node_id] as GraphNode, str(node_id))
+	# The view fingerprint cannot see paint — a repaint moves nothing and changes no
+	# count — so the overlays that draw from the styles are told directly.
+	graph_edit.paint_stamp += 1
 	if rack == null:
 		return
 	rack.patch = patch
@@ -1297,10 +1822,36 @@ func _repaint_rack() -> void:
 	_sync_panels_menu()
 
 
-func _sync_panels_menu() -> void:
-	if view_popup == null:
+## What the menu says the program is set to, from what the program is actually set to.
+##
+## The menu used to tick itself as it was built, from whatever each setting's default
+## happened to be, and then only the settings somebody changed by hand were ever right:
+## the theme restored from the file on startup left every theme unticked, because the
+## palette is chosen before the toolbar that shows it exists. One pass, after the menu
+## exists, reading the live values.
+func _sync_view_menu() -> void:
+	if toolbar == null:
 		return
-	var panels := view_popup.get_node_or_null("PanelsMenu") as PopupMenu
+	toolbar.tick_one_of([0, 1], graph_edit.cable_style if graph_edit != null else 0)
+	toolbar.tick_one_of([70, 71],
+		70 + int(Settings.fetch("graph_detail", PatchGraph.DetailMode.ONE_TO_ONE)))
+	var width := 0
+	for index in EditorToolbar.CASE_WIDTHS.size():
+		if rack != null and EditorToolbar.CASE_WIDTHS[index] == rack.case_hp:
+			width = index
+	toolbar.tick_one_of(range(10, 10 + EditorToolbar.CASE_LABELS.size()), 10 + width)
+	toolbar.tick_one_of(range(40, 40 + Rack.DENSITY_NAMES.size()), 40 + Rack.density)
+	toolbar.tick_one_of(range(50, 50 + Design.SCALE_NAMES.size()), 50 + Design.ui_scale)
+	toolbar.tick_one_of(range(30, 30 + Design.PALETTE_NAMES.size()), 30 + Design.palette)
+	toolbar.tick(20, Design.reduced_motion)
+	toolbar.tick(104, toolbar_qr != null and toolbar_qr.visible)
+	_sync_panels_menu()
+
+
+func _sync_panels_menu() -> void:
+	if toolbar == null:
+		return
+	var panels := toolbar.menu_named("PanelsMenu")
 	if panels == null:
 		return
 	var current := str(patch.get("arrangement", {}).get("theme", ""))
@@ -1315,9 +1866,371 @@ func _sync_panels_menu() -> void:
 
 
 ## Right-click on a panel: the same list, plus the way back to the rack's own.
+## Which panel style a node is wearing: its own, then the patch's, then the category
+## colouring. The same question the rack asks, asked from here.
+func _panel_style_of(node_id: String) -> String:
+	var mine := ""
+	for node in patch.get("nodes", []):
+		if str((node as Dictionary).get("id", "")) == node_id:
+			mine = str((node as Dictionary).get("theme", ""))
+			break
+	return ModuleThemes.resolve(mine,
+		str(patch.get("arrangement", {}).get("theme", "")))
+
+
+## Dresses one graph node: its panel style, whether the pointer is on it, and whether it
+## is selected, decided together and written once.
+##
+## Together because they are three opinions about the same two styleboxes, and they were
+## held by two functions that did not know about each other. Hover replaced the header
+## with a copy of the editor theme's, and un-hover removed the override outright, so a
+## painted module lost its colour the moment the pointer crossed it and got it back when
+## the pointer left. That is what "the panel setting turns off and on" was. It also read
+## as a style that never arrived: the pointer is on the module you have just picked a
+## style for, so the paint was undone before it was ever seen.
+##
+## The style is a fact about the module, so it shows wherever the module is drawn. The
+## node keeps its shape: this is paint, not geometry, exactly as it is on a rack panel.
+##
+## The category default removes the overrides rather than writing the default colours
+## back, so an unpainted node is drawn by the editor theme and follows the palette when
+## somebody changes it.
+func _style_widget(widget: GraphNode, node_id: String) -> void:
+	var key := _panel_style_of(node_id)
+	var title_label := _title_label(widget)
+	var hovered: bool = widget.has_meta("hovered") and bool(widget.get_meta("hovered"))
+	# GraphNode draws a selected node from panel_selected and titlebar_selected, so an
+	# override on the ordinary two is not consulted at all while it is selected. The
+	# hover outline stands down there for the same reason: selection already draws one,
+	# and the two together said nothing the accent had not already said.
+	var lit := hovered and not widget.selected
+
+	# Everything written on the node is relettered from the style before the body is
+	# painted, so the paint never lands on ink that has not moved yet.
+	_letter_widget(widget, key)
+
+	# Whether the overlay should leave this node's connected ends alone. A node whose
+	# ports are drawn as sockets terminates its own cables; a painted one wants the
+	# plug. Set here rather than at creation because it is a fact about the paint as
+	# much as about the type, and the paint can change while the node stands there.
+	widget.set_meta("diagram_ports", key == ModuleThemes.CATEGORY
+		and NodeIdentity.migrated(str(widget.get_meta("type", ""))))
+
+	if key == ModuleThemes.CATEGORY:
+		# No skin on the widget means no plugs at its ports: the flat type-shapes are
+		# the graph's own grammar and the physical one arrives with the faceplate.
+		widget.remove_meta("skin")
+		if NodeIdentity.migrated(str(widget.get_meta("type", ""))):
+			# The raw hover, not the hover-and-not-selected the flat panels use: the
+			# anatomy builds both the ordinary boxes and the selected ones, and a
+			# selected node under the pointer should still lift. Selection owns the
+			# perimeter either way, so the two cannot collide.
+			_dress_anatomy(widget, hovered, _health_of(node_id))
+			return
+		if lit:
+			var plain := (theme.get_stylebox("panel", "GraphNode")
+				as StyleBoxFlat).duplicate()
+			plain.border_color = Design.BORDERS[Design.Surface.ACTIVE]
+			widget.add_theme_stylebox_override("panel", plain)
+		else:
+			widget.remove_theme_stylebox_override("panel")
+		widget.remove_theme_stylebox_override("panel_selected")
+		widget.remove_theme_stylebox_override("titlebar_selected")
+		if lit:
+			var bar := (theme.get_stylebox("titlebar", "GraphNode")
+				as StyleBoxFlat).duplicate()
+			bar.border_color = Design.BORDERS[Design.Surface.ACTIVE]
+			widget.add_theme_stylebox_override("titlebar", bar)
+		else:
+			widget.remove_theme_stylebox_override("titlebar")
+		# Put back rather than removed. Removing it took the node title's own styling
+		# with it — _style_node_title puts INK_BRIGHT on this same Label — so a module
+		# sent back to the patch's panels came away lettered in the plain Label colour
+		# while every module that had never been painted kept the bright one.
+		if title_label != null:
+			title_label.add_theme_color_override("font_color", Design.INK_BRIGHT)
+		return
+
+	# The body takes the faceplate, and the hover outline goes round it rather than over
+	# it: the style says which module this is, the outline says the pointer is here, and
+	# both are wanted at once.
+	#
+	# The header was the whole of this for a day, on the argument that a graph node is
+	# mostly text and a pale plate under the editor's light ink is the rack's
+	# knob-lettering bug in the wordiest view in the app. The argument was sound and the
+	# conclusion was not: the text can move too. It is a module either way, and the two
+	# views are supposed to be drawings of one object.
+	var face := Design.padded_panel(Design.Surface.NODE, PANEL_PADDING,
+		PANEL_PADDING, PANEL_RADIUS)
+	face.bg_color = ModuleThemes.token(key, "faceplate")
+	# Borderless, both halves. See panel_hardware.gd: the outline is drawn round the
+	# whole module in one run, because two boxes meeting in the middle of a panel cannot
+	# be given borders without ruling a line across the join.
+	face.set_border_width_all(0)
+	# Short and dense rather than large and fuzzy. A module sits on the canvas; it does
+	# not hover a centimetre above it, and a soft wide shadow is what makes a rectangle
+	# read as a floating card rather than as an object lying on a surface.
+	# Offset by its own size, so the shadow starts at the box's top edge and none of it
+	# is drawn above. The body box begins halfway down the module — the titlebar box is
+	# the half above it — so a shadow that reached upward laid a dark line straight
+	# across the panel under the title. That is the rule this pass removed, put back by
+	# accident and found at 75%.
+	face.shadow_size = Design.scale(5)
+	face.shadow_offset = Vector2(0.0, Design.scale(5))
+	face.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
+	# The body is the lower half of one plate, so it is not rounded or ruled along the
+	# top: the titlebar's box sits directly above it and the two have to read as one
+	# piece of metal. A border across the top here is a rule under the title by another
+	# name, which is the thing being removed.
+	face.corner_radius_top_left = 0
+	face.corner_radius_top_right = 0
+	face.border_width_top = 0
+	widget.add_theme_stylebox_override("panel", face)
+	widget.add_theme_stylebox_override("panel_selected", face.duplicate())
+
+	# The title is printed onto the plate. There is no header — but there is still a box
+	# up there, and it is the top half of the same plate.
+	#
+	# Drawing nothing at all was the first attempt and the screenshot killed it in one
+	# look: a GraphNode's panel covers the content area only, so an empty titlebar left
+	# the module's name floating on the canvas above its own faceplate, in dark ink on a
+	# dark background. The band was never the box. The band was the rule under it and
+	# the change of colour across it — take those away and what is left is a plate with
+	# a name printed at the top of it, which is what the reference boards are.
+	var head := Design.padded_panel(Design.Surface.RAISED, PANEL_PADDING,
+		Design.SPACE_S, PANEL_RADIUS)
+	head.bg_color = ModuleThemes.token(key, "faceplate")
+	head.corner_radius_bottom_left = 0
+	head.corner_radius_bottom_right = 0
+	head.set_border_width_all(0)
+	widget.add_theme_stylebox_override("titlebar", head)
+	# And a selected module is drawn the same way, which needs saying separately because
+	# the selected header is a different stylebox. Without this a selected node gets the
+	# editor's own title bar back — the band, on top of the plate — for as long as it is
+	# selected, which is most of the time somebody is working on one.
+	widget.add_theme_stylebox_override("titlebar_selected", head.duplicate())
+	# The title is a Label in the titlebar rather than a themed colour on the node, so
+	# add_theme_color_override("title_color", ...) on the GraphNode silently does
+	# nothing — which is how FILTER SWEEP came to be drawn in white on cream.
+	if title_label != null:
+		title_label.add_theme_color_override("font_color",
+			ModuleThemes.token(key, "legend"))
+
+	# For the plug overlay and anything else that draws from the panel rather than
+	# painting it: the resolved skin, carried on the widget it describes.
+	widget.set_meta("skin", Rack.skin(key))
+	_finish_widget(widget, key)
+	_socket_widget(widget, key)
+
+
+## Re-cuts a node's sockets in its panel style.
+##
+## The port icon is the whole of the jack: GraphEdit centres it on the slot anchor and
+## draws the cables underneath the nodes, so a socket drawn here sits over the end of its
+## own cable and the anchor, the hitbox and the routing are all untouched. That is the
+## reason the jacks are icons rather than something drawn over the panel — the brief asks
+## for the graph anchor to stay exactly where it is, and this way nothing had to move.
+func _socket_widget(widget: GraphNode, key: String) -> void:
+	if not widget.has_meta("left_types"):
+		return
+	var left: PackedStringArray = widget.get_meta("left_types")
+	var right: PackedStringArray = widget.get_meta("right_types")
+	for slot in left.size():
+		if str(left[slot]) != "":
+			widget.set_slot_custom_icon_left(slot, _port_icon(str(left[slot]), key))
+		if str(right[slot]) != "":
+			widget.set_slot_custom_icon_right(slot, _port_icon(str(right[slot]), key))
+
+
+## Gives a node the parts of a faceplate a stylebox cannot draw: the finish, the lit top
+## edge, the dark sidewall, and the screws holding it in.
+##
+## See panel_hardware.gd for why all of it rides above the node's own drawing, and why
+## that is safe. The layer is an internal child, which matters more than it sounds: a
+## GraphNode binds each slot to the index of a visible child, so an ordinary child added
+## here would renumber every port below it and the cables would reattach to the wrong
+## ones. An internal child is not laid out, not counted, and not returned by
+## get_children() — which is also why the lettering walk never tries to reletter it.
+func _finish_widget(widget: GraphNode, key: String) -> void:
+	var layer: PanelHardware = widget.get_meta("finish") as PanelHardware \
+		if widget.has_meta("finish") else null
+	if key == ModuleThemes.CATEGORY:
+		if layer != null:
+			layer.visible = false
+		return
+	if layer == null:
+		layer = PanelHardware.new()
+		widget.add_child(layer, false, Node.INTERNAL_MODE_FRONT)
+		widget.set_meta("finish", layer)
+	layer.dress(Rack.skin(key), float(Design.scale(PANEL_RADIUS)),
+		Design.BORDERS[Design.Surface.ACTIVE] if widget.selected \
+			or (widget.has_meta("hovered") and bool(widget.get_meta("hovered"))) \
+			else ModuleThemes.token(key, "edge"))
+	layer.visible = true
+
+
+## Letters a node in its panel style: every label on it, and every knob.
+##
+## Not dimmed, on a painted panel. The editor ranks a port's name above its unit partly
+## by ink, and that ranking cannot survive here: Safety Orange gives its black lettering
+## 4.9:1 at full strength, so anything faded is under the bar whatever the fade, and no
+## amount of tuning fixes a ceiling. The rank is carried by size and weight instead — the
+## unit is already a size and a weight down from the name — which is what was separating
+## them anyway. Rack.Knob reached this conclusion first and for the same reason; this is
+## the same decision applied to the labels the graph draws outside the dial.
+##
+## Each label's editor ink is kept the first time it is touched, so a module put back on
+## the patch's panels is relettered in the colour it was built with rather than in a
+## guess at what that colour was.
+func _letter_widget(widget: GraphNode, key: String) -> void:
+	var painted := key != ModuleThemes.CATEGORY
+	var ink: Color = ModuleThemes.token(key, "legend") if painted else Color.WHITE
+	var skin := Rack.skin(key)
+	var title_label := _title_label(widget)
+	var queue: Array = widget.get_children()
+	while not queue.is_empty():
+		var next: Node = queue.pop_back()
+		for child in next.get_children():
+			queue.append(child)
+		var knob := next as Rack.Knob
+		if knob != null:
+			# The same knob class the rack uses, so it already knows how to wear a skin
+			# — it was simply never handed one down here.
+			knob.skin = skin
+			knob.queue_redraw()
+			continue
+		var chooser := next as OptionButton
+		if chooser != null:
+			_mount_chooser(chooser, key, skin)
+			continue
+		var label := next as Label
+		if label == null or label == title_label:
+			continue
+		if not label.has_meta("editor_ink"):
+			label.set_meta("editor_ink", label.get_theme_color("font_color"))
+		label.add_theme_color_override("font_color",
+			ink if painted else label.get_meta("editor_ink"))
+
+
+## Mounts a dropdown in the panel instead of leaving it dressed as a form field.
+##
+## A shape selector on a faceplate is a switch cut into the metal: a dark inset field the
+## same height as the knobs beside it, with the chosen setting printed in it. What was
+## there instead was the editor's own button chrome — a rounded slab a shade lighter than
+## the surface behind it — which on a cream lab panel is the one control that still says
+## "web form" out loud.
+##
+## Inset rather than raised, which is the whole difference. A raised control sits on the
+## panel and belongs to the application; a recessed one is cut into the panel and belongs
+## to the instrument. It is the same trick as the jack: the darkness is the depth.
+##
+## Its own lettering, and not the plate's: the field is the hardware colour in every
+## style, so its text is light in every style, and the legend that reads on the faceplate
+## would be black on black half the time.
+## A dropdown that belongs to the node rather than to a form.
+##
+## It was the loudest thing on the Lowpass: a bright slab with a heavy border, sitting
+## between two knobs that had just been quietened. The surface is the node's own, the
+## edge is the hairline everything else here wears, and the arrow is the editor's drawn
+## caret rather than the theme's.
+func _dress_option(chooser: OptionButton) -> void:
+	NodeText.dress(chooser, NodeText.Role.CONTROL_OPTION)
+	for state: Array in [["normal", Design.Surface.NODE],
+			["hover", Design.Surface.RAISED],
+			["pressed", Design.Surface.ACTIVE],
+			["focus", Design.Surface.NODE]]:
+		var box := Design.padded_panel(int(state[1]), Design.SPACE_M,
+			Design.SPACE_XS, Design.RADIUS_BUTTON)
+		box.border_color = Design.BORDERS[Design.Surface.RAISED]
+		chooser.add_theme_stylebox_override(str(state[0]), box)
+	chooser.add_theme_icon_override("arrow",
+		Icons.get_icon(Icons.Kind.CARET_DOWN, Design.scale(14), Design.INK_SECOND))
+
+
+func _mount_chooser(chooser: OptionButton, key: String, skin: Dictionary) -> void:
+	if key == ModuleThemes.CATEGORY:
+		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+			chooser.remove_theme_stylebox_override(state)
+		for state in ["font_color", "font_hover_color", "font_pressed_color",
+				"font_focus_color"]:
+			chooser.remove_theme_color_override(state)
+		chooser.remove_theme_font_override("font")
+		if chooser.has_meta("lip"):
+			(chooser.get_meta("lip") as Panel).visible = false
+		# Unpainted means the editor's own chrome, unless the node is through the pass —
+		# in which case its dropdown belongs to the node, and this is where it is put
+		# back, because this function has just taken it off.
+		if bool(chooser.get_meta("node_diagram", false)):
+			_dress_option(chooser)
+		return
+	var field: Color = skin.get("hardware", Color(0.13, 0.13, 0.14))
+	var wall: Color = skin.get("hardware_hi", Color(0.3, 0.31, 0.33))
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = field.lightened(0.10) if state == "hover" else field
+		# Barely rounded. A recess is cut with a tool and has corners; the four-pixel
+		# radius it had is the radius of a button, and it was doing as much to keep this
+		# looking like a form control as the colour was.
+		box.set_corner_radius_all(maxi(Design.scale(2), 1))
+		box.content_margin_top = Design.scale(Design.SPACE_XS)
+		box.content_margin_bottom = Design.scale(Design.SPACE_XS)
+		box.content_margin_left = Design.scale(Design.SPACE_S)
+		box.content_margin_right = Design.scale(Design.SPACE_XS)
+		# The lip of the recess, all the way round rather than a line along the top.
+		# Dark where the cut catches no light, pale along the bottom where the far wall
+		# of the recess faces up into it — the panel's own top-lighting, read inside
+		# out. One border colour is all a stylebox has, so the pale wall is a second box
+		# and this is the dark one.
+		box.set_border_width_all(maxi(Design.scale(1), 1))
+		box.border_color = field.darkened(0.55)
+		box.shadow_size = 0
+		if state == "focus":
+			box.border_color = Design.FOCUS
+		chooser.add_theme_stylebox_override(state, box)
+	# The perimeter's lit half, drawn as a second control behind the first: a Panel one
+	# pixel down carrying the pale wall, which shows only along the bottom edge where the
+	# field above does not cover it.
+	var lip: Panel = chooser.get_meta("lip") as Panel \
+		if chooser.has_meta("lip") else null
+	if lip == null:
+		lip = Panel.new()
+		lip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lip.show_behind_parent = true
+		lip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		lip.offset_top = 1.0
+		lip.offset_bottom = 2.0
+		chooser.add_child(lip, false, Node.INTERNAL_MODE_FRONT)
+		chooser.set_meta("lip", lip)
+	var wall_box := StyleBoxFlat.new()
+	wall_box.bg_color = Color(wall, 0.5)
+	wall_box.set_corner_radius_all(maxi(Design.scale(2), 1))
+	lip.add_theme_stylebox_override("panel", wall_box)
+
+	# Set like a legend rather than like a menu: the same weight the panel prints its
+	# control names in, so the chosen setting reads as something stamped in the recess.
+	var printed := Color(1.0, 1.0, 1.0, 1.0).lerp(wall, 0.18)
+	chooser.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
+	for state in ["font_color", "font_hover_color", "font_pressed_color",
+			"font_focus_color"]:
+		chooser.add_theme_color_override(state, printed)
+
+
+## A GraphNode's title is a Label the node builds for itself, and it is reached through
+## the titlebar rather than through the theme.
+func _title_label(widget: GraphNode) -> Label:
+	var bar := widget.get_titlebar_hbox()
+	if bar == null:
+		return null
+	for child in bar.get_children():
+		var label := child as Label
+		if label != null:
+			return label
+	return null
+
+
 func _on_module_theme_requested(node_id: String, at: Vector2) -> void:
 	var menu := PopupMenu.new()
-	menu.add_item("Use the rack's panels", 0)
+	menu.add_item("Use the patch's panels", 0)
 	menu.add_separator()
 	for index in ModuleThemes.ORDER.size():
 		var key: String = ModuleThemes.ORDER[index]
@@ -1330,15 +2243,88 @@ func _on_module_theme_requested(node_id: String, at: Vector2) -> void:
 	menu.popup(Rect2i(Vector2i(at), Vector2i(1, 1)))
 
 
-func _on_view_zoom_slider(value: float) -> void:
+## Points the view in front at a zoom, and says so.
+func _set_view_zoom(value: float) -> void:
 	if view_zoom_readout == null or _zoom_slider_syncing:
 		return
 	var which := _zoomable_view()
+	var span := _view_zoom_span()
+	var wanted := clampf(value, span.x, span.y)
 	if which == "Graph":
-		graph_edit.zoom = value
+		graph_edit.zoom = wanted
 	elif which == "Rack":
-		rack.view_zoom = value
-	view_zoom_readout.text = "%d%%" % roundi(value * 100.0)
+		rack.view_zoom = wanted
+	view_zoom_readout.text = "%d%%" % roundi(wanted * 100.0)
+
+
+## What the view in front will accept, as a low and a high.
+func _view_zoom_span() -> Vector2:
+	match _zoomable_view():
+		"Graph":
+			return Vector2(graph_edit.zoom_min, graph_edit.zoom_max)
+		"Rack":
+			return Vector2(0.25, 1.0)
+	return Vector2(1.0, 1.0)
+
+
+## Where the view in front is standing.
+func _view_zoom() -> float:
+	match _zoomable_view():
+		"Graph":
+			return graph_edit.zoom
+		"Rack":
+			return rack.view_zoom
+	return 1.0
+
+
+## One press of minus or plus. A ratio rather than a step, because zoom is a ratio: the
+## same press has to feel the same at 30% as at 200%, and a fixed step is either useless
+## at one end or violent at the other.
+func _step_view_zoom(direction: int) -> void:
+	_set_view_zoom(_view_zoom() * (1.2 if direction > 0 else 1.0 / 1.2))
+	_refresh_view_zoom_slider()
+
+
+## Fit, for whichever view is in front.
+func _fit_view_zoom() -> void:
+	match _zoomable_view():
+		"Graph":
+			graph_edit.fit_graph()
+		"Rack":
+			rack.fit_case()
+	_refresh_view_zoom_slider.call_deferred()
+
+
+## One of the cluster's three buttons. Direction 0 is Fit.
+func _zoom_button(label: String, tip: String, direction: int) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.tooltip_text = tip
+	button.visible = false
+	button.focus_mode = Control.FOCUS_NONE
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# Compact on purpose. These sit in a strip of tabs, next to a document name, and at
+	# the theme's ordinary button padding four of them are the loudest thing in the row
+	# — a camera control is furniture, and furniture is small.
+	button.custom_minimum_size = Vector2(Design.scale(28 if label != "Fit" else 40),
+		Design.scale(26))
+	button.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	for state: Array in [["normal", Design.Surface.NODE],
+			["hover", Design.Surface.RAISED], ["pressed", Design.Surface.ACTIVE]]:
+		var box := Design.padded_panel(int(state[1]), Design.SPACE_S, 0,
+			Design.RADIUS_BUTTON)
+		box.border_color = Design.BORDERS[Design.Surface.RAISED]
+		button.add_theme_stylebox_override(str(state[0]), box)
+	var faded := Design.padded_panel(Design.Surface.NODE, Design.SPACE_S, 0,
+		Design.RADIUS_BUTTON)
+	faded.bg_color = Color(Design.SURFACES[Design.Surface.NODE], 0.4)
+	faded.border_color = Color(Design.BORDERS[Design.Surface.RAISED], 0.4)
+	button.add_theme_stylebox_override("disabled", faded)
+	if direction == 0:
+		button.pressed.connect(_fit_view_zoom)
+	else:
+		button.pressed.connect(func() -> void: _step_view_zoom(direction))
+	return button
 
 
 func _on_file_menu(id: int) -> void:
@@ -1401,9 +2387,8 @@ func _on_view_menu(id: int) -> void:
 	if id >= 40:
 		Rack.density = id - 40
 		Settings.store("rack_density", Rack.density)
-		for entry in Rack.DENSITY_NAMES.size():
-			view_popup.set_item_checked(view_popup.get_item_index(40 + entry),
-				entry == Rack.density)
+		toolbar.tick_one_of(range(40, 40 + Rack.DENSITY_NAMES.size()),
+			40 + Rack.density)
 		rack.rebuild()
 		_say("rack: %s" % Rack.DENSITY_NAMES[Rack.density])
 		return
@@ -1413,7 +2398,7 @@ func _on_view_menu(id: int) -> void:
 	if id == 20:
 		Design.reduced_motion = not Design.reduced_motion
 		Settings.store("reduced_motion", Design.reduced_motion)
-		view_popup.set_item_checked(view_popup.get_item_index(20), Design.reduced_motion)
+		toolbar.tick(20, Design.reduced_motion)
 		if Design.reduced_motion and graph_edit != null:
 			# Cleared rather than frozen, or the last frame of glow would sit there
 			# forever looking like a port that is stuck on.
@@ -1421,15 +2406,15 @@ func _on_view_menu(id: int) -> void:
 			graph_edit.queue_redraw()
 		return
 	if id < 10:
-		for index in 2:
-			view_popup.set_item_checked(index, index == id)
-		rack.cable_style = id
+		toolbar.tick_one_of([0, 1], id)
+		# The graph's routing only. The rack keeps its physical cords: yoking both
+		# views to one menu id is how choosing PCB for the diagram silently stripped
+		# the rack back to thin lines.
 		graph_edit.cable_style = id
 		graph_edit.refresh_cables()
 		return
 	var choice := id - 10
-	for index in EditorToolbar.CASE_LABELS.size():
-		view_popup.set_item_checked(index + 3, index == choice)
+	toolbar.tick_one_of(range(10, 10 + EditorToolbar.CASE_LABELS.size()), id)
 	rack.case_hp = EditorToolbar.CASE_WIDTHS[choice]
 	# Picking a case answers "does my patch fit it" — so show the whole case at once.
 	rack.fit_case()
@@ -1512,9 +2497,7 @@ func _modernize_stereo_outputs() -> void:
 func _choose_detail_mode(mode: int) -> void:
 	graph_edit.set_detail_mode(mode)
 	Settings.store("graph_detail", mode)
-	for entry in 2:
-		view_popup.set_item_checked(view_popup.get_item_index(70 + entry),
-			entry == mode)
+	toolbar.tick_one_of([70, 71], 70 + mode)
 	_say("detail: %s" % ("1:1" if mode == PatchGraph.DetailMode.ONE_TO_ONE \
 		else "adaptive"))
 
@@ -1532,10 +2515,9 @@ func _choose_detail_mode(mode: int) -> void:
 func _use_ui_scale(index: int) -> void:
 	Design.ui_scale = clampi(index, 0, Design.SCALE_FACTORS.size() - 1)
 	Settings.store("ui_scale", Design.ui_scale)
-	if view_popup != null:
-		for entry in Design.SCALE_NAMES.size():
-			view_popup.set_item_checked(view_popup.get_item_index(50 + entry),
-				entry == Design.ui_scale)
+	if toolbar != null:
+		toolbar.tick_one_of(range(50, 50 + Design.SCALE_NAMES.size()),
+			50 + Design.ui_scale)
 
 	_apply_theme()
 	if graph_edit == null:
@@ -1566,10 +2548,8 @@ func _use_palette(index: int) -> void:
 	# Guarded, because this is reachable before the toolbar exists — from settings at
 	# startup, and from the screenshot tool, both of which set a palette without a menu
 	# to tick.
-	if view_popup != null:
-		for entry in Design.PALETTE_NAMES.size():
-			view_popup.set_item_checked(view_popup.get_item_index(30 + entry),
-				entry == index)
+	if toolbar != null:
+		toolbar.tick_one_of(range(30, 30 + Design.PALETTE_NAMES.size()), 30 + index)
 
 	# The theme carries most of it. What it cannot reach is anything styled per widget —
 	# node titles, the port icons, the scope — so the graph is rebuilt, which is cheap and
@@ -1621,8 +2601,18 @@ func _all_notes_off() -> void:
 func show_view(title: String) -> bool:
 	if views == null:
 		return false
+	# Two levels, one verb. Lenses route through the patch-view state; workspaces are
+	# still tabs. "Rack" stopped being a tab when it became a lens, and every caller
+	# that asks for it by name should not have to know that happened.
+	var lenses := {"rack": PatchView.RACK, "graph": PatchView.GRAPH,
+		"schematic": PatchView.SCHEMATIC, "face": PatchView.FACE}
+	var wanted := title.to_lower()
+	if lenses.has(wanted):
+		if patch_view != lenses[wanted] or views.get_tab_title(views.current_tab) != "Patch":
+			_set_patch_view(lenses[wanted])
+		return true
 	for index in views.get_tab_count():
-		if views.get_tab_title(index).to_lower() == title.to_lower():
+		if views.get_tab_title(index).to_lower() == wanted:
 			views.current_tab = index
 			return true
 	return false
@@ -2717,6 +3707,12 @@ func shutdown_audio() -> void:
 		player.free()
 		player = null
 	playback = null
+	# The probe keeps its own reference to the engine, handed to it when the panel was
+	# built. Nulling ours does not release the extension object — the *last* reference
+	# would instead die inside `free()`, which is after the frames this teardown exists to
+	# provide, so the gap was being given to the wrong moment.
+	if scope_probe != null:
+		scope_probe.engine = null
 	engine = null
 
 
@@ -2766,16 +3762,16 @@ func _process(_delta: float) -> void:
 			roll_scroll.set_value_no_signal(want)
 		_roll_scroll_syncing = false
 
-	# The slider follows the view when zoom changes by any other hand — Ctrl+wheel,
-	# the graph's own buttons, a fitted case. Cheap, and quiet: no_signal, so the
-	# follow never argues with the drag.
-	if view_zoom_slider != null and view_zoom_slider.visible:
+	# The readout follows the view when the zoom changes by any other hand — Ctrl+wheel,
+	# a fitted case, a lens that remembers where it was standing. Cheap, and the only way
+	# the number can be trusted: this cluster is not the only way to zoom and was never
+	# meant to be.
+	if view_zoom_readout != null and view_zoom_readout.visible:
 		var which := _zoomable_view()
 		var actual: float = graph_edit.zoom if which == "Graph" \
 			else (rack.view_zoom if which == "Rack" else -1.0)
-		if actual > 0.0 and absf(actual - view_zoom_slider.value) > 0.005:
-			view_zoom_slider.set_value_no_signal(actual)
-			view_zoom_readout.text = "%d%%" % roundi(actual * 100.0)
+		if actual > 0.0 and view_zoom_readout.text != "%d%%" % roundi(actual * 100.0):
+			_refresh_view_zoom_slider()
 	# Before the early return: the dock's cables have to follow the graph as it scrolls,
 	# zooms and has nodes dragged under them, and none of that waits for an engine.
 	_refresh_seam_cables()
@@ -3521,8 +4517,15 @@ func _engine_signal_source(node_id: String, port: String) -> Array:
 ##
 ## So world = document x this, converted at the three places the two spaces meet: making
 ## a widget, reading a widget back, and dropping a new node where the pointer is.
+##
+## Up with the interface scale and never down, which is the rule node widths follow and
+## has to be the same rule. A width class stopped shrinking below base because the text
+## inside it does not shrink either — and the moment positions kept shrinking while widths
+## did not, the two disagreed and First Synth's nodes overlapped at Compact. Spacing and
+## the things it spaces are one system or they are a bug waiting for somebody to change
+## their interface size.
 func _graph_scale() -> float:
-	return Design.SCALE_FACTORS[Design.ui_scale]
+	return maxf(1.0, Design.SCALE_FACTORS[Design.ui_scale])
 
 
 func _create_widget(node: Dictionary) -> void:
@@ -3540,7 +4543,13 @@ func _create_widget(node: Dictionary) -> void:
 		node.get("position", {}).get("x", 0.0),
 		node.get("position", {}).get("y", 0.0)) * _graph_scale()
 	widget.set_meta("patch_id", node["id"])
+	# Above the cord layer (z 1): a cable passes behind the panels. See CordLayer.
+	widget.z_index = 2
 	widget.set_meta("type", type_name)
+	# Written on the widget rather than looked up while drawing: the overlay that draws
+	# a shrinking title has a GraphNode and no idea what type it came from, and the one
+	# place that knows both is here.
+	widget.set_meta("compact_name", NodeIdentity.compact_of(type_name))
 
 	_style_node_title(widget, descriptor)
 
@@ -3551,6 +4560,16 @@ func _create_widget(node: Dictionary) -> void:
 	# to need the mouse, "which node am I about to click" is a real question. One step
 	# of border brightening: enough to answer it, not enough to be mistaken for the
 	# accent outline that means selected.
+	# Right-click for the panel style, the same menu the rack offers on its modules. A
+	# style is a fact about the module rather than about a view, so it is changed by
+	# pointing at the module — in whichever view you happen to be looking at it.
+	widget.gui_input.connect(func(event: InputEvent) -> void:
+		var press := event as InputEventMouseButton
+		if press != null and press.pressed \
+				and press.button_index == MOUSE_BUTTON_RIGHT:
+			_on_module_theme_requested(str(widget.get_meta("patch_id")),
+				widget.get_global_mouse_position())
+			widget.accept_event())
 	widget.mouse_entered.connect(func() -> void: _set_node_hovered(widget, true))
 	widget.mouse_exited.connect(func() -> void: _set_node_hovered(widget, false))
 
@@ -3576,6 +4595,24 @@ func _create_widget(node: Dictionary) -> void:
 	# front, which is the entire point of having said so. Anything without a panel wraps
 	# its whole surface PARAMETERS_PER_LINE to a line, as it always did.
 	var parameters: Array = descriptor.get("parameters", [])
+	# Whether this node lays out on the grid. Asked once, here, rather than in each of
+	# the places below that would otherwise each have their own opinion.
+	#
+	# A painted module is not in it, whatever its type. Paint means the faceplate
+	# grammar — plates, grommets, plugs seated in them — and half a module in each
+	# language is worse than either: the panel suite caught exactly that, a painted patch
+	# whose filter had lost its plugs while its neighbours kept theirs.
+	# `_type_key`, not the document's own "type". A seam is keyed by the port it
+	# stands for, seam:Input/note, and the raw field says only "Input" — which
+	# is how the two seams in First Synth took the new anatomy from _style_widget
+	# (which uses the key) and missed their width class here (which did not).
+	# One key, asked for the same way everywhere.
+	var gridded := NodeIdentity.migrated(_type_key(node)) 		and _panel_style_of(str(node["id"])) == ModuleThemes.CATEGORY
+	# The port labels, kept so their columns can be squared up once they all exist. A
+	# gutter cannot know how wide it should be until the widest label in it has been
+	# built.
+	var gutters: Array = []
+	var right_gutters: Array = []
 	var grid: Array = descriptor.get("panel_rows", []).duplicate()
 	# The Step Sequencer wears a bar of piano roll instead of sixteen number
 	# cells: length keeps its cell up here, the steps become the grid appended
@@ -3585,11 +4622,66 @@ func _create_widget(node: Dictionary) -> void:
 		for parameter: Dictionary in parameters:
 			if str(parameter["name"]) == "length":
 				grid = [[parameter]]
+	# A module with one knob and an input of the same name puts the knob on that input's
+	# row. The Amplifier is the case in point: its gain knob sat on the top row while the
+	# gain input sat below it, so the panel's one relationship — this socket feeds this
+	# control — was the one thing the layout did not say. Empty lines pad the grid down
+	# to the port's row; a padded line is a short row holding only its ports, which is
+	# exactly what the rows above the knob should be.
+	if grid.is_empty() and parameters.size() == 1:
+		for port_index in inputs.size():
+			if str(inputs[port_index]["name"]) == str(parameters[0]["name"]):
+				for _pad in port_index:
+					grid.append([])
+				grid.append([parameters[0]])
+				break
+
+	# The cells are built before the rows are decided, measured, and only then
+	# grouped. That order is the grid contract:
+	#
+	#   build the controls, measure what they need, group them into rows,
+	#   place the rows
+	#
+	# rather than predicting a width, grouping on the prediction and building
+	# afterwards. The predictor this replaces was wrong by a third — a dressed
+	# dropdown holding "minor pentatonic" measures 224 where adding up the
+	# spacing tokens said 168 — and no arithmetic over styleboxes finds the
+	# difference, because Godot puts it inside the Button.
+	#
+	# They are parented to a hidden box on the widget while they are measured, so
+	# that a Control which only knows its size once it has a theme gets one, and
+	# so that nothing about the measuring pass reaches the node: an invisible
+	# child adds nothing to a container's minimum, and the node never sees a
+	# width it would then refuse to come back down from.
+	var measured := {}
+	if gridded and grid.is_empty():
+		var bench := VBoxContainer.new()
+		bench.visible = false
+		widget.add_child(bench)
+		for parameter: Dictionary in parameters:
+			var cell := _build_parameter_row(node, parameter)
+			bench.add_child(cell)
+			measured[str(parameter.get("name", ""))] = cell
+		widget.set_meta("bench", bench)
 	if grid.is_empty():
+		var per_line := PARAMETERS_PER_LINE
 		var line: Array = []
 		for parameter: Dictionary in parameters:
+			# A control that cannot inhabit the normal allocation takes the row. The
+			# alternative is what the Scale Quantizer was doing: one dropdown two and
+			# a half columns wide beside an ordinary one, and the whole chassis five
+			# hundred units across to hold the pair. The node was never big.
+			#
+			# Asked of the built cell, which is the point of the pass above.
+			if gridded and NodeGrid.spans(measured.get(
+				str(parameter.get("name", ""))), measured.values()):
+				if not line.is_empty():
+					grid.append(line)
+					line = []
+				grid.append([parameter])
+				continue
 			line.append(parameter)
-			if line.size() == PARAMETERS_PER_LINE:
+			if line.size() == per_line:
 				grid.append(line)
 				line = []
 		if not line.is_empty():
@@ -3597,9 +4689,22 @@ func _create_widget(node: Dictionary) -> void:
 	var port_rows: int = maxi(inputs.size(), outputs.size())
 	var cell_lines: int = grid.size()
 
+	# Whether this module is a rail module: one side is mostly ports and the other is
+	# mostly empty. The Keyboard is the type specimen — three knobs, four outputs — and
+	# on such a module the centred knob column reads as three knobs stranded on a field,
+	# because the centre of the panel is the one place nothing else is. Clustering the
+	# knobs against the quiet edge turns the same rows into a control block facing an
+	# I/O rail, which is the composition a real panel would have.
+	#
+	# Judged from the shape, not named per module, so the next node with this shape
+	# composes itself the same way. Modules with balanced sides keep the centred column.
+	var rail_right: bool = outputs.size() - cell_lines >= 2 and inputs.size() <= 1
+	var rail_left: bool = inputs.size() - cell_lines >= 2 and outputs.size() <= 1
+
 	for row in maxi(port_rows, cell_lines):
 		var line := HBoxContainer.new()
-		line.add_theme_constant_override("separation", Design.scale(Design.SPACE_M))
+		line.add_theme_constant_override("separation",
+			NodeGrid.column_gap() if gridded else Design.scale(Design.SPACE_M))
 		line.alignment = BoxContainer.ALIGNMENT_CENTER
 		line.set_meta("row", "module")
 		# A row with a slot on it may never be hidden. GraphEdit binds a slot to the index
@@ -3614,23 +4719,44 @@ func _create_widget(node: Dictionary) -> void:
 		# were scanning for — the name — had to be picked out of each one. Same
 		# information, ranked: the unit is metadata and now looks like it. Parentheses
 		# gone too; they were doing the separating that a colour change does better.
-		var left := _port_label(inputs[row] if row < inputs.size() else {}, false)
+		var left := _port_label(inputs[row] if row < inputs.size() else {}, false,
+			gridded)
 		left.set_meta("port_label", true)
+		gutters.append(left)
 		line.add_child(left)
 
 		var cells := HBoxContainer.new()
-		cells.add_theme_constant_override("separation", Design.scale(Design.SPACE_M))
-		cells.alignment = BoxContainer.ALIGNMENT_CENTER
+		cells.add_theme_constant_override("separation",
+			NodeGrid.column_gap() if gridded else Design.scale(Design.SPACE_M))
+		cells.alignment = BoxContainer.ALIGNMENT_BEGIN if rail_right \
+			else BoxContainer.ALIGNMENT_END if rail_left \
+			else BoxContainer.ALIGNMENT_CENTER
 		cells.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cells.set_meta("cells", true)
 		if row < grid.size():
 			for parameter: Dictionary in grid[row]:
-				cells.add_child(_build_parameter_row(node, parameter))
+				# Already built, if this node went through the measuring pass: taken off
+				# the bench rather than made a second time.
+				var made: Control = measured.get(str(parameter.get("name", "")))
+				var cell: Control = made
+				if cell == null:
+					cell = _build_parameter_row(node, parameter)
+				if made != null and made.get_parent() != null:
+					made.get_parent().remove_child(made)
+				# One column width for every cell, so the control on the second row
+				# lands under the control on the first. Without it each row centres its
+				# own contents and two rows of two read as four separate islands, which
+				# is exactly what the Lowpass looked like.
+				if gridded:
+					cell.custom_minimum_size.x = Design.scale(NodeGrid.COLUMN)
+				cells.add_child(cell)
 		line.add_child(cells)
 		line.set_meta("cells_box", cells)
 
-		var right := _port_label(outputs[row] if row < outputs.size() else {}, true)
+		var right := _port_label(outputs[row] if row < outputs.size() else {}, true,
+			gridded)
 		right.set_meta("port_label", true)
+		right_gutters.append(right)
 		line.add_child(right)
 		widget.add_child(line)
 
@@ -3638,7 +4764,7 @@ func _create_widget(node: Dictionary) -> void:
 		# past the first line behind an "n more" click, which taxed every look at a
 		# freshly loaded patch — the way to see less of a module is to zoom out, not
 		# to unwrap it knob by knob.
-		_fit_row_height(line)
+		_fit_row_height(line, gridded)
 
 		if row >= port_rows:
 			continue
@@ -3655,9 +4781,52 @@ func _create_widget(node: Dictionary) -> void:
 		# greyscale printout and a projector that has given up on saturation. Colour was
 		# doing this on its own, which meant for some people it was not being done.
 		if has_input:
-			widget.set_slot_custom_icon_left(row, _port_icon(inputs[row]["type"]))
+			widget.set_slot_custom_icon_left(row,
+				_port_socket(inputs[row]["type"], _port_connected(str(node["id"]),
+					str(inputs[row]["name"]), true)) if gridded
+				else _port_icon(inputs[row]["type"], _panel_style_of(str(node["id"]))))
 		if has_output:
-			widget.set_slot_custom_icon_right(row, _port_icon(outputs[row]["type"]))
+			widget.set_slot_custom_icon_right(row,
+				_port_socket(outputs[row]["type"], _port_connected(str(node["id"]),
+					str(outputs[row]["name"]), false)) if gridded
+				else _port_icon(outputs[row]["type"], _panel_style_of(str(node["id"]))))
+
+	# The gutters, squared up now that every label in them exists. Each side takes the
+	# width of its own longest label, so the control region has one left edge and one
+	# right edge down the whole node — and a node with two short port names does not
+	# reserve room for a node with long ones.
+	if gridded:
+		for side: Array in [gutters, right_gutters]:
+			var widest := 0.0
+			for label: Control in side:
+				widest = maxf(widest, label.get_combined_minimum_size().x)
+			# Capped. One long port name is allowed to widen its own gutter and not to
+			# set the width of the node system; past the ceiling it clips, and the node
+			# says so rather than growing quietly.
+			var ceiling := float(Design.scale(NodeGrid.PORT_GUTTER_MAX))
+			if widest > ceiling:
+				widget.set_meta("gutter_overflow", widest - ceiling)
+				widest = ceiling
+			for label: Control in side:
+				label.custom_minimum_size.x = widest
+		# And the node stands at its class. A width that emerges from whatever minimum
+		# sizes the controls asked for is not a class; this is the one place a node's
+		# width is decided, and the specimens were measured to arrive at the figures.
+		#
+		# Set, not floored. A minimum only ever pushes a Control wider — nothing pulls
+		# one back down — so a node that stood at 401 while its gutters were being
+		# measured kept that pixel after the class said 400, and its own combined
+		# minimum agreed with the class the whole time. One stray pixel does not
+		# matter and the invariant does: a migrated node has one declared class and
+		# its footprint comes from that class, or fifty more types will quietly
+		# reintroduce emergent widths one pixel at a time.
+		#
+		# If content genuinely cannot fit, that is evidence for another class rather
+		# than a reason to let this one drift, and `editor_test` reports it.
+		var class_width := NodeGrid.width_for(_type_key(node))
+		if class_width > 0:
+			widget.custom_minimum_size.x = class_width
+			widget.size.x = class_width
 
 	if str(node.get("type", "")) in ["PluginEffect", "PluginInstrument"]:
 		var plugin_line := HBoxContainer.new()
@@ -3728,6 +4897,10 @@ func _create_widget(node: Dictionary) -> void:
 		lane_line.set_meta("has_slot", false)
 		var lane := StepGrid.new()
 		lane.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# It paints steps, so it is a control and it is for FULL. Declared rather than
+		# inferred: it is not a Button or a Range, so nothing else about it says so, and
+		# for two zoom bands it was the only thing drawn on a node that draws no controls.
+		NodeOptical.requires(lane, NodeOptical.State.FULL)
 		var lane_id := str(node["id"])
 		lane.read = func() -> Dictionary:
 			for entry: Dictionary in patch.get("nodes", []):
@@ -3747,9 +4920,29 @@ func _create_widget(node: Dictionary) -> void:
 		# Not through _fit_row_height: that helper hides any slotless row without
 		# parameter cells, and this row's whole job is to be the thing it carries.
 
+	# What each slot carries, so its socket can be re-cut in a new style without taking
+	# the node apart. Read back from the widget rather than from the document because
+	# this is a fact about the built rows, and the rows are what have slots.
+	var left_types := PackedStringArray()
+	var right_types := PackedStringArray()
+	for slot in maxi(inputs.size(), outputs.size()):
+		left_types.append(str(inputs[slot]["type"]) if slot < inputs.size() else "")
+		right_types.append(str(outputs[slot]["type"]) if slot < outputs.size() else "")
+	widget.set_meta("left_types", left_types)
+	widget.set_meta("right_types", right_types)
+
 	_add_ghost_ports(widget, str(node["id"]), descriptor)
 
 	graph_edit.add_child(widget)
+	# Dressed last, and after the node is in the tree rather than merely built.
+	#
+	# Twice now this has been too early. Before the rows were added it painted a node
+	# with nothing written on it; before add_child it still missed every value readout,
+	# because ValueField builds the Label inside it in _ready and _ready does not run
+	# until the node has a parent. Both times a fresh graph came up in the editor's ink
+	# and took its lettering at the next repaint, which looks exactly like a style that
+	# did not apply.
+	_style_widget(widget, str(node["id"]))
 	# Deferred, because the honest minimums need the tree: an OptionButton measured
 	# before the theme reaches it reports the fallback theme's width, and a column
 	# sized to that lie is a column that falls back out of register one frame later.
@@ -3867,45 +5060,174 @@ func _style_node_title(widget: GraphNode, descriptor: Dictionary) -> void:
 ## GraphEdit hotzone constants, so this is about telling the types apart, not about aim.
 static var _port_icons: Dictionary = {}
 
-func _port_icon(type_name: String) -> Texture2D:
-	if _port_icons.has(type_name):
-		return _port_icons[type_name]
+## A port on a node that has been through the pass: a hole with a coloured ring round it.
+##
+## Three marks and a rule about what each one is for. The centre is dark because a socket
+## is a hole; the ring is the signal's own colour because that is the one thing a port
+## must say before it is read; the outer hairline is there so the ring has an edge against
+## a body of nearly its own value. That is the whole of it — no washer, no nut, no bevel,
+## no glow. The knobs have just escaped from miniature hardware and the ports are not
+## going to walk back into it.
+##
+## The signal type is still carried by shape as well as colour — audio round, control a
+## diamond, event square, note a ring — so a reader who cannot separate mint from blue
+## still can separate the ports. It is the ring that takes the shape now rather than a pip
+## inside it, which is one mark doing two jobs instead of two marks doing one each.
+##
+## Connected and unconnected differ in weight, not in light: an occupied socket has a
+## fuller ring and a trace of its own colour in the hole, an empty one is a thin ring and
+## a dark hole. Whether a cable is plugged in is not the same fact as whether signal is
+## flowing, and only one of them is allowed to glow.
+func _port_socket(type_name: String, connected: bool) -> Texture2D:
+	var cached := "socket/%s/%s" % [type_name, connected]
+	if _port_icons.has(cached):
+		return _port_icons[cached]
 
-	const SIZE := 20
+	const SIZE := 26
 	var image := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0, 0, 0, 0))
 	var colour: Color = TYPE_COLOURS.get(type_name, Design.INK_NORMAL)
 	var centre := Vector2(SIZE * 0.5 - 0.5, SIZE * 0.5 - 0.5)
-	var radius := 5.0
+	# The hole, in the canvas's own dark rather than in black: a socket is a hole in the
+	# node, and what you see through it is the same nothing the graph is drawn on.
+	var hole: Color = Design.SURFACES[Design.Surface.CANVAS]
+	if connected:
+		hole = hole.lerp(colour, 0.45)
+	var ring := colour if connected else Color(colour, 0.62)
 
+	# The state is a difference in weight: an occupied socket has a fuller ring and a
+	# trace of the cable's colour in the hole, an empty one is a thinner ring around a
+	# dark one. The first pair differed by a shade of alpha alone and could not be told
+	# apart on the Lowpass, which is the node that has both at once.
+	const OUTER := 8.6
+	var ring_edge: float = 7.4 if connected else 6.7
+	var bore: float = 4.2 if connected else 4.8
 	for y in SIZE:
 		for x in SIZE:
 			var point := Vector2(x, y) - centre
-			var distance := 0.0
+			# One distance metric per signal type, so the ring is round for audio, a
+			# diamond for control, a square for events and — for notes — round with a
+			# wider bore, which reads as the open ring the old icon drew.
+			var reach := point.length()
 			match type_name:
 				"control":
-					distance = absf(point.x) + absf(point.y)          # diamond
+					reach = (absf(point.x) + absf(point.y)) * 0.76
 				"event":
-					distance = maxf(absf(point.x), absf(point.y)) * 1.35   # square
-				_:
-					distance = point.length()                          # circle
-			var edge := radius + 1.0
-			if distance > edge:
+					reach = maxf(absf(point.x), absf(point.y)) * 0.94
+			if reach > OUTER:
 				continue
-			# A dark rim, so a port stays visible against a node body of any lightness.
-			var alpha: float = clampf(edge - distance, 0.0, 1.0)
-			var fill := colour
-			if type_name == "note" and distance < radius - 2.0:
-				fill = Design.SURFACES[Design.Surface.NODE]        # ring, not disc
-			image.set_pixel(x, y, Color(fill.r, fill.g, fill.b, alpha))
+			var fill: Color = Design.BORDERS[Design.Surface.RAISED]
+			if reach <= bore:
+				fill = hole
+			elif reach <= ring_edge:
+				fill = ring
+			image.set_pixel(x, y, Color(fill.r, fill.g, fill.b,
+				clampf(OUTER - reach, 0.0, 1.0) * (1.0 if connected else 0.92)))
 
 	var texture := ImageTexture.create_from_image(image)
-	_port_icons[type_name] = texture
+	_port_icons[cached] = texture
+	return texture
+
+
+## Whether anything is plugged into one port of one node, by the document rather than by
+## the view: the graph's own connection list is empty for a frame after a rebuild, and
+## this is asked while rebuilding.
+func _port_connected(node_id: String, port_name: String, is_input: bool) -> bool:
+	for wire: Dictionary in patch.get("connections", []):
+		var end: Dictionary = wire["to"] if is_input else wire["from"]
+		if str(end["node"]) == node_id and str(end["port"]) == port_name:
+			return true
+	return false
+
+
+func _port_icon(type_name: String, key: String = ModuleThemes.CATEGORY) -> Texture2D:
+	var cached := "%s/%s" % [type_name, key]
+	if _port_icons.has(cached):
+		return _port_icons[cached]
+
+	# A socket mounted in the panel, on every node — painted or not.
+	#
+	# The grammar used to arrive with the faceplate: painted modules got sockets and
+	# the unpainted graph kept flat type-shapes, which was defensible while the cables
+	# were flat too. The cords ended that. A cord entering a flat diamond is exactly
+	# the decorated-connection-point read the socket exists to kill, and the cable
+	# reference sheet draws its grommets on an unpainted panel for the same reason. An
+	# unpainted node now wears a steel grommet — the rack's own hardware colours — and
+	# a painted one wears its theme's ring, so the difference paint makes is the trim,
+	# never the grammar.
+	#
+	# The signal type is still carried by a shape: it moves from being the whole port
+	# to being the pip in the mouth of one, which is how the type survives a
+	# colour-blind reader, a greyscale printout and a projector that has given up on
+	# saturation. This is the icon only — GraphEdit centres it on the slot anchor, so
+	# nothing about the row, the port position or the cable moves.
+	const SIZE := 26
+	var image := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var colour: Color = TYPE_COLOURS.get(type_name, Design.INK_NORMAL)
+	var centre := Vector2(SIZE * 0.5 - 0.5, SIZE * 0.5 - 0.5)
+
+	var painted := key != ModuleThemes.CATEGORY
+	var skin := Rack.skin(key)
+	var ring: Color = skin.get("ring", Color(0.7, 0.7, 0.7)) if painted \
+		else Rack.JACK_RING
+	var hole: Color = skin.get("jack", Color(0.07, 0.07, 0.07)) if painted \
+		else Rack.JACK_HOLE
+	var nut := ring.darkened(0.55)
+	# The seat takes the editor surface rather than a constant, so switching palettes
+	# re-cuts the icon — which is also what the suite checks.
+	var shade: Color = Design.SURFACES[Design.Surface.NODE].darkened(0.35)
+
+	# Four rings, and the money is in the middle two: the hole, the collar, the wide
+	# top-lit nut, and the seat. The nut band widened in the grommet pass — the metal
+	# is what says "hardware", and at the old two pixels of band it said "border".
+	const RIM := 12.6
+	const NUT := 11.2
+	const RING := 8.0
+	const HOLE := 5.8
+	for y in SIZE:
+		for x in SIZE:
+			var point := Vector2(x, y) - centre
+			var distance := point.length()
+			if distance > RIM:
+				continue
+			# Lit from the top left, like everything else on these panels: the metal
+			# lifts where it faces the light and drops where it turns away.
+			var lift: float = clampf(-(point.x + point.y) / 22.0, -0.28, 0.32)
+			var fill := shade
+			if distance <= HOLE:
+				fill = hole
+			elif distance <= RING:
+				fill = ring.lightened(maxf(lift, 0.0)) if lift > 0.0 \
+					else ring.darkened(-lift)
+			elif distance <= NUT:
+				fill = nut.lightened(maxf(lift, 0.0)) if lift > 0.0 \
+					else nut.darkened(-lift)
+			# The pip: the signal's own shape in the signal's own colour, sitting in
+			# the mouth of the socket.
+			var pip := 0.0
+			match type_name:
+				"control":
+					pip = absf(point.x) + absf(point.y)
+				"event":
+					pip = maxf(absf(point.x), absf(point.y)) * 1.35
+				_:
+					pip = distance
+			# 3.6, up from 3.0: at three pixels a diamond and a circle differ by eight
+			# pixels of corner, which is a shape distinction in name only — and the pip
+			# is the whole of how a signal type reaches a colour-blind reader.
+			if pip <= 3.6 and not (type_name == "note" and pip < 1.9):
+				fill = colour
+			image.set_pixel(x, y, Color(fill.r, fill.g, fill.b,
+				clampf(RIM - distance, 0.0, 1.0)))
+
+	var texture := ImageTexture.create_from_image(image)
+	_port_icons[cached] = texture
 	return texture
 
 
 ## One side of a port row: the name in ordinary ink, the unit behind it in secondary.
-func _port_label(port: Dictionary, align_right: bool) -> Control:
+func _port_label(port: Dictionary, align_right: bool, roles: bool = false) -> Control:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.alignment = BoxContainer.ALIGNMENT_END if align_right \
@@ -3920,11 +5242,15 @@ func _port_label(port: Dictionary, align_right: bool) -> Control:
 	row.tooltip_text = doc
 
 	var name_label := Label.new()
-	name_label.text = str(port["name"])
+	name_label.text = Rack.face_text(port)
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name_label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-	name_label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
-	name_label.add_theme_color_override("font_color", Design.INK_NORMAL)
+	if roles:
+		NodeText.dress(name_label, NodeText.Role.PORT_LABEL)
+	else:
+		name_label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
+		name_label.add_theme_font_size_override("font_size",
+			Design.type(Design.SIZE_BODY))
+		name_label.add_theme_color_override("font_color", Design.INK_NORMAL)
 	name_label.set_meta("port_label", true)
 	# Operational: what is plugged in here is not guessable from the colour alone, so
 	# the name is pinned to a readable size in screen space rather than shrinking with
@@ -3937,8 +5263,12 @@ func _port_label(port: Dictionary, align_right: bool) -> Control:
 	# version put the unit first so that the name would sit nearest its port. It was
 	# a reasonable argument about proximity and it produced "Hz frequency", which
 	# reads as a typo. Reading order beats proximity when the result is words.
+	# A labelled port prints its label and nothing else. The unit was the half of
+	# "fm octaves" that made the row read as an identifier with its type exposed; the
+	# doc already says what the wire is measured in, and the readouts keep their units
+	# where a number needs one.
 	var unit := str(port.get("unit", ""))
-	if unit != "":
+	if unit != "" and not port.has("label"):
 		row.add_child(_unit_label(unit))
 	return row
 
@@ -3967,10 +5297,14 @@ func _unit_label(unit: String) -> Label:
 ## row that kept its tall minimum after its knobs were folded away left a node with a band
 ## of empty panel where the controls used to be — which is the "full node with pieces
 ## missing" that the level of detail exists to avoid.
-func _fit_row_height(line: Control) -> void:
+func _fit_row_height(line: Control, gridded: bool = false) -> void:
 	var cells: Control = line.get_meta("cells_box") if line.has_meta("cells_box") else null
 	var tall: bool = cells != null and cells.visible and cells.get_child_count() > 0
-	line.custom_minimum_size.y = Design.scale(
+	# On the grid, a row is one of two heights and both are multiples of eight, so every
+	# row below them lands on the rhythm too. Off it, the two figures this pass inherited:
+	# 74 and 28, near enough to look deliberate and far enough off to put everything
+	# underneath them half a unit out.
+	line.custom_minimum_size.y = NodeGrid.row_height(tall) if gridded else Design.scale(
 		Design.PARAMETER_CELL_HEIGHT if tall else Design.NODE_ROW_HEIGHT)
 	# A row with nothing on it at all disappears — unless it is carrying a slot, in which
 	# case it stays whatever else happens, because a hidden row renumbers the cables.
@@ -4357,7 +5691,17 @@ func _control_zone(control: Control) -> Control:
 ## graph's behaviour, still draggable, still typeable, still legible when zoomed out.
 func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 	var row := VBoxContainer.new()
-	row.add_theme_constant_override("separation", 0)
+	# Control, name, value, with one micro unit between them on the grid — they were
+	# touching, which is why a knob and the word under it read as one lump rather than as
+	# a control and its name.
+	# Whether this node is through the pass, asked once for the whole cell.
+	# `_type_key` again, and this was the third place asking the document directly.
+	# It is why the Output seam's safety-limit dropdown came out undressed —
+	# native chevron, rounded corners — sitting beside a Filter Sweep whose
+	# dropdown was flat and square. One key.
+	var roles := NodeIdentity.migrated(_type_key(node))
+	row.add_theme_constant_override("separation",
+		Design.scale(NodeGrid.LABEL_GAP) if roles else 0)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.set_meta("cell", "parameter")
@@ -4379,15 +5723,18 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 	# what the knob writes back through and is never touched by a caption — the two are
 	# separate fields precisely so that naming a knob cannot rewire it.
 	label.text = str(parameter.get("display_name", "")) \
-		if str(parameter.get("display_name", "")) != "" else name
+		if str(parameter.get("display_name", "")) != "" else Rack.face_text(parameter)
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.tooltip_text = str(parameter.get("doc", ""))
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-	label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
-	label.add_theme_color_override("font_color", Design.INK_NORMAL)
+	if roles:
+		NodeText.dress(label, NodeText.Role.PARAM_LABEL)
+	else:
+		label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
+		label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
+		label.add_theme_color_override("font_color", Design.INK_NORMAL)
 	label.set_meta("screen_min", Design.MIN_SCREEN_LABEL)
 	label.set_meta("screen_kind", "parameter")
 
@@ -4444,15 +5791,26 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		# been hidden with the control that carried it, which is the same failure as an
 		# unlabelled slider seen from the other end. A dropdown is a control; the option
 		# it is showing is information, and information survives the control.
+		if roles:
+			# Marked, then dressed. The mark is what survives _mount_chooser, which
+			# strips every stylebox off an unpainted module's dropdown on its way past —
+			# so this styling was being applied and then quietly removed, and the only
+			# reason it was noticed is that the font size it does not strip stayed put.
+			options.set_meta("node_diagram", true)
+			_dress_option(options)
 		var chosen := Label.new()
 		chosen.text = str(parameter["enum"][clampi(int(round(current)), 0,
 			parameter["enum"].size() - 1)])
 		chosen.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		chosen.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		chosen.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		chosen.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-		chosen.add_theme_font_size_override("font_size", Design.type(Design.SIZE_NUMERIC))
-		chosen.add_theme_color_override("font_color", Design.INK_BRIGHT)
+		if roles:
+			NodeText.dress(chosen, NodeText.Role.CONTROL_OPTION)
+		else:
+			chosen.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
+			chosen.add_theme_font_size_override("font_size",
+				Design.type(Design.SIZE_NUMERIC))
+			chosen.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		chosen.set_meta("screen_min", Design.MIN_SCREEN_LABEL)
 		chosen.set_meta("screen_kind", "value")
 		chosen.visible = false
@@ -4488,6 +5846,10 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 	# Compact still means "dial only, no drawn captions" — the captions below are real
 	# Labels so the level of detail can reach them. Same dial, same size, same keyboard.
 	slider.compact = true
+	# And on the three types through the node pass, drawn as a diagram rather than as a
+	# moulded part. Same control, same size, same descriptor, same keyboard: only the
+	# picture differs, which is the same relationship the fader already has with it.
+	slider.diagram = roles
 	slider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	slider.node_id = node_id
 	slider.descriptor = parameter
@@ -4500,6 +5862,15 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 	# so the only way to ask for exactly 440 was to drag until it happened to say 440.
 	# Drag the figure, double click to type it, Alt-click for the default.
 	var readout := ValueField.new()
+	# Seventy-two pixels, which is not wide enough for every reading this can show and
+	# is left alone deliberately.
+	#
+	# "0.000 semitones" is half as wide again and prints past its cell into whatever
+	# slack its neighbours are carrying — which, at two knobs to a line, there always is.
+	# Reserving the true width fixes the overflow and widens every cell holding a long
+	# unit, and four of the shipped Game examples then open with their nodes overlapping.
+	# The overflow is latent at this packing and the fix is not, so it belongs with the
+	# composition work that would move those columns, not ahead of it.
 	readout.custom_minimum_size.x = Design.scale(72)
 	readout.centred = true
 	readout.text = _format_with_unit(parameter, current)
@@ -4509,6 +5880,11 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		return _to_value(parameter, position)
 	readout.to_position = func(value: float) -> float:
 		return _to_position(parameter, value)
+	# This field's display converts — milliseconds under a second, kilohertz over a
+	# thousand — so its parse has to convert back. Without this, opening the editor on
+	# "10 ms" and pressing return stored ten seconds.
+	readout.read_text = func(typed: String, showing: String) -> float:
+		return ValueText.parse(parameter, typed, showing)
 	readout.value_submitted.connect(func(value: float) -> void:
 		var clamped: float = clampf(value, float(parameter["min"]), float(parameter["max"]))
 		slider.set_value_silently(clamped)
@@ -4573,31 +5949,13 @@ func _to_position(parameter: Dictionary, value: float) -> float:
 
 ## The value as somebody would say it out loud: "10 ms", not "0.010".
 ##
-## A patch format stores seconds and hertz, and a person reading a node should not
-## have to hold the native representation in their head to know what they are looking
-## at. So the unit is always shown, and it changes with the magnitude — milliseconds
-## under a second, kilohertz over a thousand — because that is how the number would
-## be spoken and written down anywhere else.
+## One line now. This used to be two functions here and two more identical ones in the
+## rack, all keying the number of decimals to the value's own magnitude — three under one,
+## two under ten — which is why every value on a normalised control wore three decimals
+## whatever the control was. `ValueText` asks the parameter descriptor instead, and both
+## views call the same implementation.
 func _format_with_unit(parameter: Dictionary, value: float) -> String:
-	var unit := str(parameter.get("unit", ""))
-	if unit == "s" and absf(value) < 1.0:
-		return "%s ms" % _format_value(value * 1000.0)
-	if unit == "Hz" and absf(value) >= 1000.0:
-		return "%s kHz" % _format_value(value / 1000.0)
-	if unit == "":
-		return _format_value(value)
-	return "%s %s" % [_format_value(value), unit]
-
-
-func _format_value(value: float) -> String:
-	var magnitude := absf(value)
-	if magnitude >= 1000.0:
-		return "%.0f" % value
-	if magnitude >= 10.0:
-		return "%.1f" % value
-	if magnitude >= 1.0:
-		return "%.2f" % value
-	return "%.3f" % value
+	return ValueText.of(parameter, value)
 
 
 # ---------------------------------------------------------------------------------
@@ -4613,11 +5971,23 @@ func _set_parameter(node_id: String, parameter: String, value: float) -> void:
 	# gesture rebuilds instead.
 	if parameter == "voices":
 		_voices_touched = true
+	# And a handful of parameters are identity rather than state: turning a filter from
+	# lowpass to notch changes what operation the node performs, so its mark has to
+	# follow. Noted here and acted on after the document has the new value, because the
+	# mark is read from the document.
+	var identity := false
+	var moved: GraphNode = widgets.get(node_id)
+	if moved != null:
+		identity = parameter == NodeIdentity.variant_parameter(
+			str(moved.get_meta("type", "")))
 	# The engine runs the flattened graph, so an instance's exported knob reaches it
 	# by its inner name; the document records the value on the instance, because the
 	# facade is what the file says.
 	var target := _engine_parameter_target(node_id, parameter)
 	engine.set_parameter(target[0], target[1], value)
+	if identity:
+		# Deferred: the document is written a few lines below and the mark reads it.
+		(func() -> void: _style_widget(moved, node_id)).call_deferred()
 	for node in patch.get("nodes", []):
 		if node["id"] == node_id:
 			if not node.has("parameters"):
@@ -4887,6 +6257,8 @@ func _without_target(entries: Array, node_id: String) -> Array:
 
 func _on_node_selected(node: Node) -> void:
 	var node_id: String = ids.get(node.name, "")
+	if node_id != "":
+		selected_module = node_id
 	if node_id == "":
 		# Still a selection change, even though there is nothing behind it. Returning
 		# without saying so left the panel describing whatever was selected before — which
@@ -4938,6 +6310,7 @@ func _on_rack_parameter_changed(node_id: String, parameter: String, value: float
 
 
 func _on_rack_node_selected(node_id: String) -> void:
+	selected_module = node_id
 	var outputs := _port_list(node_id, "outputs")
 	inspecting = {"node": node_id, "port": outputs[0]["name"]} if not outputs.is_empty() \
 		else {}
@@ -7042,6 +8415,76 @@ func _write_speech_buffer(node_id: String, bytes: PackedByteArray, phrases: int)
 		+ "says the first, each semitone up the next")
 
 
+## What a patch is made of, for the browser's preview pane.
+##
+## Read from the file when somebody looks at it. The alternative is opening three hundred
+## patches to draw a list of their names, which is the sort of eager work that turns a
+## browser into a wait.
+func _browser_facts(item: BrowserItem) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if not _examples.has(item.source_ref):
+		return lines
+	var file := FileAccess.open(_example_path(_examples[item.source_ref]),
+		FileAccess.READ)
+	if file == null:
+		return lines
+	var patch_file: Variant = JSON.parse_string(file.get_as_text())
+	if not (patch_file is Dictionary):
+		return lines
+	var nodes: Array = (patch_file as Dictionary).get("nodes", [])
+	var wires: Array = (patch_file as Dictionary).get("connections", [])
+	lines.append("%d node%s" % [nodes.size(), "" if nodes.size() == 1 else "s"])
+	lines.append("%d connection%s" % [wires.size(), "" if wires.size() == 1 else "s"])
+	# What it plays through, from its own terminals rather than from a guess: the host on
+	# an Input or Output node is the seam it is wired to.
+	var terminals := {}
+	for node: Dictionary in nodes:
+		var host := str(node.get("host", ""))
+		match "%s/%s" % [str(node.get("type", "")), host]:
+			"Input/note":
+				terminals["Keyboard input"] = true
+			"Input/audio":
+				terminals["Audio input"] = true
+			"Output/stereo":
+				terminals["Audio output"] = true
+	for terminal in terminals:
+		lines.append(str(terminal))
+	return lines
+
+
+## Taking something from the browser: the action the item asked for.
+##
+## Two routes, both of which the editor already had. Adding is the palette's, and loading
+## is the toolbar example menu's — which loads straight into the patch with no
+## confirmation, so this does too rather than inventing a convention for one entry point.
+## The browser closes on a load and stays open on an add: a patch replaces what you were
+## looking at, and nodes are added several at a time.
+func _from_browser(id: String, action: int) -> void:
+	if action == BrowserItem.Action.LOAD_PATCH:
+		node_browser.hide()
+		await _load_example(id.trim_prefix("device:"))
+		return
+	_search_spawn = graph_edit.size * 0.5
+	await _add_from_search(id)
+
+
+## Opens the browser under the control that asked for it.
+##
+## The toolbar button's own rectangle, in viewport coordinates, so the panel arrives
+## where the hand already is rather than at a corner the editor picked.
+func _open_node_browser() -> void:
+	var anchor := Rect2i(Vector2i(Design.scale(120), Design.scale(60)), Vector2i.ZERO)
+	if toolbar != null and toolbar.toolbar_add_button != null:
+		var button: Button = toolbar.toolbar_add_button
+		anchor = Rect2i(button.get_global_rect())
+	# Rebuilt on every opening: the example shelf and the registry can both have grown
+	# since the last one — a plugin scan, a device saved. Which node names can be added is
+	# the editor's rule about its own graph, so it is answered here and handed over.
+	node_browser.catalogue = BrowserCatalogue.build(registry,
+		_addable(PackedStringArray(registry.keys())), _examples)
+	node_browser.open_beside(anchor)
+
+
 func _open_search(at_position: Vector2 = Vector2(120, 120)) -> void:
 	_search_spawn = at_position
 	_added_since_open = 0
@@ -7437,6 +8880,687 @@ func _auto_place() -> void:
 		everything.append(node["id"])
 	await _arrange(everything)
 
+
+
+## Repairs the arrangement without redesigning it.
+##
+## Layout goal 3. The measurement that earned this its own menu item: legalizing the hostile
+## QA patch costs nine nudges and a median move of forty units, while auto-placing it moves
+## twenty-nine nodes a median of thirteen hundred and takes its stage violations from
+## twenty-four to a hundred and thirty-three. Those are not the same operation, and one
+## button should not do both.
+##
+## > **Legalization repairs invalid geometry and preserves intent. It is not permission to
+## > regenerate the arrangement.**
+##
+## Everything it does is one undo step. A repair that has to be undone nine times is a repair
+## nobody will risk pressing.
+func _legalize_layout() -> void:
+	if patch.get("nodes", []).is_empty():
+		return
+
+	var home := {}
+	for id in widgets:
+		home[str((widgets[id] as GraphNode).name)] = (widgets[id] as GraphNode).position_offset
+
+	var start := _layout_faults()
+	if int(start["total"]) == 0:
+		_say("the layout is already legal")
+		return
+
+	_begin_edit()
+	var reasons := {}
+	var escapes := {}
+	var rounds := 0
+	# Bounded. A legalizer that could run for ever on a patch it cannot repair is worse
+	# than one that stops and says so.
+	while rounds < 200:
+		var found := _layout_faults()
+		if int(found["total"]) == 0:
+			break
+		rounds += 1
+		var before_crossings: int = _layout_crossings()
+		var took := false
+		# Phase A nudges, phase B searches locally, phase C escapes a trapped node. The
+		# candidate set widens only when the narrower one has no answer.
+		for phase in 3:
+			var movable := LayoutLegalize.implicated(found, phase > 0)
+			var best: Array = []
+			var best_id := ""
+			var best_at := Vector2.ZERO
+			for radius: int in LayoutLegalize.rings(phase):
+				for offset: Vector2 in LayoutLegalize.offsets(radius, GRID):
+					for id: String in movable:
+						# An anchored node is the author saying this stays here, and
+						# tier 0 outranks legality: a legalizer that moved one would be
+						# repairing the drawing by overruling the drawing's author.
+						if _layout_anchored(id):
+							continue
+						var widget: GraphNode = graph_edit.get_node_or_null(NodePath(id))
+						if widget == null:
+							continue
+						var was: Vector2 = widget.position_offset
+						widget.position_offset = (was + offset).snappedf(GRID)
+						await get_tree().process_frame
+						var after := _layout_faults()
+						var spent := LayoutLegalize.disturbance(_layout_positions(), home)
+						var candidate := LayoutLegalize.score(int(after["total"]),
+							_layout_crossings() - before_crossings, spent)
+						widget.position_offset = was
+						if int(after["total"]) >= int(found["total"]):
+							continue
+						if best.is_empty() or LayoutLegalize.prefer(candidate, best):
+							best = candidate
+							best_id = id
+							best_at = (was + offset).snappedf(GRID)
+				if not best.is_empty():
+					break
+			if best_id != "":
+				var widget: GraphNode = graph_edit.get_node_or_null(NodePath(best_id))
+				if widget != null:
+					widget.position_offset = best_at
+					await get_tree().process_frame
+				if not reasons.has(best_id):
+					reasons[best_id] = str(movable[best_id])
+				if phase == 2:
+					escapes[best_id] = true
+				took = true
+				break
+		if not took:
+			break
+
+	# Positions back into the document, keyed by what each widget actually draws.
+	var moved := 0
+	for id in widgets:
+		var widget: GraphNode = widgets[id]
+		var at: Vector2 = widget.position_offset
+		if (home.get(str(widget.name), at) as Vector2).distance_to(at) <= 0.5:
+			continue
+		moved += 1
+		for node: Dictionary in patch["nodes"]:
+			if str(node["id"]) == str(id):
+				node["position"] = {"x": at.x, "y": at.y}
+	_commit_edit("legalize layout")
+
+	var left := _layout_faults()
+	var repaired: int = int(start["total"]) - int(left["total"])
+	if int(left["total"]) > 0:
+		_say("resolved %d of %d layout conflicts; %d could not be repaired without moving "
+			% [repaired, int(start["total"]), int(left["total"])]
+			+ "an anchored node")
+	elif escapes.is_empty():
+		_say("resolved %d layout conflict%s; moved %d node%s"
+			% [repaired, "" if repaired == 1 else "s", moved, "" if moved == 1 else "s"])
+	else:
+		_say("resolved %d layout conflict%s; moved %d node%s, %d of them trapped"
+			% [repaired, "" if repaired == 1 else "s", moved, "" if moved == 1 else "s",
+				escapes.size()])
+
+
+
+## Improves how well the drawing agrees with the computation, without rearranging it.
+##
+## Layout goal 4. Narrower than "make the graph better" on purpose: it moves nodes toward
+## their own topology-derived stage band, keeps them legal, and stops. Crossings and cable
+## length are watched and not pursued.
+##
+## Selection-aware. With nodes selected only those may move, and everything else is a fixed
+## obstacle that still counts in the scoring — so "tidy this area" is a real operation rather
+## than auto-place with a smaller radius. **Stage depth always comes from the whole
+## topology**, because a selection's induced subgraph would report three middle nodes as
+## sources and then destroy their relationship to the rest of the patch.
+func _tidy_flow() -> void:
+	if patch.get("nodes", []).is_empty():
+		return
+	# Routing goal 2.3. This refused to run at all on a graph with any fault, which was a
+	# reasonable precondition while a trespass meant the router's hidden path and most
+	# patches had none. Now that it means the cable on screen, babble has fourteen and the
+	# dense fixture twenty-three — so the refusal made this operation a no-op on nearly
+	# every real patch, and routes_test caught it doing exactly nothing.
+	#
+	# The precondition it actually needs is the weaker and more honest one, applied to
+	# every candidate below rather than to the starting state:
+	#
+	# > **A tidy operation may not make the drawing less legal than it found it.**
+	#
+	# Overlapping *nodes* are still a hard stop, because tidying around a genuine collision
+	# really would hide it, and node overlap does not depend on how cables are drawn.
+	var at_rest := _layout_faults()
+	if (at_rest["overlaps"] as Array).size() > 0:
+		_say("resolve the overlaps first — tidying an invalid drawing would hide them")
+		return
+	# Goal 2.4 found a contradiction here and this is the side it came down on.
+	#
+	# Tidy flow was asked both to introduce no new *visible* trespass and to take no input
+	# whatsoever from cable presentation. Those cannot both hold, because visible trespass
+	# *is* presentation. The dense fixture carries twenty-three in CATENARY and none in
+	# ROUTED, so the two requirements pull apart on it and something has to give.
+	#
+	# Both sides were built and measured. Guarding on the structural trespass instead — the
+	# chord through a node body — makes the operation style-independent on every fixture and
+	# costs this: on dense-graph-legalized it takes the visible trespasses from 23 to 25 and
+	# the drawn crossings from 31 to 32. An operation called Tidy that makes the picture
+	# worse is the more expensive of the two defects.
+	#
+	# So the contract was corrected rather than the gate forced:
+	#
+	# > **Presentation may veto a structural improvement, but presentation never supplies
+	# > the improvement objective.**
+	#
+	# The objective above is structural and identical in every cable style. This is the
+	# safety constraint, and it belongs to the *active* presentation only — checking both
+	# would put ROUTED geometry, and `_route`'s corridor instability with it, back inside a
+	# CATENARY decision, which is the dependency goal 2.3 removed. A third cable style would
+	# then have changed the behaviour of the two that already existed.
+	#
+	# Two runs may therefore land differently, and when they do `tidy_trace` has to name the
+	# pair that caused it. `geometry_contract_test.gd` asserts exactly that, so "it depends
+	# on the style" can never become an excuse for a divergence nobody can account for.
+	var kept_trespass := _trespass_pairs()
+	var kept_clearance: int = (at_rest["clearance"] as Array).size()
+	tidy_trace.clear()
+
+	var movable := {}
+	var chosen := _selected_ids()
+	# In document order, and that is not a tidiness. First improvement makes the outcome
+	# depend on which node is tried first, and a widget is named n0..n29 by the order it
+	# was built rather than by anything in the document — so the same patch reopened could
+	# offer a different first improvement and find four more moves at what had been a
+	# fixed point. Sorting by the node identity the document actually carries makes the
+	# operation reach the same answer from the same drawing, whenever it is asked.
+	var by_document: Array = []
+	for id in widgets:
+		if chosen.is_empty() or chosen.has(str(id)):
+			by_document.append(str(id))
+	by_document.sort()
+	for id: String in by_document:
+		movable[str((widgets[id] as GraphNode).name)] = true
+	var home := _layout_positions()
+
+	# The whole topology, once. Depth does not change as nodes move — only the drawing's
+	# agreement with it does — so this is computed before the loop and never again.
+	var ids: Array = []
+	var edges: Array = []
+	for id in widgets:
+		ids.append(str((widgets[id] as GraphNode).name))
+	for wire in graph_edit.get_connection_list():
+		edges.append([str(wire["from_node"]), str(wire["to_node"])])
+	var depth := LayoutTidy.stages(ids, edges)
+	var component := LayoutObjective.components(ids, edges)
+	var cohorts := {}
+	for name: String in ids:
+		var at: int = depth[name]
+		if not cohorts.has(at):
+			cohorts[at] = []
+		(cohorts[at] as Array).append(name)
+
+	_begin_edit()
+	var rounds := 0
+	while rounds < 120:
+		var boxes := _layout_boxes()
+		var tolerance := _layout_tolerance(boxes)
+		var before := LayoutTidy.vector(boxes, depth, edges, tolerance)
+		# Goal 2.4: the structural count, not the drawn one. `Tidy flow` decides where
+		# nodes belong, and where nodes belong may not depend on how cables are painted.
+		var before_crossings := _structural_crossings()
+		var taken := false
+		# Two passes. The first refuses any move that adds a crossing; the second allows
+		# it only when nothing else improved the same stage vector. Assuming from the
+		# start that stage order must be bought with crossings would be assuming the
+		# answer.
+		#
+		# First improvement rather than best, and the difference is not a nicety: scanning
+		# every node against every offset against every vertical repair is six hundred
+		# routed trials per round, and this ran for twenty minutes on one fixture without
+		# finishing. Taking the first admissible move is the same operation with the
+		# search order doing the work the ranking was doing.
+		# One pass, and no escape hatch. The rule began as "refuse a move that adds a
+		# crossing unless no non-worsening move exists", and the fixtures said the
+		# opposite of what that anticipated: on babble every stage improvement costs
+		# crossings, so the hatch was taken every time and the operation bought seventeen
+		# stage violations with seven crossings and ten thousand units of cable — the
+		# auto-place pathology in miniature, from an operation built to avoid it.
+		#
+		# So: if no move improves the stage vector without adding a crossing, move
+		# nothing. Tidy is allowed to say the author already did better than it can prove.
+		for allow_crossings in [false]:
+			for id: String in by_document:
+				var name := str((widgets[id] as GraphNode).name)
+				var target := LayoutTidy.band_of(boxes, cohorts[int(depth[name])], name)
+				for shift: float in LayoutTidy.toward(
+						(boxes[name] as Rect2).get_center().x, target, GRID):
+					for lift: int in LayoutTidy.Y_REPAIR:
+						# A component moves as one. Forcing an internal order onto a
+						# feedback loop is correcting it into nonsense.
+						var group := {}
+						var standing := _layout_positions()
+						for other: String in ids:
+							if component[other] == component[name] and movable.has(other):
+								group[other] = (standing[other] as Vector2) 									+ Vector2(shift, float(lift) * GRID)
+						if group.is_empty():
+							continue
+						var was := {}
+						for other: String in group:
+							var widget: GraphNode = graph_edit.get_node_or_null(
+								NodePath(other))
+							if widget == null:
+								continue
+							was[other] = widget.position_offset
+							widget.position_offset = (group[other] as Vector2).snappedf(GRID)
+						await get_tree().process_frame
+						# The structural verdict first, and on its own. It consults the
+						# stage vector, the chord crossings and nothing that knows what a
+						# cable looks like, so it is the same answer in every cable style.
+						var now := LayoutTidy.vector(_layout_boxes(), depth, edges,
+							tolerance)
+						var sound: bool = LayoutTidy.better(now, before) 							and (allow_crossings
+								or _structural_crossings() <= before_crossings)
+						# Then the active presentation, which may veto and never proposes.
+						var refused: Array = _trespass_added(kept_trespass)
+						var legal: bool = _no_less_legal(kept_trespass, kept_clearance)
+						if sound and tidy_trace.size() < 400:
+							tidy_trace.append({
+								"node": name, "shift": shift, "lift": lift,
+								"structurally_sound": true,
+								"vetoed": not legal,
+								"pairs": refused})
+						var fine: bool = sound and legal
+						if fine:
+							taken = true
+							break
+						for other: String in was:
+							(graph_edit.get_node(NodePath(other)) as GraphNode) 								.position_offset = was[other]
+						await get_tree().process_frame
+					if taken:
+						break
+				if taken:
+					break
+			if taken:
+				break
+		if not taken:
+			break
+		rounds += 1
+
+	var moved := 0
+	for id in widgets:
+		var widget: GraphNode = widgets[id]
+		var at: Vector2 = widget.position_offset
+		if (home.get(str(widget.name), at) as Vector2).distance_to(at) <= 0.5:
+			continue
+		moved += 1
+		for node: Dictionary in patch["nodes"]:
+			if str(node["id"]) == str(id):
+				node["position"] = {"x": at.x, "y": at.y}
+	_commit_edit("tidy flow")
+
+	var after := LayoutTidy.vector(_layout_boxes(), depth, edges,
+		_layout_tolerance(_layout_boxes()))
+	if moved == 0:
+		# The operation is allowed to say the author already did better than it can prove.
+		_say("nothing to tidy — the layout already agrees with the signal flow")
+	else:
+		_say("tidied the flow: moved %d node%s" % [moved, "" if moved == 1 else "s"])
+
+
+
+## Takes the cheap crossing wins that placement can still offer, and declines the rest.
+##
+## Layout goal 5B, and it is deliberately tiny. The crossing-cost frontier measured what a
+## crossing actually costs to remove by moving a node, and the curve has a sharp knee: on
+## the legalized hostile patch several forty-unit moves each remove one crossing at zero or
+## one inversion, and then it jumps to candidates costing thousands of units and dozens of
+## inversions. The best of those — eight crossings for 3640 units, 4056 more cable and
+## twenty-eight reorderings — is the auto-place pathology arrived at from the other
+## direction.
+##
+## > **Tidy routes may take only cheap local placement wins. If removing a crossing requires
+## > reorganising the patch, it declines.**
+##
+## So the knee is a **feasibility boundary and not a score**. There is no exchange rate here
+## and no budget in units: a candidate is either eligible or it is not, and the eight-crossing
+## move is not a worse candidate — it is not a Tidy routes candidate at all.
+##
+## [codeblock]
+## tier 0 unchanged
+## tier 1 legal
+## the goal 4 stage vector does not worsen
+## exactly one node moves
+## vertically only
+## within the legalizer's own nudge ring, not its search or escape radii
+## at most ORDER_BUDGET vertical order inversions
+## crossings strictly decrease
+## [/codeblock]
+##
+## The ring is the boundary rather than a distance, because that is what the evidence
+## actually established: cheap wins live in the local nudge neighbourhood and the expensive
+## ones require leaving it. Naming a cutoff in units would be inventing a figure the frontier
+## never produced.
+func _tidy_routes() -> void:
+	if patch.get("nodes", []).is_empty():
+		return
+	# Routing goal 2.3. This refused to run at all on a graph with any fault, which was a
+	# reasonable precondition while a trespass meant the router's hidden path and most
+	# patches had none. Now that it means the cable on screen, babble has fourteen and the
+	# dense fixture twenty-three — so the refusal made this operation a no-op on nearly
+	# every real patch, and routes_test caught it doing exactly nothing.
+	#
+	# The precondition it actually needs is the weaker and more honest one, applied to
+	# every candidate below rather than to the starting state:
+	#
+	# > **A tidy operation may not make the drawing less legal than it found it.**
+	#
+	# Overlapping *nodes* are still a hard stop, because tidying around a genuine collision
+	# really would hide it, and node overlap does not depend on how cables are drawn.
+	var at_rest := _layout_faults()
+	if (at_rest["overlaps"] as Array).size() > 0:
+		_say("resolve the overlaps first — a crossing is not the problem yet")
+		return
+	var kept_trespass := _trespass_pairs()
+	var kept_clearance: int = (at_rest["clearance"] as Array).size()
+
+	var chosen := _selected_ids()
+	var by_document: Array = []
+	for id in widgets:
+		if chosen.is_empty() or chosen.has(str(id)):
+			by_document.append(str(id))
+	by_document.sort()
+
+	var ids: Array = []
+	var edges: Array = []
+	for id in widgets:
+		ids.append(str((widgets[id] as GraphNode).name))
+	for wire in graph_edit.get_connection_list():
+		edges.append([str(wire["from_node"]), str(wire["to_node"])])
+	var depth := LayoutTidy.stages(ids, edges)
+
+	_begin_edit()
+	var moved := 0
+	var removed := 0
+	var rounds := 0
+	while rounds < 60:
+		rounds += 1
+		var boxes := _layout_boxes()
+		var tolerance := _layout_tolerance(boxes)
+		var before_stage := LayoutTidy.vector(boxes, depth, edges, tolerance)
+		var before_crossings := _layout_crossings()
+		var before_ys := _layout_heights()
+		var before_cable := _structural_cable()
+
+		var best: Array = []
+		var best_id := ""
+		var best_at := Vector2.ZERO
+		for id: String in by_document:
+			var name := str((widgets[id] as GraphNode).name)
+			var widget: GraphNode = graph_edit.get_node_or_null(NodePath(name))
+			if widget == null:
+				continue
+			var was: Vector2 = widget.position_offset
+			for radius: int in LayoutLegalize.NEAR:
+				for direction in [1, -1]:
+					widget.position_offset = Vector2(was.x,
+						snappedf(was.y + float(direction * radius) * GRID, GRID))
+					await get_tree().process_frame
+					var legal: bool = _no_less_legal(kept_trespass, kept_clearance)
+					var now_boxes := _layout_boxes()
+					var now_stage := LayoutTidy.vector(now_boxes, depth, edges, tolerance)
+					var now_crossings := _layout_crossings()
+					var turned := LayoutTidy.inversions(before_ys, _layout_heights())
+					var now_cable := _structural_cable()
+					var here: Vector2 = widget.position_offset
+					widget.position_offset = was
+					if not legal:
+						continue
+					# Goal 5 may not buy a crossing by undoing goal 4.
+					if LayoutTidy.better(before_stage, now_stage):
+						continue
+					if turned > LayoutTidy.ORDER_BUDGET:
+						continue
+					if now_crossings >= before_crossings:
+						continue
+					var candidate: Array = [before_crossings - now_crossings, turned,
+						absf(here.y - was.y), float(now_cable[0]) - float(before_cable[0]),
+						float(now_cable[1]) - float(before_cable[1])]
+					# Most crossings removed first, and the rest as tie-breaks.
+					candidate[0] = -candidate[0]
+					if best.is_empty() or LayoutLegalize.prefer(candidate, best):
+						best = candidate
+						best_id = name
+						best_at = here
+		if best_id == "":
+			break
+		(graph_edit.get_node(NodePath(best_id)) as GraphNode).position_offset = best_at
+		await get_tree().process_frame
+		removed += int(-float(best[0]))
+		moved += 1
+
+	var touched := 0
+	var home := {}
+	for id in widgets:
+		var widget: GraphNode = widgets[id]
+		for node: Dictionary in patch["nodes"]:
+			if str(node["id"]) != str(id):
+				continue
+			var was := Vector2(float(node.get("position", {}).get("x", 0.0)),
+				float(node.get("position", {}).get("y", 0.0)))
+			if was.distance_to(widget.position_offset) > 0.5:
+				touched += 1
+				node["position"] = {"x": widget.position_offset.x,
+					"y": widget.position_offset.y}
+	_commit_edit("tidy routes")
+
+	if touched == 0:
+		# The declining case, and it is the signature of the operation rather than a
+		# failure of it. On babble every crossing costs the author's vertical grouping, so
+		# there is nothing here to take.
+		_say("no cheap crossing to remove — the rest would mean rearranging the patch")
+	else:
+		_say("removed %d crossing%s by moving %d node%s"
+			% [removed, "" if removed == 1 else "s", touched,
+				"" if touched == 1 else "s"])
+
+
+## Every node's vertical centre, for the order-inversion metric.
+func _layout_heights() -> Dictionary:
+	var out := {}
+	for id in widgets:
+		var widget: GraphNode = widgets[id]
+		if widget.visible:
+			out[str(widget.name)] = widget.position_offset.y + widget.size.y * 0.5
+	return out
+
+
+## How far apart connected things are. **Not** how long any drawn cable is.
+##
+## Routing goal 2.3, and the name is part of the contract: this used to be `_layout_cable`
+## reading `_routes()`, so a structural placement metric was a measurement of the router's
+## polyline — a construction the CATENARY user never sees, which goal 2 found could move a
+## thousand units in response to an edit on the far side of the patch.
+##
+## The fix is not to point it at the drawing instead. That would make arrangement change
+## when somebody changes how cables are *rendered*, which is the WYSIWYG bargain and the
+## wrong one for this tier:
+##
+## > **Structural placement metrics describe the graph, independent of presentation.**
+##
+## So it is deliberately boring. Straight-line distance between the two ports, summed and
+## maximised. No obstacle avoidance, no sag, no cord shape, no waypoint, no corridor.
+##
+## Euclidean rather than Manhattan on purpose. Manhattan would quietly bake the ROUTED
+## style's orthogonal grammar back into a metric that exists precisely to be free of any
+## style's grammar — it would look canonical and would not be.
+##
+## Named `structural_` so nobody later reaches for `path.length()` because a field happened
+## to be called `cable`.
+## What the last Tidy flow considered, and which presentation stopped it.
+##
+## The contract this exists to make checkable:
+##
+## > **Presentation may veto a structural improvement, but presentation never supplies the
+## > improvement objective.**
+##
+## Style-independence alone was the wrong acceptance gate — it forced a choice between an
+## objective that ignores the drawing and a safety rule that protects it. This is the shape
+## that keeps both: the objective is structural and identical in every cable style, and the
+## active presentation may refuse a move it would visibly spoil. Two runs may therefore land
+## in different places, and when they do the difference has to be *attributable* — a named
+## trespass pair, in a named style, on a named candidate — rather than shrugged at.
+##
+## Recorded on every run because an unexplained divergence is the thing this guards against,
+## and a trace you have to switch on is a trace nobody has when they need it.
+var tidy_trace: Array = []
+
+
+func _structural_crossings() -> int:
+	return StructuralGeometry.chord_crossings(StructuralGeometry.chords(graph_edit))
+
+
+## The visible trespasses as a set, so a tidy operation can be held to more than a count.
+func _trespass_pairs() -> Dictionary:
+	var out := {}
+	for row: Array in _layout_faults()["trespass"]:
+		out["%s|%s|%s" % [str(row[0]), str(row[1]), str(row[2])]] = true
+	return out
+
+
+## Which visible trespass pairs this arrangement has that the starting one did not.
+##
+## The evidence a veto has to produce. "Presentation refused it" is not an explanation; "in
+## CATENARY this move puts cable n8>n17 through node n7" is, and `tidy_trace` carries it so
+## that a divergence between two cable styles can be accounted for rather than tolerated.
+func _trespass_added(was: Dictionary) -> Array:
+	var added: Array = []
+	for row: Array in _layout_faults()["trespass"]:
+		var key := "%s|%s|%s" % [str(row[0]), str(row[1]), str(row[2])]
+		if not was.has(key):
+			added.append(key)
+	return added
+
+
+## Whether the drawing is no less legal than the state a tidy operation started from.
+##
+## Routing goal 2.4 strengthens what 2.3 settled for. A count was the obvious reading of
+## "no less legal" and it is too weak: a move can drop one trespass and introduce a
+## different one, leave the total unchanged, and be accepted — the drawing is not less
+## legal by the number and is plainly different by the eye.
+##
+## > **A tidy move may remove a visible trespass. It may not trade one for another.**
+##
+## So the trespasses after have to be a subset of the trespasses before, pair by pair.
+## Node overlap keeps the stricter rule it always had — never any, before or after — since
+## tidying around a genuine collision would hide it, and clearance may not get worse.
+func _no_less_legal(was: Dictionary, was_clearance: int) -> bool:
+	var now := _layout_faults()
+	if (now["overlaps"] as Array).size() > 0:
+		return false
+	if (now["clearance"] as Array).size() > was_clearance:
+		return false
+	for row: Array in now["trespass"]:
+		if not was.has("%s|%s|%s" % [str(row[0]), str(row[1]), str(row[2])]):
+			return false
+	return true
+
+
+func _structural_cable() -> Array:
+	var total := 0.0
+	var longest := 0.0
+	for connection: Dictionary in graph_edit.connections:
+		var ends: Array = graph_edit._endpoints(connection)
+		if ends.is_empty():
+			continue
+		var span: float = (ends[0] as Vector2).distance_to(ends[1] as Vector2)
+		total += span
+		longest = maxf(longest, span)
+	return [total, longest]
+
+## Every node's rectangle, by widget name.
+func _layout_boxes() -> Dictionary:
+	var boxes := {}
+	for id in widgets:
+		var widget: GraphNode = widgets[id]
+		if widget.visible:
+			boxes[str(widget.name)] = Rect2(widget.position_offset, widget.size)
+	return boxes
+
+
+## The width a band is measured at: half the median node width, so the same rule reads a
+## patch of narrow nodes and a patch of wide ones.
+func _layout_tolerance(boxes: Dictionary) -> float:
+	var widths: Array = []
+	for id: String in boxes:
+		widths.append((boxes[id] as Rect2).size.x)
+	if widths.is_empty():
+		return 120.0
+	widths.sort()
+	return float(widths[widths.size() / 2]) * LayoutObjective.BAND_FRACTION
+
+## Where every node currently stands, by widget name.
+func _layout_positions() -> Dictionary:
+	var at := {}
+	for id in widgets:
+		var widget: GraphNode = widgets[id]
+		at[str(widget.name)] = widget.position_offset
+	return at
+
+
+## Whether the author has pinned this node in place.
+##
+## There is no pin in the product today, so this is always false and is here as the tier-0
+## seam rather than as a feature: when one arrives, the legalizer already refuses to move
+## what it names, and `_legalize_layout` already reports the case it cannot repair. Adding
+## the constraint afterwards would mean finding every loop that had assumed it away.
+func _layout_anchored(_widget_name: String) -> bool:
+	return false
+
+
+## Tier-1 faults in the arrangement as it currently stands, measured against the cables
+## the user is actually looking at.
+##
+## Routing goal 2.3. This read `_routes()`, and goal 2.2 measured what that cost: on babble
+## fourteen cables visibly pass through a node while the editor calls the arrangement legal,
+## and on `first-synth` Resolve overlaps moves a node, reports the trespass cleared, and
+## leaves the drawn cable running through exactly the same box. The word "legal" meant "the
+## invisible path is clear".
+##
+## Trespass is a WYSIWYG question and takes the WYSIWYG contract:
+##
+## > **A trespass is a fault when the cable the user is looking at passes through the
+## > visible body of a node.**
+##
+## In ROUTED style `display_path` *is* the routed polyline, so nothing changes there. In
+## CATENARY it is the hanging curve, which is the whole point.
+func _layout_faults() -> Dictionary:
+	var boxes := {}
+	for id in widgets:
+		var widget: GraphNode = widgets[id]
+		if widget.visible:
+			boxes[str(widget.name)] = Rect2(widget.position_offset, widget.size)
+	return LayoutLegalize.faults(boxes, _display_routes())
+
+
+## Every cable as it is drawn, in the shape the legalizer wants.
+##
+## The same list `_routes()` returns, built from `display_path` instead of `routing_path`.
+## Kept beside it rather than replacing it: `routing_path` still owns ROUTED cable
+## construction and ROUTED cable quality, which is a real job — it is just no longer an
+## invisible proxy for layout semantics.
+func _display_routes() -> Array:
+	var out: Array = []
+	for connection: Dictionary in graph_edit.connections:
+		var points: PackedVector2Array = graph_edit.display_path(connection)
+		if points.size() < 2:
+			continue
+		out.append({"points": points,
+			"fields": graph_edit._connection_fields(connection),
+			"colour": Color.WHITE})
+	return out
+
+
+## How many crossings the drawing currently has, for the gratuitous-damage guard.
+func _layout_crossings() -> int:
+	for child in graph_edit.get_children():
+		if child.has_method("crossing_sites"):
+			return (child.crossing_sites() as Array).size()
+	return 0
 
 ## Arranges just the selected nodes, treating the rest as fixed anchors. Kept as its own
 ## action rather than something Auto-place decides for you: an arrangement that silently
@@ -8716,7 +10840,17 @@ func _refresh_document_label() -> void:
 	# A dot rather than an asterisk, and the name goes bright rather than gaining
 	# punctuation — the change should be noticeable without the label jumping about,
 	# and a leading "*" shifts every character along by one.
-	var shown := document_name + ("  (unsaved)" if unsaved else "")
+	# The state is a dot and a word beside the name rather than a parenthesis after it:
+	# "(unsaved)" is only ever there when something is wrong, so its absence has to be
+	# read as the good news, and an absence is a poor way to say anything. Saved says
+	# saved.
+	if save_dot != null:
+		save_dot.texture = _icon(Icons.Kind.DOT,
+			Design.INK_SECOND if unsaved else Design.ACCENT, Design.SIZE_SECONDARY)
+		save_word.text = "Unsaved" if unsaved else "Saved"
+		save_word.add_theme_color_override("font_color",
+			Design.INK_NORMAL if unsaved else Design.INK_SECOND)
+	var shown := document_name
 	if dive_stack.is_empty():
 		document_label.text = "[right]%s[/right]" % shown
 	else:
@@ -8729,8 +10863,7 @@ func _refresh_document_label() -> void:
 				parts.append("[url=%d]%s[/url]" % [index, segments[index]])
 			else:
 				parts.append(segments[index])
-		document_label.text = "[right]%s%s[/right]" % [" > ".join(parts),
-			"  (unsaved)" if unsaved else ""]
+		document_label.text = "[right]%s[/right]" % " > ".join(parts)
 	# Because the label is clipped, this is the only place a long name can be read whole.
 	document_label.tooltip_text = shown
 	document_label.add_theme_color_override("default_color",
@@ -8888,6 +11021,9 @@ func _on_waypoint_changed(from_node: StringName, from_port: int, to_node: String
 ## Pushes stored waypoints into the canvas after a load or rebuild.
 func _restore_waypoints() -> void:
 	graph_edit.clear_waypoints()
+	# Goal 3D: a load starts from nothing. Routes kept across frames make an editing
+	# session stable and must never survive into a fresh opening of the same file.
+	graph_edit.forget_routes()
 	for connection in patch.get("connections", []):
 		if not connection.has("waypoint"):
 			continue
@@ -8935,7 +11071,11 @@ func _apply(same_sound_as: String = "") -> void:
 		var now: String = engine.flatten_patch(text)
 		if now != "" and now == same_sound_as:
 			var quiet: Variant = JSON.parse_string(engine.validate_patch(text))
-			_show_diagnostics(quiet["diagnostics"] if typeof(quiet) == TYPE_DICTIONARY else [])
+			var quiet_found: Array = quiet["diagnostics"] \
+				if typeof(quiet) == TYPE_DICTIONARY else []
+			# The graph was not rebuilt, so the engine's last build still describes it.
+			quiet_found.append_array(_build_diagnostics())
+			_show_diagnostics(quiet_found)
 			_rebuild_level_targets()
 			_show_info()
 			_refresh_status()
@@ -8943,7 +11083,6 @@ func _apply(same_sound_as: String = "") -> void:
 
 	var report: Variant = JSON.parse_string(engine.validate_patch(text))
 	var diagnostics: Array = report["diagnostics"] if typeof(report) == TYPE_DICTIONARY else []
-	_show_diagnostics(diagnostics)
 
 	if typeof(report) == TYPE_DICTIONARY and report["ok"]:
 		# The plugins are asked what they are *before* the graph that owns them is
@@ -8953,6 +11092,19 @@ func _apply(same_sound_as: String = "") -> void:
 		_capture_plugin_states()
 		_close_plugin_face(true)
 		engine.load_patch(_patch_text_with_plugin_states(), 48000.0)
+		# What building the graph turned up, added to what reading the document turned
+		# up, and only then presented. Two sources, one health state, one channel.
+		#
+		# 15B found the second source reaching nobody. `validate_patch` parses and
+		# validates a *document*; a plugin that is not installed, an implausible latency
+		# and a buffer that will not resolve are all discovered later, when `load_patch`
+		# actually builds the nodes — and nothing in the editor had ever read that list.
+		# So a node hosting a missing plugin was silent in a program with a validity
+		# channel designed, proven and sitting right there on its header.
+		#
+		# After the load rather than before it, because before it the engine's answer is
+		# about the previous graph.
+		diagnostics.append_array(_build_diagnostics())
 		_note_latency()
 		# Loading puts the stored level back, so a mute has to be re-asserted or it lifts
 		# the first time anybody moves a node.
@@ -8962,14 +11114,45 @@ func _apply(same_sound_as: String = "") -> void:
 				engine.set_parameter(muted_output, "level", 0.0)
 		# The sweep list names ports by node and index, so it has to be rebuilt whenever
 		# the graph is — otherwise the glow keeps lighting ports that no longer exist.
+		_show_diagnostics(diagnostics)
+		# A lock is an identity, so it survives zoom and pan for free — what it does not
+		# survive is the cable being disconnected underneath it, and a stale reference
+		# would leave the field quieted around nothing at all.
+		graph_edit.prune_focus_lock()
 		_rebuild_level_targets()
 		_show_info()
 		_refresh_status()
 	else:
+		# A document that will not validate was never handed to the engine, so there is
+		# no build to ask about.
+		_show_diagnostics(diagnostics)
 		_refresh_status()
 
 
-func _show_diagnostics(diagnostics: Array) -> void:
+## What the engine said while it was building the graph, as diagnostics.
+##
+## The second of the two sources `_show_diagnostics` is fed from. Kept separate from the
+## call so both paths through `_apply` can add it without either of them knowing how the
+## engine spells its answer.
+func _build_diagnostics() -> Array:
+	var built: Variant = JSON.parse_string(str(engine.get_diagnostics_json()))
+	return built if typeof(built) == TYPE_ARRAY else []
+
+
+func _show_diagnostics(unmerged: Array) -> void:
+	# Two sources, and they overlap: everything `validate_patch` finds in the document is
+	# found again while the graph is built, so a clamped parameter would otherwise be
+	# reported twice and counted twice. Keyed on the code and the words, because the same
+	# code about two different nodes is two problems and the message is what says which.
+	var diagnostics: Array = []
+	var already := {}
+	for entry: Dictionary in unmerged:
+		var key := "%s / %s" % [str(entry.get("code", "")), str(entry.get("message", ""))]
+		if already.has(key):
+			continue
+		already[key] = true
+		diagnostics.append(entry)
+
 	for child in diagnostics_list.get_children():
 		child.queue_free()
 
@@ -8983,7 +11166,7 @@ func _show_diagnostics(diagnostics: Array) -> void:
 		health_label.text = "Graph valid"
 		health_label.add_theme_color_override("font_color", Design.INK_SECOND)
 		diagnostics_heading.visible = false
-		_highlight([])
+		_apply_health({})
 		return
 
 	var errors := 0
@@ -8996,7 +11179,17 @@ func _show_diagnostics(diagnostics: Array) -> void:
 		Design.ERROR if errors > 0 else Design.WARNING)
 	diagnostics_heading.visible = true
 
-	var to_highlight := []
+	# Which nodes are unwell, and how unwell. An error outranks a warning where a node
+	# collects both, because the reader wants the worst thing that is true about it.
+	var unwell := {}
+	for diagnostic in diagnostics:
+		var severity: int = NodeState.Health.ERROR \
+			if str(diagnostic.get("severity", "error")) == "error" \
+			else NodeState.Health.WARNING
+		for node_id: Variant in diagnostic.get("nodes", []):
+			unwell[str(node_id)] = maxi(severity,
+				int(unwell.get(str(node_id), NodeState.Health.WELL)))
+
 	for diagnostic in diagnostics:
 		var card := VBoxContainer.new()
 
@@ -9009,8 +11202,6 @@ func _show_diagnostics(diagnostics: Array) -> void:
 		# Spatial, not just textual: the offending nodes are named and highlighted in the
 		# graph, and clicking the problem frames them.
 		if diagnostic.has("nodes"):
-			for node_id in diagnostic["nodes"]:
-				to_highlight.append(node_id)
 			var where := Label.new()
 			where.text = "  " + " → ".join(diagnostic["nodes"])
 			where.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
@@ -9029,7 +11220,7 @@ func _show_diagnostics(diagnostics: Array) -> void:
 		card.add_child(rule)
 		diagnostics_list.add_child(card)
 
-	_highlight(to_highlight)
+	_apply_health(unwell)
 
 
 ## Lights the whole signal path a node sits on.
@@ -9102,6 +11293,44 @@ func _reachable_from(node_id: String, downstream: bool) -> Array:
 ## stay. An enum cell hands its chosen option to a label as the dropdown goes, so it
 ## never shows a name with nothing beside it — "shape" and "safety_limit" floating alone
 ## was the same failure as an unlabelled slider, seen from the other end.
+## Enforces what a body control said about the distance it is for.
+##
+## The counterpart to `_apply_cell_detail`, for everything that is not on a parameter row.
+## Six controls in the library are added straight to the node — the plugin host's buttons,
+## the CC learn button, the speech words button, the sequencer's step lane — so the cell
+## machinery never saw them and they were still drawn at 28%, where the contract says a
+## node draws no control at all.
+##
+## Governed by declaration rather than by a list of six names. A control says the lowest
+## optical state it may appear in and `NodeOptical` defaults that to FULL, so the seventh
+## one somebody adds is governed the day it exists.
+##
+## The previous visibility is remembered rather than assumed, because "visible at FULL" is
+## not true of all of them: the plugin's panel button appears only when the plugin has a
+## face, and putting it back unconditionally would offer a window that is not there.
+func _apply_body_optics(control: Control, state: int) -> void:
+	# A control zone belongs to `_apply_cell_detail`, which already owns the knob inside
+	# it. Two authorities over one control is how a widget ends up flickering between two
+	# opinions of itself.
+	if bool(control.get_meta("control_zone", false)):
+		return
+	if control is BaseButton or control is Range \
+			or control.has_meta(NodeOptical.REQUIRES):
+		if NodeOptical.survives(control, state):
+			if control.has_meta("optical_was"):
+				control.visible = bool(control.get_meta("optical_was"))
+				control.remove_meta("optical_was")
+		else:
+			if not control.has_meta("optical_was"):
+				control.set_meta("optical_was", control.visible)
+			control.visible = false
+			return
+	for child in control.get_children():
+		var kid := child as Control
+		if kid != null:
+			_apply_body_optics(kid, state)
+
+
 func _apply_cell_detail(cell: Control, full: bool) -> void:
 	var value_field: Control = cell.get_meta("value_field") 		if cell.has_meta("value_field") else null
 	if value_field != null:
@@ -9146,8 +11375,20 @@ func _apply_detail(level: int) -> void:
 	# whatever the zoom left. A summary node is exactly "what is this and what plugs
 	# into it", so the names are most of the point of that band.
 	var show_port_names: bool = level != PatchGraph.Detail.TOPOLOGY
+	# What the bands are, rather than which band this is. Everything below asks the state
+	# so that a control's declaration reads as "FULL only" rather than as a comparison
+	# against a detail constant.
+	var optical := NodeOptical.of(level)
 	for id in widgets:
 		var widget: GraphNode = widgets[id]
+		# Everything in the body that is not on a parameter row, by its own declaration.
+		# The titlebar is GraphNode's own furniture and carries identity rather than
+		# controls, so it is not swept.
+		var titlebar := widget.get_titlebar_hbox()
+		for child in widget.get_children():
+			var part := child as Control
+			if part != null and part != titlebar:
+				_apply_body_optics(part, optical)
 		# The node gives back the height its controls were using.
 		#
 		# GraphNode keeps whatever size it was last given, so a compact node used to be a
@@ -9206,6 +11447,18 @@ func _apply_detail(level: int) -> void:
 			widget.set_meta("authored_size", widget.size)
 		var authored: Vector2 = widget.get_meta("authored_size")
 		widget.size.y = authored.y if full else widget.get_combined_minimum_size().y
+		# And the width is put back on its class, for the same reason the height
+		# is measured here rather than while the rows are being built. A minimum
+		# only pushes a Control wider and nothing pulls one back, so a child that
+		# asked for an extra pixel during construction and then settled left the
+		# node standing a pixel over its class for good — the Output seam at 401
+		# against a class of 400, while its own combined minimum agreed with the
+		# class the whole time. One pixel does not matter; a class that is only a
+		# floor does, because fifty more types would reintroduce emergent widths
+		# one pixel at a time.
+		var declared := NodeGrid.width_for(str(widget.get_meta("type", "")))
+		if declared > 0:
+			widget.size.x = float(declared)
 
 ## Says what a port is, in words, while the pointer is on it.
 ##
@@ -9218,6 +11471,11 @@ func _apply_detail(level: int) -> void:
 func _on_port_hovered(widget_name: String, side: String, index: int) -> void:
 	if graph_edit == null:
 		return
+	# Cable pass, goal 2. The cable field gets quieter around whatever the pointer is
+	# asking about, and a port is asking about everything plugged into it — which for an
+	# output is the fan-out, and a fan-out really is one source feeding several places.
+	graph_edit.focus_port = ("" if widget_name == ""
+		else "%s:%s:%d" % [widget_name, side, index])
 	if widget_name == "":
 		graph_edit.tooltip_text = ""
 		return
@@ -9248,22 +11506,50 @@ func _on_port_hovered(widget_name: String, side: String, index: int) -> void:
 ## Only the border, and only when the node is not selected: a hover that also changed the
 ## fill would compete with the selected state, and the whole value of having three states
 ## is that they are told apart at a glance rather than compared.
+## Records that the pointer is on a node, and has it redressed.
+##
+## The dressing is not done here any more. This function used to write the two
+## styleboxes straight from the editor theme, which meant every module the pointer
+## touched was repainted by something that had never heard of panel styles.
 func _set_node_hovered(widget: GraphNode, hovered: bool) -> void:
-	if widget.selected:
-		widget.remove_theme_stylebox_override("panel")
-		widget.remove_theme_stylebox_override("titlebar")
-		return
-	if not hovered:
-		widget.remove_theme_stylebox_override("panel")
-		widget.remove_theme_stylebox_override("titlebar")
-		return
+	widget.set_meta("hovered", hovered)
+	_style_widget(widget, str(widget.get_meta("patch_id")))
 
-	var body := (theme.get_stylebox("panel", "GraphNode") as StyleBoxFlat).duplicate()
-	body.border_color = Design.BORDERS[Design.Surface.ACTIVE]
-	widget.add_theme_stylebox_override("panel", body)
-	var head := (theme.get_stylebox("titlebar", "GraphNode") as StyleBoxFlat).duplicate()
-	head.border_color = Design.BORDERS[Design.Surface.ACTIVE]
-	widget.add_theme_stylebox_override("titlebar", head)
+
+## Which identity variant a node is currently in, or -1 for a type that declares none.
+##
+## A state-variable filter set to notch is not doing the operation a lowpass does, so its
+## mark is not the lowpass mark. Only a type that has declared one identity parameter can
+## do this — see `NodeIdentity.VARIANT` for why it is that narrow.
+func _identity_variant(widget: GraphNode) -> int:
+	var driver := NodeIdentity.variant_parameter(str(widget.get_meta("type", "")))
+	if driver == "":
+		return -1
+	var node_id := str(widget.get_meta("patch_id", ""))
+	for node: Dictionary in patch.get("nodes", []):
+		if str(node["id"]) == node_id:
+			return int(round(float(node.get("parameters", {}).get(driver, 0.0))))
+	return -1
+
+
+## What the last validation thought of a node.
+func _health_of(node_id: String) -> int:
+	return int(_node_health.get(node_id, NodeState.Health.WELL))
+
+
+## Records which nodes a validation had something to say about, and redresses the ones
+## whose answer changed.
+##
+## Only the ones that changed: restyling a node rebuilds its styleboxes and relettering
+## it touches every label on it, and doing that to a whole graph every time the document
+## is validated is a lot of work to conclude that nothing is different.
+func _apply_health(found: Dictionary) -> void:
+	var was := _node_health
+	_node_health = found
+	for node_id: String in widgets:
+		if int(was.get(node_id, NodeState.Health.WELL)) \
+				!= int(found.get(node_id, NodeState.Health.WELL)):
+			_style_widget(widgets[node_id], node_id)
 
 
 ## Puts a drawn icon on a control, at the size the ink around it is using.
@@ -9313,14 +11599,16 @@ func _refresh_status() -> void:
 	var parts := ["Audio running" if running else "Audio stopped"]
 	parts.append("Graph valid" if valid else "%d problem%s"
 		% [_problem_count, "" if _problem_count == 1 else "s"])
-	# The sample rate is not here at all now, having been "48 kHz" and then "48k" on the
-	# way out. Its own comment had already made the argument — a number that has never
-	# once changed while somebody watched belongs in the tooltip — and the sidebar's Cost
-	# line says "48000 Hz" in full a few inches away. Two copies of a constant were paying
-	# for themselves in toolbar width, on a bar with eight pixels of room left.
-	if toolbar_menu_popup != null:
-		toolbar_menu_popup.set_item_text(toolbar_menu_popup.get_item_index(102), parts[0])
-		toolbar_menu_popup.set_item_text(toolbar_menu_popup.get_item_index(103), parts[1])
+	# And they are said in one place. These two used to be written into the menu as
+	# disabled items — "Audio running", "Graph valid" — which is a state filed under
+	# commands, read only by somebody who opened a menu to look for it. The dot above
+	# carries the whole sentence in its tooltip, and it is legible from across a table.
+	_status_line = " · ".join(parts)
+
+
+## What the status dot is currently saying, in words. Read by the suite, and by anything
+## that wants the sentence without recomputing it.
+var _status_line := ""
 
 
 ## The status strip spelled out, for whichever of its two parts is left to hover.
@@ -9361,10 +11649,17 @@ func _note_latency() -> void:
 			% [now, _latency_ms()])
 
 
+## Points at nodes from somewhere else in the interface, using the hover channel.
+##
+## It used to wash them in red, and it was also what the diagnostics list used to say
+## "these are broken" — one treatment for two unrelated facts, which is how a reader
+## learns that red means "something over there mentioned this node". Pointing is what a
+## pointer does, so pointing borrows the pointer's own treatment; being invalid is a
+## property of the node and now lives on the node's header.
 func _highlight(node_ids: Array) -> void:
 	for id in widgets:
 		var widget: GraphNode = widgets[id]
-		widget.modulate = Color(1.0, 0.65, 0.6) if node_ids.has(id) else Color.WHITE
+		_set_node_hovered(widget, node_ids.has(id))
 
 
 ## Kept under its old name because half a dozen places call it after the graph changes.
@@ -9729,6 +12024,8 @@ func _load_text(text: String) -> void:
 	if not patch.has("connections"):
 		patch["connections"] = []
 	_modernize_stereo_outputs()
+	if graph_edit != null:
+		graph_edit.clear_focus_lock()
 	inspecting = {}
 	# A fresh document starts on no page of anyone's bank, with deck B unpicked.
 	preset_pages.clear()
@@ -9845,6 +12142,19 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		accept_event()
 		return
 
+	# The four lenses on the plain number row, tooltips say so. Only while the Patch
+	# tab is up and nothing has keyboard focus — a 3 typed into a value field is a
+	# number, not a request for the schematic.
+	if key.pressed and not key.ctrl_pressed and not key.alt_pressed \
+			and get_viewport().gui_get_focus_owner() == null \
+			and views != null and views.get_tab_title(views.current_tab) == "Patch":
+		var lens_keys := {KEY_1: PatchView.RACK, KEY_2: PatchView.GRAPH,
+			KEY_3: PatchView.SCHEMATIC, KEY_4: PatchView.FACE}
+		if lens_keys.has(key.keycode):
+			_set_patch_view(lens_keys[key.keycode])
+			accept_event()
+			return
+
 	# The end of the view row Ctrl+0 and Ctrl+1 begin: fit, real size, and which
 	# drawing. A toggle on one key rather than an accelerator per radio item,
 	# because the question has two answers and one hand.
@@ -9857,6 +12167,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 	# Panic, on the key everybody already tries. A stop control you can only reach
 	# with the mouse is one you cannot use while holding a chord down.
+	#
+	# A pinned cable focus goes first and on its own: Escape is the key for "never mind",
+	# and letting go of a focus is a smaller never-mind than silencing the instrument. A
+	# reader who has locked a route and wants out of it should not have to stop the sound
+	# to get there.
+	if key.pressed and key.keycode == KEY_ESCAPE and graph_edit != null 			and (not graph_edit.locked_cable.is_empty() or graph_edit.locked_port != ""):
+		graph_edit.clear_focus_lock()
+		accept_event()
+		return
 	if key.pressed and key.keycode == KEY_ESCAPE:
 		_all_notes_off()
 		accept_event()

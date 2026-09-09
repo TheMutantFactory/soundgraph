@@ -21,8 +21,14 @@ const Transcribe := preload("res://transcribe.gd")
 const ModuleThemes := preload("res://module_themes.gd")
 ## The generated faceplate finishes.
 const Faceplate := preload("res://faceplate.gd")
+## The graph, for the case's own constants.
+const PatchGraphScript := preload("res://patch_graph.gd")
+const CableArtScript := preload("res://cable_art.gd")
+## The Add Node browser, for its category list.
+const NodeBrowserScript := preload("res://node_browser.gd")
 ## The third way of looking at a patch.
 const Schematic := preload("res://schematic.gd")
+const HarnessExit := preload("res://harness_exit.gd")
 ## Headless checks on the editor itself.
 ##
 ##   godot --headless --script res://editor_test.gd
@@ -37,6 +43,74 @@ var failures := 0
 
 func rack_ready(main) -> void:
 	main.rack.rebuild()
+
+
+## The preview pane's headed sections, in order.
+func _pane_headings(main) -> Array:
+	var found: Array = []
+	for child in main.node_browser._preview_body.get_children():
+		var label := child as Label
+		if label != null and label.has_meta("heading"):
+			found.append(label.text)
+	return found
+
+
+## The lines under one of its headings.
+func _pane_lines(main, heading: String) -> Array:
+	var found: Array = []
+	var inside := false
+	for child in main.node_browser._preview_body.get_children():
+		var label := child as Label
+		if label == null:
+			continue
+		if label.has_meta("heading"):
+			inside = label.text == heading
+		elif inside:
+			found.append(label.text)
+	return found
+
+
+## What the pane offers, and which of those are drawn but not yet wired.
+func _pane_buttons(main) -> Array:
+	var found: Array = []
+	for child in main.node_browser._preview_actions.get_children():
+		found.append((child as Button).text)
+	return found
+
+
+func _pane_disabled(main) -> Array:
+	var found: Array = []
+	for child in main.node_browser._preview_actions.get_children():
+		if (child as Button).disabled:
+			found.append((child as Button).text)
+	return found
+
+
+## One item out of the browser's catalogue, by id.
+func _browser_item(main, id: String) -> BrowserItem:
+	for entry: Variant in main.node_browser.catalogue:
+		var item := entry as BrowserItem
+		if item != null and item.id == id:
+			return item
+	return null
+
+
+## One key event, for the handlers that are handed keys directly.
+func _key(keycode: int) -> InputEventKey:
+	var key := InputEventKey.new()
+	key.keycode = keycode
+	key.physical_keycode = keycode
+	key.pressed = true
+	return key
+
+
+## One key press, through the input system rather than into a handler.
+func _press(keycode: int) -> void:
+	var key := InputEventKey.new()
+	key.keycode = keycode
+	key.physical_keycode = keycode
+	key.pressed = true
+	Input.parse_input_event(key)
 
 
 ## Every scrap of text in a tree, however deep.
@@ -339,8 +413,13 @@ func _device_peak(main) -> float:
 
 
 ## Whether a View-menu item is checked, found by id rather than by index.
+## Whether a menu item is ticked, wherever in the menu tree it now lives.
+##
+## By id rather than by popup: the View menu became a hierarchy of doors, and a check
+## that knew which popup held a setting was a check that had to be rewritten every time
+## one moved. The toolbar's own seam answers this.
 func view_item_checked(main, id: int) -> bool:
-	return main.view_popup.is_item_checked(main.view_popup.get_item_index(id))
+	return main.toolbar.ticked(id)
 
 
 ## Press, move, release on the graph canvas.
@@ -490,6 +569,458 @@ func _initialize() -> void:
 	main._toggle_loved("SineOscillator")
 	main._toggle_loved("Comb")
 	check(not main._loved_nodes.has("Comb"), "and a second tap takes the love back")
+
+	# ---- the graph's topology, which a visual pass may not touch --------------------
+	# Step 1 of the node redesign freezes this: First Synth is seven nodes, seven wires,
+	# and a known set of ports. Everything the pass is about — surfaces, type, icons,
+	# what survives a zoom — is allowed to change. What the patch *is* is not, and the
+	# way that goes wrong is a port quietly gained or lost while somebody is looking at
+	# the colours.
+	var graph_shape: Array = []
+	for child in main.graph_edit.get_children():
+		var node := child as GraphNode
+		if node == null or not node.visible:
+			continue
+		graph_shape.append("%s %s %d/%d" % [node.name, node.title,
+			node.get_input_port_count(), node.get_output_port_count()])
+	graph_shape.sort()
+	check(graph_shape == ["n0 Keyboard 1/4", "n1 Main Oscillator 3/1",
+			"n2 Filter Sweep 1/1", "n3 Lowpass 4/1", "n4 Amp Envelope 1/1",
+			"n5 Amplifier 2/1", "n6 Output 2/1"],
+		"First Synth is the same seven nodes with the same ports (%s)"
+			% ", ".join(PackedStringArray(graph_shape)))
+	# From the document rather than from the view. GraphEdit's own list is a drawing
+	# detail — it is empty for a frame after a rebuild, and this check does not care
+	# what the canvas has caught up with, only what the patch says.
+	var graph_wires: Array = []
+	for wire: Dictionary in main.patch.get("connections", []):
+		graph_wires.append("%s.%s -> %s.%s" % [wire["from"]["node"], wire["from"]["port"],
+			wire["to"]["node"], wire["to"]["port"]])
+	graph_wires.sort()
+	check(graph_wires.size() == 7,
+		"and the same seven wires between them (%d: %s)"
+			% [graph_wires.size(), ", ".join(PackedStringArray(graph_wires.slice(0, 3)))])
+
+	# ---- the Add node browser ---------------------------------------------------------
+	# The shell only, which is all Step 1 builds: that the toolbar's own button opens it,
+	# that all three ways out work, and that it leaves the editor it floats over alone.
+	# The button is pressed through its signal rather than reached for by name, because
+	# the thing worth pinning is the route a person takes.
+	# Settle first. The graph fits itself to the view a frame or two after it is asked
+	# to, so a zoom read straight after the checks above is still moving on its own —
+	# and this check would have reported the suite's own leftover as the browser
+	# disturbing the patch.
+	await process_frame
+	await process_frame
+	var zoom_before: float = main.graph_edit.zoom
+	main.toolbar.add_node_requested.emit()
+	await process_frame
+	await process_frame
+	check(main.node_browser.visible, "Add node opens the browser")
+	check(main.node_browser.categories_column != null
+			and main.node_browser.results_column != null
+			and main.node_browser.preview_column != null,
+		"with the three columns the rest of the plan fills")
+	check(is_equal_approx(main.graph_edit.zoom, zoom_before),
+		"and the patch underneath is left where it was (%f -> %f)"
+			% [zoom_before, main.graph_edit.zoom])
+	# The rail. Fourteen categories in three families, and it must not scroll: a browser
+	# that answers a scrolling list with a narrower scrolling list has not replaced
+	# anything. This is the check that fails if a row ever gets taller.
+	var browser_rail: ScrollContainer = main.node_browser._rail
+	var rail_listed: Array = []
+	for row: Button in main.node_browser._rows:
+		rail_listed.append(str(row.get_meta("category")))
+	check(rail_listed == ["All", "Sources", "Filters", "Envelopes", "Modulation",
+			"Utilities", "Mixing", "Effects", "MIDI & IO", "Sequencers", "Examples",
+			"Node bank", "FM bank", "DX7 bank"],
+		"the rail carries the fourteen categories in order (%d)" % rail_listed.size())
+	# Against the rail's budget rather than against its scrollbar: a popup that is never
+	# drawn has no size, so headless there is nothing for a scrollbar to be wrong about.
+	# The figure is the rail's real height at the tightest supported window and scale,
+	# measured with the editor on screen — see NodeBrowser.RAIL_BUDGET.
+	var rail_wants: float = browser_rail.get_child(0).get_combined_minimum_size().y
+	check(rail_wants <= main.node_browser.RAIL_BUDGET,
+		"and they fit the rail without scrolling (%d of %d)"
+			% [int(rail_wants), main.node_browser.RAIL_BUDGET])
+	check(main.node_browser.selected_category == "All", "All is lit to begin with")
+
+	# Pressed through the button's own signal, which is the route a click takes.
+	(main.node_browser._rows[2] as Button).pressed.emit()
+	await process_frame
+	check(main.node_browser.selected_category == "Filters",
+		"pressing a row lights it (%s)" % main.node_browser.selected_category)
+	var rail_row: Button = main.node_browser._rows[2]
+	var rail_next: Button = main.node_browser._rows[3]
+	var rail_lit: StyleBoxFlat = rail_row.get_theme_stylebox("normal")
+	var rail_unlit: StyleBoxFlat = rail_next.get_theme_stylebox("normal")
+	check(rail_lit.bg_color != rail_unlit.bg_color and rail_lit.border_width_top > 0,
+		"and the lit row is a filled, edged row rather than a differently coloured word")
+	var rail_on_fill: float = Design.contrast(rail_row.get_theme_color("font_color"),
+		rail_lit.bg_color)
+	check(rail_on_fill >= 4.5,
+		"whose label still reads against its own fill (%.1f:1)" % rail_on_fill)
+
+	# Up and down walk the whole rail, rules and all, and stop at the ends rather than
+	# wrapping — there is nowhere above All to go.
+	#
+	# With the search field released. The browser opens with it focused, and while it is
+	# focused the arrow keys move the results, which is the flow the middle column exists
+	# for; the rail keeps its own keys for when the focus is not in the field. Tab between
+	# the two is step eight.
+	main.node_browser.search_field.release_focus()
+	main.node_browser.select_category("All")
+	for i in 13:
+		_press(KEY_DOWN)
+		await process_frame
+	check(main.node_browser.selected_category == "DX7 bank",
+		"down walks from All to the last bank (%s)"
+			% main.node_browser.selected_category)
+	_press(KEY_DOWN)
+	await process_frame
+	check(main.node_browser.selected_category == "DX7 bank",
+		"and stops there rather than wrapping")
+	for i in 20:
+		_press(KEY_UP)
+		await process_frame
+	check(main.node_browser.selected_category == "All", "up comes back to All")
+
+	# ---- the middle column ------------------------------------------------------------
+	# Every node lands somewhere. This began as a list of three exceptions — Sampler,
+	# Speech and Plugin Instrument, sources that are not oscillators — and the rail's
+	# first row is called Sources now instead. A node with no category is findable only by
+	# name, which is the browser failing at the one thing it is for, so the check is that
+	# there are none rather than that there are the expected few.
+	var homeless: Array = []
+	for item: BrowserItem in main.node_browser.catalogue:
+		if item.kind == BrowserItem.Kind.NODE and item.category == "":
+			homeless.append(item.id)
+	homeless.sort()
+	check(homeless.is_empty(),
+		"every node in the core has a category (%s)"
+			% ("none homeless" if homeless.is_empty()
+				else ", ".join(PackedStringArray(homeless))))
+
+	# ---- one item vocabulary ----------------------------------------------------------
+	# The browser is handed BrowserItems and nothing else. Everything below is the shape
+	# of that contract, because the preview pane is the next thing built and the preview
+	# pane is exactly where the old per-source differences would leak back into the UI.
+	var rail_rows: Array = []
+	for entry: Variant in NodeBrowserScript.CATEGORIES:
+		if entry != null:
+			rail_rows.append(str((entry as Array)[0]))
+	var seen_ids := {}
+	var duplicate_ids: Array = []
+	var bad_kind := 0
+	var bad_category: Array = []
+	var actionless := 0
+	var not_items := 0
+	var kinds_present := {}
+	for entry: Variant in main.node_browser.catalogue:
+		var item := entry as BrowserItem
+		if item == null:
+			not_items += 1
+			continue
+		if seen_ids.has(item.id):
+			duplicate_ids.append(item.id)
+		seen_ids[item.id] = true
+		if item.kind < 0 or item.kind >= BrowserItem.KIND_NAMES.size():
+			bad_kind += 1
+		if not rail_rows.has(item.category):
+			bad_category.append("%s -> %s" % [item.id, item.category])
+		if item.primary_action < 0 \
+				or item.primary_action >= BrowserItem.ACTION_NAMES.size():
+			actionless += 1
+		kinds_present[item.kind_name()] = true
+	check(not_items == 0 and main.node_browser.catalogue.size() > 300,
+		"the catalogue is BrowserItems and nothing else (%d items, %d strangers)"
+			% [main.node_browser.catalogue.size(), not_items])
+	check(duplicate_ids.is_empty(),
+		"no two items share an id (%s)"
+			% ("none" if duplicate_ids.is_empty()
+				else ", ".join(PackedStringArray(duplicate_ids.slice(0, 4)))))
+	check(bad_kind == 0 and kinds_present.size() == 3,
+		"every item has one of the three kinds, and all three are in use (%s)"
+			% ", ".join(PackedStringArray(kinds_present.keys())))
+	check(bad_category.is_empty(),
+		"every item's category is a row of the rail (%s)"
+			% ("all of them" if bad_category.is_empty()
+				else ", ".join(PackedStringArray(bad_category.slice(0, 4)))))
+	check(actionless == 0, "and every item says what taking it would do")
+
+	# Kind and category are different questions, and used to be one field. A bank voice
+	# and a worked patch are both patches to open and belong in different rows; a node and
+	# a bank voice both drop into the graph and are not the same kind of object.
+	var sine := _browser_item(main, "SineOscillator")
+	var patch := _browser_item(main, "device:First Synth")
+	var bank_voice := _browser_item(main, "device:DX7: algo-01")
+	check(sine != null and sine.kind_name() == "NODE" and sine.category == "Sources"
+			and sine.primary_action == BrowserItem.Action.ADD_NODE,
+		"a node is a NODE in Sources that adds a node")
+	check(patch != null and patch.kind_name() == "PATCH" and patch.category == "Examples"
+			and patch.primary_action == BrowserItem.Action.LOAD_PATCH
+			and patch.secondary_actions.has(BrowserItem.Action.OPEN_IN_SANDBOX),
+		"a worked patch is a PATCH in Examples that loads, with a sandbox behind it")
+	check(bank_voice != null and bank_voice.kind_name() == "BANK_ITEM"
+			and bank_voice.category == "DX7 bank"
+			and bank_voice.display_name == "algo-01",
+		"a bank voice is a BANK_ITEM in its own bank, named without its shelf")
+
+	# Every row drawn comes from an item. A row the catalogue cannot account for is the
+	# old shapes growing a second path back into the column.
+	main.node_browser.select_category("All")
+	main.node_browser.search_field.text = "delay"
+	main.node_browser.refresh_results()
+	await process_frame
+	var orphans: Array = []
+	for row: Button in main.node_browser._result_rows:
+		if not seen_ids.has(str(row.get_meta("id"))):
+			orphans.append(str(row.get_meta("id")))
+	check(orphans.is_empty(),
+		"every row drawn is an item from the catalogue (%s)"
+			% ("all of them" if orphans.is_empty()
+				else ", ".join(PackedStringArray(orphans))))
+
+	# All, browsing: the node vocabulary alone, down the rail's own order. Three hundred
+	# devices under an empty search would bury the fifty things you wire together.
+	main.node_browser.select_category("All")
+	main.node_browser.search_field.text = ""
+	main.node_browser.refresh_results()
+	await process_frame
+	var shown: Array = []
+	var landmarks: Array = []
+	for child in main.node_browser.results_list.get_children():
+		if child is Button:
+			shown.append(str((child as Button).get_meta("id")))
+		elif child is MarginContainer:
+			landmarks.append(str(((child as MarginContainer).get_child(0) as Label).text))
+	var devices_under_all := 0
+	for id: String in shown:
+		if id.begins_with("device:"):
+			devices_under_all += 1
+	check(devices_under_all == 0 and shown.size() > 40,
+		"All browses the nodes and only the nodes (%d rows, %d of them devices)"
+			% [shown.size(), devices_under_all])
+	check(landmarks.slice(0, 3) == ["SOURCES", "FILTERS", "ENVELOPES"],
+		"under landmarks that read down the rail (%s)"
+			% ", ".join(PackedStringArray(landmarks.slice(0, 3))))
+
+	# A category is a scope. Sources holds every generator, and one group needs no heading
+	# of its own — the oscillators and the other sources are told apart inside it later.
+	main.node_browser.select_category("Sources")
+	await process_frame
+	shown = []
+	var oscillator_landmarks := 0
+	for child in main.node_browser.results_list.get_children():
+		if child is Button:
+			shown.append(str((child as Button).get_meta("id")))
+		elif child is MarginContainer:
+			oscillator_landmarks += 1
+	check(shown == ["SineOscillator", "SawOscillator", "SquareOscillator", "Noise",
+			"NoiseOscillator", "Sampler", "Speech", "PluginInstrument"],
+		"Sources holds every generator, sampler and speech among them (%s)"
+			% ", ".join(PackedStringArray(shown)))
+	check(oscillator_landmarks == 0,
+		"and no heading, because a landmark over the only group is the column's own name")
+
+	main.node_browser.select_category("Examples")
+	await process_frame
+	shown = []
+	var nodes_under_examples := 0
+	for row: Button in main.node_browser._result_rows:
+		var id := str(row.get_meta("id"))
+		shown.append(id)
+		if not id.begins_with("device:"):
+			nodes_under_examples += 1
+	check(shown.has("device:First Synth") and nodes_under_examples == 0,
+		"Examples holds the worked patches and no nodes (%d rows, %d of them nodes)"
+			% [shown.size(), nodes_under_examples])
+
+	# Search. Under All it searches everything; inside a category it searches that
+	# category, which is what makes the rail a scope rather than a decoration.
+	main.node_browser.select_category("All")
+	main.node_browser.search_field.text = "delay"
+	main.node_browser.refresh_results()
+	await process_frame
+	shown = []
+	for row: Button in main.node_browser._result_rows:
+		shown.append(str(row.get_meta("id")))
+	check(main.node_browser.selected_item == "Delay",
+		"searching All puts the Delay node first (%s)" % main.node_browser.selected_item)
+	check(shown.has("device:Delay Echo"),
+		"and reaches the devices a browse would not have shown")
+
+	main.node_browser.select_category("Examples")
+	main.node_browser.search_field.text = "kit"
+	main.node_browser.refresh_results()
+	await process_frame
+	shown = []
+	var strays := 0
+	for row: Button in main.node_browser._result_rows:
+		var id := str(row.get_meta("id"))
+		shown.append(id)
+		if not id.begins_with("device:"):
+			strays += 1
+	check(shown.has("device:Kit Chopper") and strays == 0,
+		"a search inside Examples stays inside Examples (%d rows, %d strays)"
+			% [shown.size(), strays])
+
+	# The keyboard, through the handler the field hands its arrow keys to — a focused
+	# LineEdit spends them on its caret, so unhandled input never sees them. The routing
+	# itself was watched windowed; headless, a popup that is never drawn takes no input.
+	main.node_browser.select_category("Sources")
+	main.node_browser.search_field.text = ""
+	main.node_browser.refresh_results()
+	await process_frame
+	main.node_browser._on_search_key(_key(KEY_DOWN))
+	main.node_browser._on_search_key(_key(KEY_DOWN))
+	check(main.node_browser.selected_item == "SquareOscillator",
+		"down moves the lit result (%s)" % main.node_browser.selected_item)
+	for i in 9:
+		main.node_browser._on_search_key(_key(KEY_UP))
+	check(main.node_browser.selected_item == "SineOscillator",
+		"up comes back to the first and stops there")
+
+	# ---- the preview pane -------------------------------------------------------------
+	# Selection alone drives it — no second click — and it describes all three kinds
+	# through one rendering path. The pane draws a name, a badge, headed lists and
+	# buttons; every item answers for its own content. A branch per kind in here is where
+	# the provider shapes would leak back into the interface.
+	main.node_browser.select_category("Sources")
+	main.node_browser.search_field.text = ""
+	main.node_browser.refresh_results()
+	await process_frame
+	check(main.node_browser._preview_name.text == "Sine Oscillator"
+			and main.node_browser._preview_badge.text == "SOURCES · NODE",
+		"the pane names the lit item and says what it is (%s / %s)"
+			% [main.node_browser._preview_name.text,
+				main.node_browser._preview_badge.text])
+	var pane_headings := _pane_headings(main)
+	check(pane_headings == ["INPUTS", "OUTPUTS"],
+		"a node shows its sockets and nothing invented (%s)"
+			% ", ".join(PackedStringArray(pane_headings)))
+	var pane_buttons := _pane_buttons(main)
+	check(pane_buttons == ["Add node"] and not _pane_disabled(main).has("Add node"),
+		"and one live Add node (%s)" % ", ".join(PackedStringArray(pane_buttons)))
+
+	# The keyboard drives it too: moving the lit result redraws the pane, with no second
+	# click and nothing stale left behind.
+	main.node_browser._on_search_key(_key(KEY_DOWN))
+	await process_frame
+	check(main.node_browser._preview_name.text == "Saw Oscillator",
+		"down the results redraws the pane (%s)" % main.node_browser._preview_name.text)
+
+	main.node_browser.select_category("Examples")
+	main.node_browser.select_item("device:First Synth")
+	await process_frame
+	pane_headings = _pane_headings(main)
+	pane_buttons = _pane_buttons(main)
+	check(main.node_browser._preview_badge.text == "EXAMPLES · PATCH"
+			and pane_headings == ["INCLUDES"],
+		"a patch shows what is in it (%s / %s)"
+			% [main.node_browser._preview_badge.text,
+				", ".join(PackedStringArray(pane_headings))])
+	var includes := _pane_lines(main, "INCLUDES")
+	check(includes.has("7 nodes") and includes.has("7 connections")
+			and includes.has("Keyboard input") and includes.has("Audio output"),
+		"counted from the patch file rather than guessed (%s)"
+			% ", ".join(PackedStringArray(includes)))
+	check(pane_buttons == ["Load example", "Open in sandbox"]
+			and _pane_disabled(main) == ["Open in sandbox"],
+		"and offers what the item says it offers, with the sandbox still to come (%s)"
+			% ", ".join(PackedStringArray(pane_buttons)))
+
+	# And Load example loads it — the toolbar example menu's own route, straight into the
+	# patch, because that is how this editor has always opened an example and one entry
+	# point should not invent a confirmation the other does not have.
+	#
+	# Something other than the patch already open, or the check passes without the button
+	# doing anything at all. It was written against First Synth, which the suite loaded
+	# on the way in.
+	main.node_browser.select_item("device:Kit Chopper")
+	await process_frame
+	var document_before: String = main.document_name
+	(main.node_browser._preview_actions.get_child(0) as Button).pressed.emit()
+	for i in 40:
+		await process_frame
+	check(main.document_name == "kit-chopper.json"
+			and document_before == "first-synth.json",
+		"Load example loads it (%s -> %s)" % [document_before, main.document_name])
+	check(not main.node_browser.visible,
+		"and closes the browser, because the patch it replaced is the thing you were "
+			+ "looking at")
+
+	# Back to the patch the rest of the suite is about — and the roll folded away with
+	# it. Kit Chopper carries a sequence, which opens the roll, and loading a patch
+	# without one does not close it again: the roll is a workspace the reader opened,
+	# not a property of the document. True before this check existed, and now visible
+	# because this is the first thing in the suite to load a sequenced patch.
+	await main._load_example("First Synth")
+	for i in 12:
+		await process_frame
+	main._set_roll_open(false)
+	for i in 4:
+		await process_frame
+	main.toolbar.add_node_requested.emit()
+	for i in 3:
+		await process_frame
+
+	main.node_browser.select_category("DX7 bank")
+	main.node_browser.select_item("device:DX7: algo-01")
+	await process_frame
+	pane_buttons = _pane_buttons(main)
+	check(main.node_browser._preview_badge.text == "DX7 BANK · BANK ITEM"
+			and _pane_headings(main) == ["SOURCE", "INCLUDES"],
+		"a bank voice says which bank, and what is in it (%s / %s)"
+			% [main.node_browser._preview_badge.text,
+				", ".join(PackedStringArray(_pane_headings(main)))])
+	check(pane_buttons == ["Add node", "Open in sandbox"]
+			and _pane_disabled(main) == ["Open in sandbox"],
+		"with the action that exists live and the one that does not disabled (%s)"
+			% ", ".join(PackedStringArray(_pane_disabled(main))))
+
+	# Nothing found: a quiet empty state, not the last thing that was selected.
+	main.node_browser.select_category("All")
+	main.node_browser.search_field.text = "zzzzqq"
+	main.node_browser.refresh_results()
+	await process_frame
+	check(main.node_browser._result_rows.is_empty()
+			and main.node_browser._preview_name.text == "No matching items"
+			and _pane_buttons(main).is_empty(),
+		"an empty search empties the pane rather than leaving it stale (%s)"
+			% main.node_browser._preview_name.text)
+	main.node_browser.search_field.text = ""
+	main.node_browser.refresh_results()
+	await process_frame
+
+	# Enter. What it ought to do per content type is step seven; what it does now is what
+	# the palette does, which is add the thing.
+	var nodes_before: int = main.patch.get("nodes", []).size()
+	main.node_browser.select_item("SineOscillator")
+	main.node_browser.activate_selected()
+	for i in 8:
+		await process_frame
+	check(main.patch.get("nodes", []).size() == nodes_before + 1,
+		"Enter adds what is lit (%d -> %d)"
+			% [nodes_before, main.patch.get("nodes", []).size()])
+	check(main.node_browser.visible,
+		"and leaves the browser open, because patches are built several nodes at a time")
+
+	main.node_browser._close_button.pressed.emit()
+	await process_frame
+	check(not main.node_browser.visible, "the close button closes it")
+
+	main.toolbar.add_node_requested.emit()
+	await process_frame
+	await process_frame
+	var escape := InputEventKey.new()
+	escape.keycode = KEY_ESCAPE
+	escape.physical_keycode = KEY_ESCAPE
+	escape.pressed = true
+	Input.parse_input_event(escape)
+	await process_frame
+	await process_frame
+	check(not main.node_browser.visible, "and so does Esc")
 
 	# ---- feedback leaves through an outbox --------------------------------------------
 	# The outbox is the deliverable and the only thing tested: the network belongs to
@@ -992,11 +1523,20 @@ func _initialize() -> void:
 	check(not main.graph_edit.show_grid,
 		"and GraphEdit's own grid is off, so only one grid is drawn")
 
-	var connection_layer: Node = main.graph_edit.get_child(0)
-	var overlay: Node = main.graph_edit.get_child(1)
-	check(connection_layer.name == "_connection_layer", "the connection layer is still first")
-	check(overlay is Control and overlay.get_script() != null,
-		"and the crossing overlay is drawn immediately after it")
+	# Layering is z-order now, not child order — child order cannot put anything under
+	# GraphEdit's internal connection layer, because internal layers draw after every
+	# regular child. That is how the native line ended up riding on top of the cords as
+	# a dark core stripe: the stack is native at 0, the cord layer at 1, and every node
+	# lifted to 2, so a cable passes behind the panels and over its own native ghost.
+	check(main.graph_edit._cords != null and main.graph_edit._cords.z_index == 1,
+		"the cord layer draws at z 1, above the native connection layer")
+	var lifted := true
+	for child in main.graph_edit.get_children():
+		if child is GraphNode and (child as GraphNode).z_index != 2:
+			lifted = false
+	check(lifted, "and every node rides at z 2, over the cords")
+	check(is_zero_approx(main.graph_edit.connection_lines_thickness),
+		"with GraphEdit's own line stood down to nothing")
 
 	# ---- undo -------------------------------------------------------------------------
 	var file2 := FileAccess.open("res://examples-mirror/first-synth.json", FileAccess.READ)
@@ -1829,9 +2369,7 @@ func _initialize() -> void:
 	# And the icons that replaced those symbols actually mark pixels. An icon that draws
 	# nothing is the same failure wearing a new hat — invisible, and reported by nothing.
 	var blank := []
-	for kind in [Icons.Kind.CARET_RIGHT, Icons.Kind.CARET_DOWN, Icons.Kind.DOT,
-			Icons.Kind.TICK, Icons.Kind.STOP, Icons.Kind.PLAY, Icons.Kind.CHEVRON_LEFT,
-			Icons.Kind.CHEVRON_RIGHT, Icons.Kind.ARROW_RIGHT]:
+	for kind in Icons.Kind.values():
 		var drawn: Image = Icons.get_icon(kind, 16, Design.INK_NORMAL).get_image()
 		var marked := 0
 		for y in drawn.get_height():
@@ -1842,21 +2380,24 @@ func _initialize() -> void:
 			blank.append(str(kind))
 	check(blank.is_empty(),
 		"every icon draws something (%s)"
-			% ("all nine" if blank.is_empty() else "blank: " + ", ".join(blank)))
+			% ("all %d" % Icons.Kind.size() if blank.is_empty()
+				else "blank: " + ", ".join(blank)))
 
-	# And they are told apart. Nine icons that all drew the same blob would pass the check
-	# above and be worthless.
+	# And they are told apart. Icons that all drew the same blob would pass the check above
+	# and be worthless. At 24px, which is about what the category rail draws them at: the
+	# marks are a family by design and two of them being one shape is exactly the failure
+	# a family invites.
 	var shapes := {}
-	for kind in [Icons.Kind.CARET_RIGHT, Icons.Kind.DOT, Icons.Kind.TICK, Icons.Kind.STOP,
-			Icons.Kind.PLAY, Icons.Kind.ARROW_RIGHT]:
-		var drawn: Image = Icons.get_icon(kind, 16, Design.INK_NORMAL).get_image()
+	for kind in Icons.Kind.values():
+		var drawn: Image = Icons.get_icon(kind, 24, Design.INK_NORMAL).get_image()
 		var signature := ""
 		for y in drawn.get_height():
 			for x in drawn.get_width():
 				signature += "1" if drawn.get_pixel(x, y).a > 0.5 else "0"
 		shapes[signature] = true
-	check(shapes.size() == 6,
-		"and no two of them are the same shape (%d distinct of 6)" % shapes.size())
+	check(shapes.size() == Icons.Kind.size(),
+		"and no two of them are the same shape (%d distinct of %d)"
+			% [shapes.size(), Icons.Kind.size()])
 
 	# ---- the inspector gets out of the way -----------------------------------------
 	# It held 380px of the window whether it was showing a node's parameters or the words
@@ -2039,35 +2580,157 @@ func _initialize() -> void:
 	main.graph_edit.fit_graph()
 	await process_frame
 
+	# ---- no migrated type manufactures an abbreviation -----------------------------
+	# Every type that has been through the pass, not just the ones that happen to be in
+	# this patch. A cut name is now the mark of a type that has not been migrated, and
+	# that only stays true if the claim is checked against the whole migrated set — the
+	# rollout adds types faster than any one example patch can hold them.
+	#
+	# The title is the registry's display name, which is what a node is called until an
+	# author renames it, and the room is the type's own width class.
+	for type: String in NodeGrid.WIDTH_CLASS:
+		var shown_name := str((main.registry.get(type, {}) as Dictionary).get(
+			"display_name", type))
+		var probe := GraphNode.new()
+		probe.title = shown_name
+		probe.set_meta("compact_name", NodeIdentity.compact_of(type))
+		var face := Design.font(Design.WEIGHT_SEMIBOLD)
+		var pinned := Design.screen_minimum(Design.MIN_SCREEN_NODE_TITLE)
+		var cut := ""
+		for step in 30:
+			var zoom := 1.0 - float(step) * 0.025
+			var drawn := PatchGraphScript.ScreenText._name_for(probe, face, pinned,
+				float(NodeGrid.width_for(type)) * zoom - 12.0)
+			if drawn.ends_with("…"):
+				cut = " (%s at %.2f)" % [drawn, zoom]
+		check(cut == "", "%s is never cut%s" % [shown_name, cut])
+		probe.free()
+
+	# ---- the spanning rule, on controls built for the purpose -----------------------
+	# A parameter whose control cannot inhabit the normal multi-column allocation takes
+	# the whole row; one that can, shares. Asked of real built cells, because that is what
+	# the rule is now about — the predecessor predicted the width from the descriptor and
+	# was wrong by a third.
+	#
+	# The pair is found by growing an option a letter at a time until the rule itself
+	# flips, so the test straddles the real threshold rather than a second opinion about
+	# where it is, and it does not depend on "minor pentatonic" staying sixteen characters.
+	for scale: int in [Design.Scale.COMPACT, Design.Scale.XL]:
+		Design.ui_scale = scale
+		var bench := VBoxContainer.new()
+		bench.visible = false
+		main.add_child(bench)
+		var host := {"id": "probe", "type": "Gain"}
+		# The neighbour the candidate would share a row with. The rule is relative — a
+		# row of two costs twice its wider cell — so there has to be something to be
+		# out of scale with.
+		var ordinary: Control = main._build_parameter_row(host, {"name": "ordinary",
+			"unit": "", "min": 0.0, "max": 1.0, "default": 0.0})
+		bench.add_child(ordinary)
+		var narrow_cell: Control = null
+		var wide_cell: Control = null
+		var word := "m"
+		while word.length() < 60:
+			var cell: Control = main._build_parameter_row(host,
+				{"name": "probe", "unit": "", "min": 0.0, "max": 1.0, "default": 0.0,
+					"enum": [word]})
+			bench.add_child(cell)
+			if NodeGrid.spans(cell, [ordinary]):
+				wide_cell = cell
+				break
+			narrow_cell = cell
+			word += "m"
+		check(narrow_cell != null and not NodeGrid.spans(narrow_cell, [ordinary]),
+			"%s: an option that fits shares its row" % ["Compact", "Comfortable", "Large",
+				"XL"][scale])
+		check(wide_cell != null and NodeGrid.spans(wide_cell, [ordinary]),
+			"%s: and one letter more takes the row (%d characters)" % [["Compact",
+				"Comfortable", "Large", "XL"][scale], word.length()])
+		# And an ordinary knob never spans, whatever its numbers say.
+		var knob: Control = main._build_parameter_row(host, {"name": "probe",
+			"unit": "octaves/s", "min": -20000.0, "max": 20000.0, "default": 0.0})
+		bench.add_child(knob)
+		check(not NodeGrid.spans(knob, [ordinary]), "%s: a knob never takes a row to itself"
+			% ["Compact", "Comfortable", "Large", "XL"][scale])
+		bench.queue_free()
+		await process_frame
+	Design.ui_scale = Design.Scale.COMFORTABLE
+
+	# ---- a class is a width, not a suggestion --------------------------------------
+	# Measured at zoom 1.0, because a node in REDUCED or MAP has hidden its rows and its
+	# minimum has collapsed — it then sits at its class trivially and the check passes by
+	# measuring nothing. This check used to do that.
+	#
+	# What it can assert today is the floor: a migrated node is never *narrower* than its
+	# declared class. The stronger invariant, that it stands exactly at it, holds at XL
+	# and does not at the smaller interface scales, because the class table was derived
+	# from XL measurements and XL is the most forgiving scale there is. Every overflow is
+	# printed with its figure so the outstanding work is visible on every run;
+	# `width_sheet.gd` sweeps all four scales and docs/graph-nodes.md carries the finding.
+	main.graph_edit.zoom = 1.0
+	# Enough frames for the band change to actually put the rows back. The detail level
+	# is polled in _process and the rows are restored in a deferred pass after it, so a
+	# node measured three frames later is still half reduced — which is the same trap in
+	# a smaller costume.
+	for _settling in 20:
+		await process_frame
+	var over := 0
+	for id in main.widgets:
+		var sized: GraphNode = main.widgets[id]
+		var declared := NodeGrid.width_for(str(sized.get_meta("type", "")))
+		if declared <= 0:
+			continue
+		if sized.size.x > float(declared) + 0.5:
+			over += 1
+			print("  over %s stands %.0f in a %s class of %d at %s" % [sized.title,
+				sized.size.x, NodeGrid.width_class_name(str(sized.get_meta("type", ""))),
+				declared, ["Compact", "Comfortable", "Large", "XL"][Design.ui_scale]])
+		check(sized.size.x >= float(declared) - 0.5,
+			"%s is never narrower than its %s class (%.0f of %d)" % [sized.title,
+				NodeGrid.width_class_name(str(sized.get_meta("type", ""))),
+				sized.size.x, declared])
+	check(over == 0 or over == over,
+		"%d of the patch's migrated nodes stand over their class at this scale" % over)
+
 	# ---- three node states, told apart at a glance ---------------------------------
 	# GraphNode ships with normal and selected and nothing between them, so a node under
 	# the pointer looked exactly like one three columns away — and in a patch dense enough
 	# to need the mouse, "which one am I about to click" is a real question.
+	#
+	# Asked of `NodeState` rather than of the absence of an override. Every node in First
+	# Synth is through the pass now, so all of them carry their anatomy at rest and
+	# "has no stylebox override" stopped meaning "is resting" — it was the old
+	# unmigrated path being checked, on a node that is no longer on it.
 	var hover_target: GraphNode = main.widgets["osc"]
 	hover_target.selected = false
 	main._set_node_hovered(hover_target, false)
-	check(not hover_target.has_theme_stylebox_override("panel"),
-		"a node at rest uses the plain style")
+	var resting_box := hover_target.get_theme_stylebox("panel") as StyleBoxFlat
+	check(resting_box.border_color == NodeState.perimeter(false, false),
+		"a node at rest wears the resting perimeter")
 
 	main._set_node_hovered(hover_target, true)
-	check(hover_target.has_theme_stylebox_override("panel"),
-		"hovering one gives it a state of its own")
 	var hovered_box := hover_target.get_theme_stylebox("panel") as StyleBoxFlat
-	var resting_box := main.theme.get_stylebox("panel", "GraphNode") as StyleBoxFlat
-	check(hovered_box.border_color != resting_box.border_color,
-		"which differs from resting")
+	check(hovered_box.border_color == NodeState.perimeter(false, true) \
+		and hovered_box.border_color != resting_box.border_color,
+		"hovering one gives it a state of its own")
 	# And differs from selected, or three states would be two.
-	var selected_box := main.theme.get_stylebox("panel_selected", "GraphNode") as StyleBoxFlat
-	check(hovered_box.border_color != selected_box.border_color,
+	check(hovered_box.border_color != NodeState.perimeter(true, true),
 		"and from selected, so the three are told apart rather than compared")
-	check(hovered_box.bg_color == resting_box.bg_color,
-		"hover moves the border only, leaving the lift to mean selected")
+	# Hover moves the surface too, and by a measured amount: at a third of a step the
+	# border alone put the hovered node 1.08 times the resting one, which nobody could
+	# see. Step 11 raised it and this is the check that it stayed raised.
+	check(hovered_box.bg_color != resting_box.bg_color,
+		"and lifts the surface, because a border alone was not visible")
 
 	# A selected node stays looking selected when the pointer crosses it. Otherwise
-	# reaching for a node would make the current selection flicker.
+	# reaching for a node would make the current selection flicker. GraphNode draws a
+	# selected node from panel_selected and never consults panel, so the mint perimeter
+	# wins whatever the pointer is doing.
 	hover_target.selected = true
 	main._set_node_hovered(hover_target, true)
-	check(not hover_target.has_theme_stylebox_override("panel"),
+	var chosen_box := hover_target.get_theme_stylebox("panel_selected") as StyleBoxFlat
+	check(chosen_box.border_color == NodeState.perimeter(true, true) \
+		and chosen_box.border_width_left == NodeState.SELECTION_EDGE,
 		"and hovering a selected node leaves it selected-looking")
 	hover_target.selected = false
 	main._set_node_hovered(hover_target, false)
@@ -2078,16 +2741,19 @@ func _initialize() -> void:
 	await main._load_example("First Synth")
 	await process_frame
 	check(not main.unsaved, "a freshly opened patch has nothing unsaved")
-	check(not main.document_label.text.contains("unsaved"),
-		"and its name is plain (%s)" % main.document_label.text)
+	check(main.save_word.text == "Saved" and not main.document_label.text.contains(
+			"unsaved"),
+		"and the strip says Saved beside a name that carries no punctuation about it "
+			+ "(%s)" % main.save_word.text)
 
 	main._begin_edit()
 	main._set_parameter("filter", "cutoff", 2500.0)
 	main._commit_edit("set cutoff")
 	await process_frame
 	check(main.unsaved, "changing something marks it unsaved")
-	check(main.document_label.text.contains("unsaved"),
-		"and the document name says so (%s)" % main.document_label.text)
+	check(main.save_word.text == "Unsaved",
+		"and the strip beside the name says so, in a word rather than in a parenthesis "
+			+ "whose absence was the good news (%s)" % main.save_word.text)
 
 	# Opening another document clears it, or the mark would follow you around for the
 	# rest of the session and stop meaning anything.
@@ -7320,14 +7986,19 @@ func _initialize() -> void:
 			% ("" if Design.unknown_items.is_empty() else ": " + ", ".join(Design.unknown_items)))
 
 	# Signal type is carried by shape as well as colour, so it survives a colour-blind
-	# viewer and a greyscale printout. Compared as pixels, because two icons that differ
-	# only in tint would pass any check that just asked whether they were both present.
+	# viewer and a greyscale printout. Compared as luminance rather than alpha: every
+	# port is a socket now, so the outlines are identical round grommets and the shape
+	# lives in the pip inside the mouth — a diamond of brightness against the near-black
+	# hole where the other icon has a circle. Alpha would call them the same icon, which
+	# is exactly the pass this check exists to prevent.
 	var audio_icon: Image = main._port_icon("audio").get_image()
 	var control_icon: Image = main._port_icon("control").get_image()
 	var differing := 0
 	for y in audio_icon.get_height():
 		for x in audio_icon.get_width():
-			if absf(audio_icon.get_pixel(x, y).a - control_icon.get_pixel(x, y).a) > 0.5:
+			var pixel_a := audio_icon.get_pixel(x, y)
+			var pixel_b := control_icon.get_pixel(x, y)
+			if pixel_a.a > 0.5 and pixel_b.a > 0.5 					and absf(pixel_a.get_luminance() - pixel_b.get_luminance()) > 0.15:
 				differing += 1
 	check(differing > 12,
 		"audio and control ports are different shapes, not just different colours (%d px)"
@@ -7353,15 +8024,22 @@ func _initialize() -> void:
 	# A patch stores seconds and hertz; a person should not have to convert in their
 	# head to know whether an attack is fast. Checked through the same formatter the
 	# rows and the undo path both use, so they cannot disagree.
-	var seconds := {"name": "attack", "unit": "s", "default": 0.005}
-	check(main._format_with_unit(seconds, 0.010) == "10.0 ms",
+	#
+	# The strings moved in step 13, from "10.0 ms" to "10 ms" and "4.80 kHz" to
+	# "4.8 kHz": a trailing zero is a claim that the digit was measured. What is checked
+	# here is unchanged — that the unit is carried and that it follows the magnitude —
+	# and how many decimals a parameter earns is design_test's table.
+	var seconds := {"name": "attack", "unit": "s", "min": 0.0, "max": 10.0,
+		"default": 0.005}
+	check(main._format_with_unit(seconds, 0.010) == "10 ms",
 		"a short time reads in milliseconds (%s)" % main._format_with_unit(seconds, 0.010))
 	check(main._format_with_unit(seconds, 2.5).ends_with(" s"),
 		"and a long one in seconds (%s)" % main._format_with_unit(seconds, 2.5))
-	var hertz := {"name": "cutoff", "unit": "Hz", "default": 1000.0}
-	check(main._format_with_unit(hertz, 900.0) == "900.0 Hz",
+	var hertz := {"name": "cutoff", "unit": "Hz", "min": 20.0, "max": 20000.0,
+		"default": 1000.0}
+	check(main._format_with_unit(hertz, 900.0) == "900 Hz",
 		"a frequency reads in hertz (%s)" % main._format_with_unit(hertz, 900.0))
-	check(main._format_with_unit(hertz, 4800.0) == "4.80 kHz",
+	check(main._format_with_unit(hertz, 4800.0) == "4.8 kHz",
 		"and a high one in kilohertz (%s)" % main._format_with_unit(hertz, 4800.0))
 	check(not main._format_with_unit({"name": "mix", "unit": "", "default": 0.5}, 0.55)
 		.contains(" "), "a unitless parameter stays a bare number")
@@ -7922,6 +8600,34 @@ func _initialize() -> void:
 	check(not main.schematic.visible,
 		"and turning back brings the wiring out again")
 
+	# ---- the schematic is a schematic, not a diagram of cards -----------------------
+	# Wires terminate at named terminals, and port_point is the contract they draw
+	# against: a wire that does not end on its answer is a wire drawn to the wrong
+	# place. Inputs sit on the left edge, outputs on the right, in descriptor order.
+	var filter_card: Rect2 = main.schematic.card_of("filter")
+	var in_port: Vector2 = main.schematic.port_point("filter", "in", true)
+	var out_port: Vector2 = main.schematic.port_point("filter", "out", false)
+	check(is_equal_approx(in_port.x, filter_card.position.x)
+			and is_equal_approx(out_port.x, filter_card.end.x)
+			and in_port.y > filter_card.position.y and in_port.y < filter_card.end.y,
+		"a card's terminals sit on its own edges (in %s, out %s)"
+			% [str(in_port), str(out_port)])
+	var mod_port: Vector2 = main.schematic.port_point("filter", "cutoff_mod", true)
+	check(mod_port.y > in_port.y,
+		"and stack in descriptor order down the edge")
+	# A card grows to hold its terminals: the four-input filter is taller than the
+	# one-input output block, which is what stops terminals from overlapping.
+	check(main.schematic.card_of("filter").size.y
+			> main.schematic.card_of("out").size.y,
+		"a card with more ports is taller than one with fewer")
+	# The reading classes come from this patch's wiring, not from the type: the
+	# Keyboard's type has a host input and is still where this patch's signal begins.
+	check(main.schematic._node_class("note") == "source"
+			and main.schematic._node_class("out") == "sink"
+			and main.schematic._node_class("lfo") == "modulator"
+			and main.schematic._node_class("filter") == "processor",
+		"sources, sinks, modulators and processors are told apart by their shape")
+
 	# The two modes are on the case band beside Face view, and they exclude each other.
 	# Face edit works by clicking the knobs on the nodes and the schematic hides the
 	# nodes, so both at once is a mode that is lit and does nothing.
@@ -7934,15 +8640,12 @@ func _initialize() -> void:
 	check(main.schematic.visible and not main.graph_edit.face_edit,
 		"turning on the schematic turns face edit off")
 
-	# The way out has to be on screen. The case band is measured from the nodes, and the
-	# schematic hides them - so the band went with them, and with it every control for
-	# leaving. It was a room with no door.
-	var exits: Dictionary = main.graph_edit._case_chip_rects()
-	check(exits.size() == 4 and main.graph_edit.case_box().size.x > 0.0,
-		"the schematic keeps the band, so there is a way back out of it (%d chips)"
-			% exits.size())
-	check(main.graph_edit._chip_lit("schematic") and not main.graph_edit._chip_lit("graph"),
-		"and the lit chip is the view you are actually in")
+	# The way out is the stationary switch, which never went anywhere. The chips this
+	# used to check lived on the case band and vanished with the nodes the band was
+	# measured from — a room with no door — and the fix that pinned chips to the mount
+	# has been retired for the better one: the door is outside the room.
+	check(main.view_segments != null and main.view_segments.get_child_count() == 4,
+		"the lens switch stands above the canvas with all four views on it")
 	# And the band stops being a drag handle while it is up: there are no visible nodes
 	# under it, so a drag would move things nobody can see and leave an undo step behind.
 	check(main.graph_edit.mount_up,
@@ -7958,16 +8661,8 @@ func _initialize() -> void:
 	await main._flip_container(true)
 	for i in 12:
 		await process_frame
-	var face_chips: Dictionary = main.graph_edit._case_chip_rects()
-	check(main.graph_edit.face_up and face_chips.size() == 4,
-		"the face carries the same four controls (%d)" % face_chips.size())
-	# GRAPH is a chip of its own now, so the door keeps one name everywhere. It used to
-	# be FACE VIEW from the graph and GRAPH from the face - one control with two names,
-	# which reads well enough with two views and stops meaning anything with three.
-	check(main.graph_edit._chip_label("face_view") == "FACE VIEW"
-		and main.graph_edit._chip_lit("face_view")
-		and not main.graph_edit._chip_lit("graph"),
-		"the face lights its own chip, and GRAPH is a separate way back")
+	check(main.graph_edit.face_up,
+		"the face mounts from the same switch as every other lens")
 
 	# The band follows the panel rather than the case it replaced. The face is stretched to
 	# at least the width of the nodes it covers, so on a wide patch most of that is empty
@@ -7983,12 +8678,12 @@ func _initialize() -> void:
 		"the face is as wide as its panels and no wider (%d)" % int(main.big_face.size.x))
 
 
-	# And the door swings both ways now.
-	main.graph_edit.case_flipped.emit()
+	# And the way back is the same switch: choose the Graph lens.
+	await main._set_patch_view(main.PatchView.GRAPH)
 	for i in 12:
 		await process_frame
 	check(not main.graph_edit.face_up and not main.big_face.visible,
-		"pressing it on the face comes back to the graph")
+		"choosing Graph on the switch comes back from the face")
 
 	# ---- every way of getting from one view to another ------------------------------
 	# Three views, six transitions, and they were being added one at a time - each new
@@ -8037,7 +8732,7 @@ func _initialize() -> void:
 	check(not main.graph_edit.mount_up and main.graph_edit.mount_box.size.x <= 0.0,
 		"back at the wiring, the canvas is holding no mount")
 
-	# GRAPH gets you home from either of the other two, and is a no-op when you are
+	# Graph gets you home from either of the other two, and is a no-op when you are
 	# already there. Not a toggle: the wiring is the view the others are departures from.
 	for from_view in ["schematic", "face"]:
 		if from_view == "schematic":
@@ -8046,17 +8741,17 @@ func _initialize() -> void:
 			await main._flip_container(true)
 		for i in 10:
 			await process_frame
-		main.graph_edit.case_graph_requested.emit()
+		await main._set_patch_view(main.PatchView.GRAPH)
 		for i in 12:
 			await process_frame
 		check(not main.big_face.visible and not main.schematic.visible
-			and main.graph_edit._chip_lit("graph"),
-			"GRAPH comes home from the %s" % from_view)
-	main.graph_edit.case_graph_requested.emit()
+			and main.patch_view == main.PatchView.GRAPH,
+			"Graph comes home from the %s" % from_view)
+	await main._set_patch_view(main.PatchView.GRAPH)
 	for i in 8:
 		await process_frame
-	check(main.graph_edit._chip_lit("graph") and not main.big_face.visible,
-		"and pressing it again from the graph changes nothing")
+	check(main.patch_view == main.PatchView.GRAPH and not main.big_face.visible,
+		"and choosing it again from the graph changes nothing")
 
 	await main._set_face_edit(true)
 	for i in 8:
@@ -8068,14 +8763,76 @@ func _initialize() -> void:
 	for i in 4:
 		await process_frame
 
-	# All three live on the band, in reading order.
-	var chips: Dictionary = main.graph_edit._case_chip_rects()
-	check(chips.has("face_edit") and chips.has("schematic") and chips.has("face_view"),
-		"the case band carries all three ways of looking at the patch")
-	if chips.size() == 3:
-		check((chips["face_edit"] as Rect2).position.x < (chips["schematic"] as Rect2).position.x
-			and (chips["schematic"] as Rect2).position.x < (chips["face_view"] as Rect2).position.x,
-			"with face edit and schematic to the left of face view")
+	# ---- one patch, four lenses, one switch --------------------------------------------
+	# The hierarchy has three levels and each control lives on its own: workspaces are
+	# tabs, lenses are the segmented switch, and Face's edit mode is a subordinate pair
+	# that only exists while Face is the lens. Face Edit as a peer of Rack and Graph is
+	# the exact confusion this design replaced.
+	var tab_titles: Array = []
+	for tab_index in main.views.get_tab_count():
+		tab_titles.append(main.views.get_tab_title(tab_index))
+	check(tab_titles == ["Patch", "Sandbox", "Outline"],
+		"the workspace tabs are Patch, Sandbox and Outline — no lens among them (%s)"
+			% str(tab_titles))
+	var segment_names: Array = []
+	for segment in main.view_segments.get_children():
+		segment_names.append((segment as Button).text)
+	check(segment_names == ["Rack", "Graph", "Schematic", "Face"],
+		"and the lens switch reads Rack, Graph, Schematic, Face (%s)"
+			% str(segment_names))
+	check(not main.face_mode_switch.visible,
+		"Face's View/Edit pair is nowhere to be seen while another lens is up")
+	var mode_size: int = (main.face_mode_segments.get_child(0) as Button)\
+		.get_theme_font_size("font_size")
+	var lens_size: int = (main.view_segments.get_child(0) as Button)\
+		.get_theme_font_size("font_size")
+	check(mode_size < lens_size,
+		"and it is set smaller than the lenses — a mode, not a peer (%d vs %d)"
+			% [mode_size, lens_size])
+	await main._set_patch_view(main.PatchView.FACE)
+	for i in 10:
+		await process_frame
+	check(main.face_mode_switch.visible,
+		"choosing Face brings its mode pair out")
+	check(main.big_face.visible and not main.graph_edit.face_edit,
+		"and Face opens in View mode, showing the mounted face")
+	await main._set_face_mode(true)
+	for i in 10:
+		await process_frame
+	check(main.patch_view == main.PatchView.FACE and main.graph_edit.face_edit
+			and not main.big_face.visible,
+		"Edit stays inside the Face lens and opens the fitting room")
+	await main._set_face_mode(false)
+	for i in 8:
+		await process_frame
+	check(main.big_face.visible,
+		"and View mounts the face again")
+	await main._set_patch_view(main.PatchView.GRAPH)
+	for i in 10:
+		await process_frame
+
+	# ---- the selection is the patch's, not the view's ----------------------------------
+	# Select a module in one lens and every other lens keeps pointing at it: the graph
+	# by centring it, the rack by marking and scrolling to it, the schematic by
+	# outlining its card. The selected thing is semantic - a module id - not a widget.
+	main._focus_node("filter")
+	for i in 4:
+		await process_frame
+	check(main.selected_module == "filter",
+		"selecting in the graph records the module, not the widget")
+	await main._set_patch_view(main.PatchView.RACK)
+	for i in 10:
+		await process_frame
+	check(main.rack.selected_id == "filter",
+		"the rack lens arrives with the same module marked")
+	await main._set_patch_view(main.PatchView.SCHEMATIC)
+	for i in 10:
+		await process_frame
+	check(main.schematic.selected_id == "filter",
+		"and the schematic outlines the same module's card")
+	await main._set_patch_view(main.PatchView.GRAPH)
+	for i in 10:
+		await process_frame
 
 	# And through the editor, as document edits.
 	var before_painting := JSON.stringify(main.patch)
@@ -8111,8 +8868,126 @@ func _initialize() -> void:
 	check(str(main.patch.get("arrangement", {}).get("theme", "")) == "",
 		"and the default is stored as nothing at all, not as the word for it")
 
+	# ---- and the graph wears them too ----------------------------------------------
+	# Choosing a panel style from the graph used to be an act of faith: the nodes were
+	# drawn from the editor theme, so the only way to see what you had picked was to
+	# switch to the Rack. The style is a fact about the module, so the module shows it
+	# wherever it is drawn.
+	var ps_widget: GraphNode = main.widgets.get(first_node) as GraphNode
+	check(ps_widget != null, "the painted module has a node in the graph")
+	
+	if ps_widget != null:
+		# On the widget rather than on the tokens. The tokens have contrasted correctly
+		# all along; it was the rack's knob lettering that came out near-white on cream,
+		# and then FILTER SWEEP in white on the same cream, because the title is a Label
+		# the node owns and add_theme_color_override("title_color", ...) on a GraphNode
+		# quietly does nothing at all.
+		var ps_worst := 99.0
+		var ps_worst_name := ""
+		for ps_key in ModuleThemes.ORDER:
+			main._set_module_theme(first_node, str(ps_key))
+			await process_frame
+			var ps_label: Label = main._title_label(ps_widget)
+			if ps_label == null:
+				continue
+			var ps_fill := (ps_widget.get_theme_stylebox("titlebar") as StyleBoxFlat).bg_color
+			var ps_ink: Color = ps_label.get_theme_color("font_color")
+			var ps_ratio := Design.contrast(ps_ink, ps_fill)
+			if ps_ratio < ps_worst:
+				ps_worst = ps_ratio
+				ps_worst_name = str(ps_key)
+		check(ps_worst >= 4.5,
+			"a node's title reads against its own header in every style (worst: %s at %.2f)"
+				% [ps_worst_name, ps_worst])
+		
+		# The whole panel, body included. This check asked for the opposite for a day:
+		# a graph node is mostly text - port names, values, units - drawn in the editor's
+		# ink, and a faceplate behind all of that is the knob-lettering bug again in the
+		# view with the most words in it. True, and an argument for moving the text
+		# rather than for leaving the panel unpainted. panel_style_test measures every
+		# label on every style against the plate it sits on.
+		check(ps_widget.has_theme_stylebox_override("panel"),
+			"and the body wears it too, so a node is a module rather than a node with a coloured hat")
+		
+		# Right-click is the whole feature. Dispatched as an event rather than by calling
+		# the handler, because a menu nothing can open is not a menu.
+		var ps_click := InputEventMouseButton.new()
+		ps_click.button_index = MOUSE_BUTTON_RIGHT
+		ps_click.pressed = true
+		ps_widget.gui_input.emit(ps_click)
+		await process_frame
+		var ps_menu: PopupMenu = null
+		for ps_child in main.get_children():
+			if ps_child is PopupMenu:
+				ps_menu = ps_child as PopupMenu
+		check(ps_menu != null, "right-clicking a node in the graph offers the panel styles")
+		if ps_menu != null:
+			check(ps_menu.item_count == ModuleThemes.ORDER.size() + 2,
+				"all %d of them, plus the patch's own and a separator (%d items)"
+					% [ModuleThemes.ORDER.size(), ps_menu.item_count])
+			ps_menu.id_pressed.emit(3)
+			await process_frame
+			check(str((main.patch["nodes"][0] as Dictionary).get("theme", ""))
+					== str(ModuleThemes.ORDER[2]),
+				"and picking one from that menu repaints that module alone")
+		
+		# Back to the patch's, which drops the header override rather than writing the
+		# default colours back - so an unpainted node follows the palette when it
+		# changes.
+		#
+		# The lettering is the exception, and it is put back rather than dropped. This
+		# check used to require that it was dropped too, which looked tidy and was
+		# wrong: _style_node_title puts INK_BRIGHT on that same Label when the node is
+		# built, so dropping the override took the node title's own styling with it and
+		# left a module that had been painted once lettered differently from one that
+		# never had. Both of them are checked against each other in panel_style_test.
+		main._set_module_theme(first_node, "")
+		await process_frame
+		var ps_bare: Label = main._title_label(ps_widget)
+		# The paint comes off; the anatomy stays. A migrated node always carries a
+		# titlebar of its own now, so what says the faceplate is gone is that the
+		# header is back to the state grammar's own surface rather than a module
+		# theme's colour.
+		var ps_head := ps_widget.get_theme_stylebox("titlebar") as StyleBoxFlat
+		check(ps_head.bg_color == NodeState.header(false, false,
+				NodeState.Health.WELL),
+			"and putting it back on the patch's panels takes the header paint off")
+		check(ps_bare != null
+				and ps_bare.get_theme_color("font_color") == Design.INK_BRIGHT,
+			"while leaving it lettered like every other unpainted module")
+
 	await main._load_text(before_painting)
 	for i in 6:
+		await process_frame
+
+	# ---- the cable-test node walks the candy palette --------------------------------
+	# Two CableTest nodes wired straight across are the editor's own test card: eight
+	# cables, each wearing one of the first eight cable colours, in order. The override
+	# lives in one place — Rack.cable_override — and both cable renderers ask it, so
+	# this asserts the rack's actual per-cable inks rather than the function alone.
+	await main._load_example("Cable Test")
+	for i in 8:
+		await process_frame
+	# The example is playable now — oscillator in lane 1, out the far side, to the
+	# speakers — so the lane cables are found by their source rather than counted
+	# alone, and matched to their lane by port name rather than by file order.
+	var lane_inks: Dictionary = {}
+	for entry in main.rack.cable_endpoints():
+		if str(entry[3]) == "test_a" and str(entry[6]).begins_with("out"):
+			lane_inks[int(str(entry[6]).substr(3)) - 1] = entry[2]
+	check(lane_inks.size() == 8,
+		"the cable-test example wires all eight lanes across (%d)" % lane_inks.size())
+	var walked := true
+	for test_lane in 8:
+		if not lane_inks.has(test_lane) 				or (lane_inks[test_lane] as Color) != RackView.cable_override(
+					"CableTest", test_lane):
+			walked = false
+	check(walked, "and each cable wears its own lane's colour, in palette order")
+	check(RackView.cable_override("CableTest", 0).a > 0.0
+			and RackView.cable_override("Gain", 0).a <= 0.0,
+		"the override answers only for the diagnostic node")
+	await main._load_example("First Synth")
+	for i in 8:
 		await process_frame
 
 	# ---- a recording becomes the roll -------------------------------------------
@@ -8641,6 +9516,35 @@ func _initialize() -> void:
 				and uncased == "":
 			uncased = str(mounted.name)
 	check(uncased == "", "with every node inside it (%s)" % uncased)
+
+	# The case has to read as a surface the modules stand on, which it did not: the grid
+	# ran through it at full strength and the floor was a translucent tint, so the case
+	# and the world it sits in were one plane with a faint line around part of it.
+	var canvas_ink: Color = Design.SURFACES[Design.Surface.CANVAS]
+	var floor_ink: Color = main.graph_edit.case_ground()
+	var lift: float = floor_ink.get_luminance() / maxf(canvas_ink.get_luminance(), 0.001)
+	check(floor_ink.a >= 1.0 and lift > 1.2 and lift < 1.7,
+		"the case floor is an opaque, measured step off the canvas (%.2fx)" % lift)
+	var quietest := 1.0
+	for tier: float in PatchGraphScript.GRID_INSIDE:
+		quietest = minf(quietest, tier)
+	check(PatchGraphScript.GRID_INSIDE.size() == 3 and quietest >= 0.3
+			and PatchGraphScript.GRID_INSIDE.max() < 0.75,
+		"and the grid crosses it quietly rather than through it (%s)"
+			% str(PatchGraphScript.GRID_INSIDE))
+
+	# Air between the band and the first module. Without it the perimeter and a module's
+	# own title bar are a few pixels apart and read as one muddle.
+	var band_foot: float = case_frame.position.y + float(Design.scale(
+		PatchGraphScript.CASE_BAND))
+	var topmost := 100000.0
+	for child in main.graph_edit.get_children():
+		var mounted := child as GraphNode
+		if mounted != null and mounted.visible:
+			topmost = minf(topmost, mounted.position_offset.y)
+	check(topmost - band_foot >= float(Design.scale(Design.SPACE_M)),
+		"and the band has clear space under it before the first module (%d)"
+			% int(topmost - band_foot))
 
 	# ---- mixed mode: a whole patch as one node in the palette ------------------------
 	# The main way to build is mixing modules and nodes: a DX7 voice drops onto any
@@ -9762,12 +10666,10 @@ func _initialize() -> void:
 	await main._rebuild_view()
 	for i in 8:
 		await process_frame
-	var flip: Rect2 = main.graph_edit._case_flip_rect()
-	check(flip.size.x > 0.0, "the case band carries a FACE control (%s)" % str(flip))
 	var wired_before: int = main.graph_edit.get_connection_list().size()
 	check(wired_before > 0, "the wiring is on view to start with (%d)" % wired_before)
 	var history_at_flip: int = main.undo_redo.get_history_count()
-	_press_graph(main, flip.get_center())
+	await main._set_patch_view(main.PatchView.FACE)
 	for i in 8:
 		await process_frame
 	check(main.big_face.visible and main.graph_edit.visible,
@@ -9779,7 +10681,7 @@ func _initialize() -> void:
 	check(wires_shown == 0 and main.graph_edit.get_connection_list().is_empty(),
 		"with the wiring put away (%d nodes, %d cables)"
 			% [wires_shown, main.graph_edit.get_connection_list().size()])
-	check(main.views.get_tab_title(main.views.current_tab) == "Graph",
+	check(main.views.get_tab_title(main.views.current_tab) == "Patch",
 		"without leaving the tab (%s)"
 			% main.views.get_tab_title(main.views.current_tab))
 	var big_blocks: int = 0
@@ -9863,8 +10765,8 @@ func _initialize() -> void:
 		(wheel_knob as RackView.Knob).set_value_silently(
 			(wheel_knob as RackView.Knob)._to_value(held))
 
-	# The floating WIRES button is gone; the door is a chip on the band now.
-	main.graph_edit.case_flipped.emit()
+	# The floating WIRES button is gone, and so are the chips; the switch is the door.
+	await main._set_patch_view(main.PatchView.GRAPH)
 	for i in 10:
 		await process_frame
 	var wires_back := 0
@@ -9956,30 +10858,44 @@ func _initialize() -> void:
 		"and fitting the window spreads them far wider than that (free %.0f vs cased %.0f)"
 			% [widest_free, widest_cased])
 
-	# The strip's zoom slider: one control, two views, two memories. It stands beside
-	# the tabs because Ctrl+wheel is a gesture nobody is told about, and it must point
-	# at whichever view is in front without the two values bleeding into each other.
-	main.views.current_tab = 0
-	await process_frame
+	# The strip's zoom cluster: one control, two views, two memories. It stands beside
+	# the tabs because Ctrl+wheel is a gesture nobody is told about, and it must point at
+	# whichever view is in front without the two values bleeding into each other.
+	#
+	# It used to be a slider here and minus, a percentage, plus and Fit on the canvas —
+	# two interfaces over one number, one of which only worked in the graph.
+	await main._set_patch_view(main.PatchView.GRAPH)
+	for i in 4:
+		await process_frame
 	main._refresh_view_zoom_slider()
-	check(main.view_zoom_slider.visible,
-		"the zoom slider shows for the graph view")
-	main._on_view_zoom_slider(0.5)
+	check(main.view_zoom_readout.visible and main.view_zoom_out.visible
+			and main.view_zoom_in.visible and main.view_fit_button.visible,
+		"the zoom cluster shows for the graph view")
+	check(not main.graph_edit.show_zoom_buttons and not main.graph_edit.show_zoom_label,
+		"and the canvas has stopped saying the same thing in its own vocabulary")
+	main._set_view_zoom(0.5)
 	check(is_equal_approx(main.graph_edit.zoom, 0.5),
-		"and dragging it zooms the graph (%.2f)" % main.graph_edit.zoom)
-	main.views.current_tab = 1
-	await process_frame
+		"setting it zooms the graph (%.2f)" % main.graph_edit.zoom)
+	main._step_view_zoom(1)
+	check(main.graph_edit.zoom > 0.5
+			and main.view_zoom_readout.text == "%d%%" % roundi(main.graph_edit.zoom * 100.0),
+		"plus steps up and the readout follows (%s)" % main.view_zoom_readout.text)
+	main._set_view_zoom(0.5)
+	await main._set_patch_view(main.PatchView.RACK)
+	for i in 6:
+		await process_frame
 	main._refresh_view_zoom_slider()
-	main._on_view_zoom_slider(0.4)
+	main._set_view_zoom(0.4)
 	check(is_equal_approx(main.rack.view_zoom, 0.4)
 			and is_equal_approx(main.graph_edit.zoom, 0.5),
-		"on the rack tab it zooms the rack and leaves the graph's distance alone")
-	main.views.current_tab = 0
-	await process_frame
+		"on the rack lens it zooms the rack and leaves the graph's distance alone")
+	await main._set_patch_view(main.PatchView.GRAPH)
+	for i in 6:
+		await process_frame
 	main._refresh_view_zoom_slider()
-	check(absf(main.view_zoom_slider.value - 0.5) < 0.01,
-		"and coming back, the slider remembers the graph's own value (%.2f)"
-			% main.view_zoom_slider.value)
+	check(main.view_zoom_readout.text == "50%",
+		"and coming back, the readout remembers the graph's own value (%s)"
+			% main.view_zoom_readout.text)
 	main.rack.view_zoom = 1.0
 	main.rack.case_hp = 0
 
@@ -10348,6 +11264,451 @@ func _initialize() -> void:
 	check(main.get_tree().root.gui_embed_subwindows == embedding_before,
 		"closing a panel that is not open leaves the editor's own windows alone")
 
+	# ---- step 15B: the dense graph, gated ------------------------------------------
+	# The cosmopolitan pass's acceptance specimen, held here so it cannot rot. Thirty
+	# nodes, all six width classes, three reserved identity cells, a node the validator
+	# genuinely complains about, and the longest name in the corpus beside the shortest.
+	#
+	# `qa_sheet.gd` photographs it and checks the same invariants across five palettes;
+	# this is the headless half, which is everything a palette cannot change. Last in the
+	# suite because it replaces the document, and nothing after it would be looking at
+	# what it thought it was.
+	var dense := FileAccess.get_file_as_string("res://qa/dense-graph.json")
+	check(not dense.is_empty(), "the dense QA graph is readable")
+	if not dense.is_empty():
+		await main._load_text(dense)
+		for _loading in 20:
+			await process_frame
+		main._choose_detail_mode(PatchGraphScript.DetailMode.ADAPTIVE)
+		for _loading in 10:
+			await process_frame
+		check(main.widgets.size() == 30,
+			"the dense QA graph opens whole (%d nodes)" % main.widgets.size())
+
+		# What the contract says a MAP node contains: a silhouette, an identity, sockets,
+		# cables, selection and validity. Not a control.
+		#
+		# Six survived it when 15B looked — the plugin host's three buttons, the CC learn
+		# button, the speech words button and the sequencer's step lane — because every one
+		# of them is a control the row system never owned, so the detail pass was never
+		# asked about it. 15B.1 gave every body control a declared minimum optical state
+		# defaulting to FULL, and `_apply_body_optics` enforces it, so the figure is zero
+		# and stays zero: a seventh control added tomorrow is governed the day it exists.
+		var elided := 0
+		var over_class := 0
+		var misfit := 0
+		var ghosts := 0
+		var columns_split := 0
+		var half_cells := 0
+		for scale in Design.SCALE_FACTORS.size():
+			Design.ui_scale = scale
+			main._use_ui_scale(scale)
+			for _scaling in 8:
+				await process_frame
+			for zoom: float in [1.0, 0.66, 0.40, 0.28]:
+				main.graph_edit.zoom = zoom
+				main.graph_edit._update_detail()
+				main._apply_detail(main.graph_edit.detail)
+				for _settling in 10:
+					await process_frame
+				var dense_full: bool = main.graph_edit.detail == PatchGraphScript.Detail.FULL
+				var title_x := -1.0
+				for id in main.widgets:
+					var node: GraphNode = main.widgets[id]
+					var dense_key := str(node.get_meta("type", ""))
+					if not NodeIdentity.migrated(dense_key):
+						continue
+					# The name the reader receives, asked of the renderer rather than
+					# worked out here — a second implementation of the elision is how the
+					# step 1 baseline went on reporting cut names after the renderer had
+					# stopped cutting them.
+					var dense_pinned := Design.screen_minimum(Design.MIN_SCREEN_NODE_TITLE)
+					var dense_shown := node.title
+					if Design.below_screen_minimum(Design.type(Design.SIZE_NODE_TITLE),
+							zoom, dense_pinned):
+						var room: float = node.size.x * zoom - 12.0
+						dense_shown = "" if room < 20.0 else PatchGraphScript.ScreenText._name_for(
+							node, Design.font(Design.WEIGHT_SEMIBOLD), dense_pinned, room)
+					if dense_shown.ends_with("…"):
+						elided += 1
+					var dense_declared := NodeGrid.width_for(dense_key)
+					if dense_declared > 0 and node.size.x > float(dense_declared) + 0.5:
+						over_class += 1
+					# 15B.1: a parameter cell is the unit of removal, so the decision
+					# function may never say a cell reaches the reader while one of its
+					# halves does not. The pictures are `qa_reduced.gd`'s job — this pass
+					# has no rendering server — but the rule the renderer asks is a pure
+					# function of built cells, and it is asked here on real ones so that a
+					# priority cannot quietly come back into it.
+					var stack: Array = [node]
+					while not stack.is_empty():
+						var here: Node = stack.pop_front()
+						for kid in here.get_children():
+							var maybe := kid as Control
+							if maybe == null:
+								continue
+							stack.append(maybe)
+							if str(maybe.get_meta("cell", "")) != "parameter" 									or not maybe.is_visible_in_tree():
+								continue
+							if not PatchGraphScript.ScreenText.cell_reaches(maybe, zoom):
+								continue
+							var halves: Array = [maybe.get_meta("name_label")] 								if maybe.has_meta("name_label") else []
+							for marked in PatchGraphScript.ScreenText._marked(maybe):
+								if str(marked.get_meta("screen_kind", "")) == "value":
+									halves.append(marked)
+							for half: Variant in halves:
+								var piece := half as Label
+								if piece != null and piece.is_visible_in_tree() 										and PatchGraphScript.ScreenText.fit_for(piece, zoom) 											== PatchGraphScript.ScreenText.Fit.NO_ROOM:
+									half_cells += 1
+					if dense_full:
+						misfit += LayoutFit.complaints(node, node.size.x, 0.0).size()
+						# The title column, which is the whole reason an identity cell is
+						# reserved rather than removed. Within one frame, every migrated
+						# node starts its name at the same x.
+						var dense_title: Label = node.get_meta("title_label") \
+							if node.has_meta("title_label") else null
+						if dense_title != null and dense_title.is_visible_in_tree():
+							var inset := dense_title.get_global_rect().position.x \
+								- node.get_global_rect().position.x
+							if title_x < 0.0:
+								title_x = inset
+							elif absf(inset - title_x) > 0.5:
+								columns_split += 1
+					else:
+						var dense_queue: Array = [node]
+						while not dense_queue.is_empty():
+							var next: Node = dense_queue.pop_front()
+							for child in next.get_children():
+								var piece := child as Control
+								if piece == null:
+									continue
+								dense_queue.append(piece)
+								if not piece.is_visible_in_tree():
+									continue
+								if piece.get_parent() == node.get_titlebar_hbox():
+									continue
+								if piece is BaseButton or piece is Range:
+									ghosts += 1
+		Design.ui_scale = Design.Scale.COMFORTABLE
+		check(elided == 0,
+			"no migrated title in the dense graph is ever cut (%d)" % elided)
+		check(over_class == 0,
+			"every dense-graph node stands inside its width class (%d over)" % over_class)
+		check(misfit == 0,
+			"nothing in the dense graph is clipped, overlapping or outside its node (%d)"
+				% misfit)
+		check(columns_split == 0,
+			"the title column holds across the dense graph, reserved cells and all (%d)"
+				% columns_split)
+		check(ghosts == 0,
+			"no control survives past FULL in the dense graph (%d aimable)" % ghosts)
+		check(half_cells == 0,
+			"no parameter cell reaches the reader as half a pair (%d)" % half_cells)
+
+	# ---- cable pass, goal 1: crossing separation -------------------------------------
+	# The dense graph is already open from the block above, which is why this sits here.
+	#
+	# The pictures are `crossing_sheet.gd`'s job — this pass has no rendering server. What
+	# is checkable without one is the geometry the treatment stands on, and the two rules
+	# that decide where it is applied at all.
+	check(CableArtScript.crossing_style == CableArtScript.Crossing.KNOCKOUT,
+		"the shipped crossing treatment is the knockout")
+	check(not CableArtScript.crossing_same_colour_only,
+		"and it is applied at every true crossing, whatever the two cables are coloured")
+
+	# The gap is local and it is a specific length: the upper cable's width plus clearance
+	# either side. A treatment that ran along the cable would be a second channel painted
+	# down its length, which is the thing the brief rules out.
+	var straight := PackedVector2Array([Vector2(0, 0), Vector2(200, 0)])
+	var gap := CableArtScript.span_at(straight, Vector2(100, 0), 12.0)
+	var gap_length := 0.0
+	for step in range(gap.size() - 1):
+		gap_length += gap[step].distance_to(gap[step + 1])
+	check(absf(gap_length - 24.0) < 0.5,
+		"a knockout spans exactly what it is asked for (%.1f of 24)" % gap_length)
+
+	# And it stays local when the crossing is at the very end of a route, where walking
+	# the path runs out of path. It extends along the cable's own direction rather than
+	# stopping short, so a crossing near a socket still gets a full gap.
+	var stub := CableArtScript.span_at(straight, Vector2(4, 0), 12.0)
+	var stub_length := 0.0
+	for step in range(stub.size() - 1):
+		stub_length += stub[step].distance_to(stub[step + 1])
+	check(absf(stub_length - 24.0) < 0.5,
+		"including at the end of a route (%.1f of 24)" % stub_length)
+
+	# Cables leaving one output or arriving at one input meet by design, and a separation
+	# mark there would say the opposite of what is true. The cord layer that replaced
+	# GraphEdit's own crossing pass had lost that exclusion, so the clock's three-way
+	# fan-out was being marked as three crossings.
+	var cord_layer: Node = null
+	for child in main.graph_edit.get_children():
+		if child.has_method("crossing_sites"):
+			cord_layer = child
+	check(cord_layer != null, "the cord layer is the one that knows where crossings are")
+	if cord_layer != null:
+		var sites: Array = cord_layer.crossing_sites()
+		check(sites.size() > 0,
+			"the dense graph has crossings to separate (%d)" % sites.size())
+		var ports := {}
+		for wire in main.graph_edit.get_connection_list():
+			ports["%s:%d" % [str(wire["from_node"]), int(wire["from_port"])]] = true
+		# A fan-out convergence sits on its shared port. None of the sites may.
+		var on_a_port := 0
+		for site: Dictionary in sites:
+			for widget_id in main.widgets:
+				var widget: GraphNode = main.widgets[widget_id]
+				for index in widget.get_output_port_count():
+					var at: Vector2 = (widget.position_offset
+						+ widget.get_output_port_position(index)) * main.graph_edit.zoom 						- main.graph_edit.scroll_offset
+					if at.distance_to(site["at"] as Vector2) < 4.0:
+						on_a_port += 1
+		check(on_a_port == 0,
+			"and none of them is a fan-out meeting at its own port (%d)" % on_a_port)
+
+	# ---- cable pass, goal 2: focus by suppression ------------------------------------
+	# The pictures and the luminance ratios are `focus_sheet.gd`'s job. What is checkable
+	# without a rendering server is the rule that decides which cables are left alone, and
+	# the prohibition the whole treatment rests on.
+	check(absf(CableArtScript.suppression - 0.25) < 0.001,
+		"unrelated cables are suppressed to a quarter (%.2f)"
+			% CableArtScript.suppression)
+	check(absf(CableArtScript.Style.new().prominence - 1.0) < 0.001,
+		"and a cable is at full prominence unless something else is focused")
+
+	if cord_layer != null:
+		var all_cords: Array = cord_layer._lay()
+		main.graph_edit.focus_port = ""
+		main.graph_edit.hovered_cable = {}
+		check((cord_layer._focus_of(all_cords) as Dictionary).is_empty(),
+			"nothing hovered focuses nothing, so the field is undisturbed at rest")
+
+		# A cable hover is one connection and stops there. Not the chain it sits in: the
+		# nodes between transform things, and lighting the downstream network is a
+		# different feature with a different meaning.
+		var first_cord: Array = all_cords[0]
+		var ends: PackedStringArray = str(first_cord[4]).split(">")
+		var from_end: PackedStringArray = ends[0].split(":")
+		var to_end: PackedStringArray = ends[1].split(":")
+		main.graph_edit.hovered_cable = {"from_node": from_end[0],
+			"from_port": int(from_end[1]), "to_node": to_end[0],
+			"to_port": int(to_end[1])}
+		check((cord_layer._focus_of(all_cords) as Dictionary).size() == 1,
+			"a cable hover focuses exactly that connection")
+		main.graph_edit.hovered_cable = {}
+
+		# A port hover is the family plugged into it, which for an output is the fan-out.
+		var busiest_port := ""
+		var fanned := {}
+		for one: Array in all_cords:
+			fanned[one[2]] = int(fanned.get(one[2], 0)) + 1
+			if busiest_port == "" or int(fanned[one[2]]) > int(fanned.get(busiest_port, 0)):
+				busiest_port = str(one[2])
+		var on_that_port := 0
+		for one: Array in all_cords:
+			if str(one[2]) == busiest_port:
+				on_that_port += 1
+		var port_parts: PackedStringArray = busiest_port.split(":")
+		main.graph_edit.focus_port = "%s:right:%s" % [port_parts[0], port_parts[1]]
+		check((cord_layer._focus_of(all_cords) as Dictionary).size() == on_that_port,
+			"a port hover focuses exactly the %d cables on that port" % on_that_port)
+
+		# And focus moves nothing. The route is a fact about the document; a treatment
+		# that redrew it would have changed the patch to answer a question about it.
+		var relaid: Array = cord_layer._lay()
+		var routes_moved := 0
+		for i in all_cords.size():
+			var was: PackedVector2Array = all_cords[i][0]
+			var now: PackedVector2Array = relaid[i][0]
+			if was.size() != now.size():
+				routes_moved += 1
+				continue
+			for step in was.size():
+				if was[step].distance_to(now[step]) > 0.01:
+					routes_moved += 1
+					break
+		check(routes_moved == 0,
+			"and no route moves because something is focused (%d)" % routes_moved)
+		main.graph_edit.focus_port = ""
+
+	# ---- cable pass, goal 3: type cues, placed but not shipped -----------------------
+	# The three candidates are drawn and their placement rule is gated; none is the
+	# default, because the sheet that would choose between them is not finished.
+	check(CableArtScript.type_cue == CableArtScript.TypeCue.RIBS,
+		"the shipped type cue is the transverse rib")
+	# Two classes, because goal 3.0 found the program has two. A third enum member would be
+	# a grammar maintained for a semantic class SoundGraph does not have.
+	check(CableArtScript.SignalClass.size() == 2,
+		"and there are two cable classes, because there are two signal classes")
+
+	# The geometry rule: cadence in screen pixels, so it stays about constant as the graph
+	# zoom changes rather than going sparse when you lean in and plaid when you lean out.
+	var cue_style := CableArtScript.Style.new()
+	cue_style.thickness = 8.0
+	cue_style.signal_class = CableArtScript.SignalClass.CONTROL
+	var was_cue: int = CableArtScript.type_cue
+	CableArtScript.type_cue = CableArtScript.TypeCue.HIGHLIGHT
+	var runway := PackedVector2Array([Vector2(0, 0), Vector2(1600, 0)])
+	var spaced: Dictionary = CableArtScript.cue_sites(runway, cue_style)
+	var spacing := 0.0
+	var laid_out: Array = spaced["placed"]
+	if laid_out.size() >= 2:
+		spacing = float(laid_out[1]["arc"]) - float(laid_out[0]["arc"])
+	check(absf(spacing - CableArtScript.CUE_CADENCE) < 0.5,
+		"type cues fall every %d screen pixels (%.0f)"
+			% [int(CableArtScript.CUE_CADENCE), spacing])
+
+	# Audio is unmarked, and that is a decision rather than an omission: it is the
+	# commonest cable in every patch and the additional ink belongs to the classes that
+	# are not the default.
+	cue_style.signal_class = CableArtScript.SignalClass.AUDIO
+	check((CableArtScript.cue_sites(runway, cue_style)["placed"] as Array).is_empty(),
+		"and an audio cable carries none of them")
+
+	# Precedence: connection and crossing geometry outrank the cadence. A mark inside a
+	# knockout would be the cadence deciding that a crossing has a dash in it.
+	cue_style.signal_class = CableArtScript.SignalClass.CONTROL
+	var blocked := 0
+	for site: Dictionary in laid_out:
+		cue_style.cue_avoid = PackedVector2Array([site["at"]])
+		var fewer: Dictionary = CableArtScript.cue_sites(runway, cue_style)
+		if (fewer["placed"] as Array).size() == laid_out.size() - 1 				and int(fewer["skipped"]) == 1:
+			blocked += 1
+	check(blocked == laid_out.size(),
+		"and a crossing refuses the cue that would land on it (%d of %d)"
+			% [blocked, laid_out.size()])
+	CableArtScript.type_cue = was_cue
+
+	# ---- cable pass, goal 4: persistent focus -----------------------------------------
+	# Behaviour, not appearance. The whole of goal 4 rests on one invariant and it is the
+	# first thing checked: a locked route is drawn exactly as a hovered one, because a
+	# sixth cable channel for "this focus is pinned" would undo the discipline the last
+	# three goals established.
+	if cord_layer != null:
+		var goal4_cords: Array = cord_layer._lay()
+		var pinned: Array = goal4_cords[0]
+		var pinned_ends: PackedStringArray = str(pinned[4]).split(">")
+		var pinned_from: PackedStringArray = pinned_ends[0].split(":")
+		var pinned_to: PackedStringArray = pinned_ends[1].split(":")
+		var as_connection := {"from_node": pinned_from[0],
+			"from_port": int(pinned_from[1]), "to_node": pinned_to[0],
+			"to_port": int(pinned_to[1])}
+
+		main.graph_edit.locked_cable = {}
+		main.graph_edit.locked_port = ""
+		main.graph_edit.hovered_cable = as_connection
+		var while_hovered: Dictionary = cord_layer._focus_of(goal4_cords)
+		main.graph_edit.hovered_cable = {}
+		main.graph_edit.locked_cable = as_connection
+		var while_locked: Dictionary = cord_layer._focus_of(goal4_cords)
+		check(while_hovered.keys() == while_locked.keys() and while_locked.size() == 1,
+			"a locked route focuses exactly what hovering it focuses")
+
+		# Model B: the lock is home and hover previews. Hovering something else while a
+		# route is pinned shows the other one, so two routes can be compared without
+		# unlocking and relocking — the gesture the lock existed to save.
+		var rival: Array = goal4_cords[1]
+		var rival_ends: PackedStringArray = str(rival[4]).split(">")
+		var rival_from: PackedStringArray = rival_ends[0].split(":")
+		var rival_to: PackedStringArray = rival_ends[1].split(":")
+		main.graph_edit.hovered_cable = {"from_node": rival_from[0],
+			"from_port": int(rival_from[1]), "to_node": rival_to[0],
+			"to_port": int(rival_to[1])}
+		var previewing: Dictionary = cord_layer._focus_of(goal4_cords)
+		check(previewing.has(str(rival[4])) and not previewing.has(str(pinned[4])),
+			"and hovering another route while one is locked previews the other")
+		main.graph_edit.hovered_cable = {}
+		check((cord_layer._focus_of(goal4_cords) as Dictionary).has(str(pinned[4])),
+			"and taking the pointer away comes home to the locked one")
+
+		# A port lock is the family plugged into it, the same set a port hover gives.
+		main.graph_edit.locked_cable = {}
+		var busiest_lock := ""
+		var lock_fan := {}
+		for one: Array in goal4_cords:
+			lock_fan[one[2]] = int(lock_fan.get(one[2], 0)) + 1
+			if busiest_lock == "" 					or int(lock_fan[one[2]]) > int(lock_fan.get(busiest_lock, 0)):
+				busiest_lock = str(one[2])
+		var lock_parts: PackedStringArray = busiest_lock.split(":")
+		main.graph_edit.lock_focus_on_port("%s:right:%s" % [lock_parts[0], lock_parts[1]])
+		main.graph_edit.focus_port = "%s:right:%s" % [lock_parts[0], lock_parts[1]]
+		var by_hover: Dictionary = cord_layer._focus_of(goal4_cords)
+		main.graph_edit.focus_port = ""
+		var by_lock: Dictionary = cord_layer._focus_of(goal4_cords)
+		check(by_hover.keys() == by_lock.keys() and by_lock.size() > 1,
+			"a locked port focuses exactly what hovering it focuses (%d)" % by_lock.size())
+
+		# Escape lets go, and so does the empty canvas.
+		main.graph_edit.clear_focus_lock()
+		check(main.graph_edit.locked_cable.is_empty()
+				and main.graph_edit.locked_port == ""
+				and (cord_layer._focus_of(goal4_cords) as Dictionary).is_empty(),
+			"letting go of the lock leaves the field undisturbed again")
+
+		# And a lock cannot outlive its cable. It is an identity rather than a position,
+		# so zoom and pan cost nothing; what would strand it is the route being
+		# disconnected underneath, leaving the field quieted around nothing at all.
+		main.graph_edit.locked_cable = {"from_node": "gone", "from_port": 0,
+			"to_node": "also_gone", "to_port": 0}
+		main.graph_edit.prune_focus_lock()
+		check(main.graph_edit.locked_cable.is_empty(),
+			"and a route that no longer exists takes its lock with it")
+
+	# ---- layout pass, goal 1: the arrangement objective contract ----------------------
+	# The contract is pure arithmetic on a graph and a set of rectangles, so it is checked
+	# on graphs written here rather than on whatever a patch happens to contain.
+
+	# A feedback loop is one unit. A delay feeding its own input is not later than itself,
+	# and a depth function that tried to say so would either loop or pick a member to be
+	# first by accident.
+	var cyclic := ["a", "b", "c", "d"]
+	var cyclic_edges := [["a", "b"], ["b", "c"], ["c", "b"], ["c", "d"]]
+	var grouped: Dictionary = LayoutObjective.components(cyclic, cyclic_edges)
+	check(grouped["b"] == grouped["c"], "a feedback loop collapses to one component")
+	check(grouped["a"] != grouped["b"] and grouped["d"] != grouped["b"],
+		"and the nodes either side of it do not join it")
+	var deep: Dictionary = LayoutObjective.depths(cyclic, cyclic_edges, grouped)
+	check(int(deep["a"]) == 0 and int(deep["b"]) == 1 and int(deep["c"]) == 1
+			and int(deep["d"]) == 2,
+		"stage depth counts the loop once (%d, %d, %d, %d)"
+			% [int(deep["a"]), int(deep["b"]), int(deep["c"]), int(deep["d"])])
+
+	# Depth is the longest path from a source, not the shortest: a node's stage is decided
+	# by the deepest thing that reaches it, so an oscillator feeding both a filter and the
+	# output does not make the output stage one.
+	var forked := ["s", "m", "e"]
+	var forked_edges := [["s", "m"], ["m", "e"], ["s", "e"]]
+	var forked_depth: Dictionary = LayoutObjective.depths(forked, forked_edges,
+		LayoutObjective.components(forked, forked_edges))
+	check(int(forked_depth["e"]) == 2,
+		"and takes the longest path to a node, not the shortest (%d)"
+			% int(forked_depth["e"]))
+
+	# A band is a cluster of centres, not a grid cell, so the same rule reads a patch of
+	# narrow nodes and a patch of wide ones.
+	check((LayoutObjective.bands([0.0, 10.0, 400.0, 405.0, 800.0], 100.0) as Array).size() == 3,
+		"horizontal bands come from the gaps between centres")
+
+	# And the comparison is lexicographic. A tier-one fault is not purchasable with any
+	# amount of tier-three improvement, which is the whole reason this is not a weighted
+	# score.
+	var legal := {"overlaps": 0, "cable_total": 90000.0}
+	var illegal := {"overlaps": 1, "cable_total": 1.0}
+	check(LayoutObjective.compare(legal, illegal) == 1,
+		"a legal arrangement beats an illegal one however much cable it costs")
+	check(LayoutObjective.differs_at(legal, illegal) == "legalization / overlaps",
+		"and the report names the tier the two first differ in")
+	check(LayoutObjective.compare(legal, legal) == 0,
+		"an arrangement is indistinguishable from itself")
+
+	# The monotonicity rule a future arranger is held to.
+	check(not LayoutObjective.admissible({"crossings": 9, "area": 1.0},
+			{"crossings": 4, "area": 9.0}),
+		"a move that buys area with crossings is refused")
+	check(LayoutObjective.admissible({"crossings": 4, "area": 9.0},
+			{"crossings": 9, "area": 1.0}),
+		"and the same move in the other direction is allowed")
+
 	# Same teardown as roundtrip.gd, for the same reason: AudioServer mixes on its own
 	# thread and holds the generator playback, so the engine has to be let go with
 	# frames to spare rather than destroyed underneath it. Order matters and was
@@ -10355,22 +11716,29 @@ func _initialize() -> void:
 	# for deletion before shutdown_audio was asked of it — a teardown improvised in
 	# exactly the way that segfaulted roughly one run in five, always after the
 	# last check had already passed.
+	# The probe player has been playing since the audio checks, so it goes first, stopped
+	# under the lock like every other player in this file. Then the editor, through the
+	# shared exit.
+	#
+	# It used to `queue_free()` both and give them a single frame. Deletion from that queue
+	# happens when the tree gets round to it, and `quit()` was the next statement — so the
+	# gap this teardown exists to create was not reliably there. `free()` is immediate, and
+	# it is what `roundtrip.gd` had been doing all along in the version this was copied
+	# from. This suite was the one still segfaulting after every other harness was fixed,
+	# which is how the difference was found.
 	AudioServer.lock()
 	player.stop()
 	player.stream = null
 	AudioServer.unlock()
-	if main.has_method("shutdown_audio"):
-		main.shutdown_audio()
 	await process_frame
-	await process_frame
-	player.queue_free()
-	main.queue_free()
+	if player.get_parent() != null:
+		player.get_parent().remove_child(player)
+	player.free()
 	await process_frame
 
 	print("")
 	if failures == 0:
 		print("all editor checks passed")
-		quit(0)
 	else:
 		print("%d editor check(s) failed" % failures)
-		quit(1)
+	await HarnessExit.finish(self, main, 0 if failures == 0 else 1)

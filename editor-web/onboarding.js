@@ -13,6 +13,8 @@
 //   invite     one control, named, with no Next button — the change IS the next step
 //   golden     what just happened, and a toggle between Original and Your version
 //   agency     where to go now, and the only place the mailing list can be offered
+//   whole      a ring around the full editor's real button — the files it needs have
+//              been prefetching since Start was pressed, so the door opens warm
 //
 // Two things are worth knowing before editing it.
 //
@@ -132,11 +134,19 @@ export const COPY = {
         keepGoing: 'Keep experimenting',
         save: 'Save this patch',
         more: 'Show me one more thing',
-        // Shown only when the full editor is actually reachable. Naming a thing somebody
-        // cannot open is worse than not mentioning it.
-        fullLead: 'This page reads a graph. To build one — add nodes, drag cables — there ' +
-            'is a full editor, and it will open with this patch.',
-        full: 'Open in the full editor',
+    },
+    // The last thing the tour says, and the only step that points at the bigger tool.
+    // Shown only when the full editor is actually reachable — naming a thing somebody
+    // cannot open is worse than not mentioning it — and it rings the real button in the
+    // actions bar, so the visitor learns where the door lives, not just that it exists.
+    whole: {
+        title: 'You can open the whole instrument now.',
+        body: 'This page reads a graph. The full editor builds one — add nodes, drag ' +
+            'cables, search by what you want — and it opens with this patch, exactly as ' +
+            'it sounds right now.',
+        warmed: 'It has been quietly downloading while you played, so it opens fast.',
+        open: 'Open the full editor',
+        stay: 'Stay with this page',
     },
     structural: {
         title: 'One more thing: take the filter out of the path.',
@@ -352,6 +362,7 @@ export class Onboarding {
 
     dismissAll() {
         this.stopWatching();
+        this.stopGoldenWatch();
         this.card.hidden = true;
         this.modal.hidden = true;
         this.ring.hidden = true;
@@ -690,6 +701,7 @@ export class Onboarding {
             this.host.onGoldenMoment?.();
         }
         this.showingOriginal = false;
+        this.stopGoldenWatch();
 
         this.showCard(this.host.controlElement('cutoff'), () => {
             const panel = make('div', 'tour-panel');
@@ -701,8 +713,25 @@ export class Onboarding {
             const state = make('p', 'compare-state', COPY.golden.yours);
             panel.append(state);
 
+            // The card is not modal and the control stays live, so the visitor usually
+            // keeps dragging after it appears. Two consequences, both handled here:
+            // switching to the original captures wherever the knob actually is — not the
+            // value that happened to cross the threshold, which is where the drag was,
+            // not where it ended — and a hand-move while the original is showing makes
+            // what is heard "your version" again. Programmatic sets do not fire 'input'
+            // (see the control surface in app.js), so the listener only ever sees hands.
+            const slider = this.host.controlElement('cutoff');
+            this.onGoldenInput = () => {
+                this.showingOriginal = false;
+                state.textContent = COPY.golden.yours;
+            };
+            slider?.addEventListener('input', this.onGoldenInput);
+
             const actions = make('div', 'tour-actions');
             const compare = button(COPY.golden.compare, 'quiet', () => {
+                if (!this.showingOriginal) {
+                    this.changedCutoff = this.host.controlValue('cutoff');
+                }
                 this.showingOriginal = !this.showingOriginal;
                 this.host.setControlValue(
                     'cutoff',
@@ -715,12 +744,21 @@ export class Onboarding {
                 button(COPY.golden.keep, 'primary', () => {
                     // Whatever is on screen when they say "keep" is what they keep — if the
                     // toggle is showing the original and they prefer it, that is a choice.
+                    this.stopGoldenWatch();
                     this.showAgency();
                 }),
             );
             panel.append(actions);
             return panel;
         });
+    }
+
+    stopGoldenWatch() {
+        const slider = this.host.controlElement('cutoff');
+        if (slider && this.onGoldenInput) {
+            slider.removeEventListener('input', this.onGoldenInput);
+        }
+        this.onGoldenInput = null;
     }
 
     // -------------------------------------------------------------------------------
@@ -744,34 +782,64 @@ export class Onboarding {
 
             const actions = make('div', 'tour-actions');
             actions.append(
-                button(COPY.agency.keepGoing, 'primary', () => {
-                    this.finish();
-                    this.offerMailingList();
-                }),
+                button(COPY.agency.keepGoing, 'primary', () => this.showWholeInstrument()),
                 button(COPY.agency.save, 'quiet', () => {
                     if (this.host.savePatchLocally()) {
                         milestone(MILESTONES.PATCH_SAVED);
                     }
+                    this.showWholeInstrument();
+                }),
+            );
+            panel.append(actions);
+
+            const more = button(COPY.agency.more, 'link', () => this.showStructural());
+            panel.append(more);
+            return panel;
+        });
+    }
+
+    // -------------------------------------------------------------------------------
+    // The last step — the whole instrument
+    //
+    // The tour ends by pointing at the door it has earned the right to point at: a ring
+    // around the real "Open in the full editor" button, so the visitor leaves knowing
+    // where it lives. Skipped entirely when the full editor is not deployed — the tour
+    // then ends exactly as it used to, with the mailing-list offer.
+    // -------------------------------------------------------------------------------
+
+    showWholeInstrument() {
+        if (!this.host.fullEditor?.()) {
+            this.finish();
+            this.offerMailingList();
+            return;
+        }
+        this.step = 'whole';
+        rememberProgress({ step: 'whole' });
+        this.host.focusNodes(null);
+
+        this.showCard(this.host.fullEditorButton?.() ?? null, () => {
+            const panel = make('div', 'tour-panel');
+            panel.append(
+                make('h2', null, COPY.whole.title),
+                make('p', 'body', COPY.whole.body),
+            );
+            // Said only when it is true: the prefetch respects metered connections and
+            // may not have run, and "it opens fast" over a cold 10 MB pull is a lie.
+            if (this.host.fullEditorWarmed?.()) {
+                panel.append(make('p', 'prompt', COPY.whole.warmed));
+            }
+            const actions = make('div', 'tour-actions');
+            actions.append(
+                button(COPY.whole.open, 'primary', () => {
+                    this.finish();
+                    this.host.openFullEditor();
+                }),
+                button(COPY.whole.stay, 'quiet', () => {
                     this.finish();
                     this.offerMailingList();
                 }),
             );
             panel.append(actions);
-
-            // The one place the visitor is already deciding what to do next, so the one
-            // place naming a bigger tool is an offer rather than an interruption.
-            if (this.host.fullEditor?.()) {
-                panel.append(make('p', 'body', COPY.agency.fullLead));
-                const onward = make('div', 'tour-actions');
-                onward.append(button(COPY.agency.full, 'quiet', () => {
-                    this.finish();
-                    this.host.openFullEditor();
-                }));
-                panel.append(onward);
-            }
-
-            const more = button(COPY.agency.more, 'link', () => this.showStructural());
-            panel.append(more);
             return panel;
         });
     }
@@ -803,8 +871,7 @@ export class Onboarding {
                 },
             ));
             actions.append(button(COPY.structural.done, 'quiet', () => {
-                this.finish();
-                this.offerMailingList();
+                this.showWholeInstrument();
             }));
             panel.append(actions);
             return panel;

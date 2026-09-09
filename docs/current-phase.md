@@ -442,6 +442,77 @@ somewhere other than the cause.
   `sg-host` for 1141x711 and the Godot extension for 2282x1422 on one screen. Neither is
   wrong: Godot's process is per-monitor DPI aware and sg-host's is not, so the plugin is
   answering a different question about the same display. Never hard-code either.
+- **2026-09-01, the exit crash again: the leak is fixed, the crash is not, and the gate
+  now says so.** Chased because the push gate had started printing a bare
+  `Segmentation fault` line from bash roughly one suite in ten, always after that suite
+  had printed its verdict, and passing anyway.
+
+  What was actually wrong and is now fixed: **thirty-eight of forty-one headless harnesses
+  never called `shutdown_audio()` at all.** They instantiated `main.tscn`, did their work
+  and called `quit()` straight into the race. Only `roundtrip.gd`, `editor_test.gd` and
+  `quit_test.gd` had the teardown, each written out by hand. There is now one
+  `harness_exit.gd` and every harness leaves through it.
+
+  **A correction, made the same day.** The first write-up of this said the
+  `AudioStreamGeneratorPlayback` leak was *gone*, on the strength of twenty-four
+  consecutive runs with no "instance was leaked at exit" line. Every one of those runs was
+  `editor_test`. Asked more widely, the leak is still there: `legalize_test` and
+  `tidy_test` report it, `crossing_semantics`, `routes_test` and `editor_test` do not. So
+  it is no longer universal, where before it was every run — the same shape as the crash,
+  reduced and not cured. Twenty runs of one suite is not a claim about the suite next to
+  it, which is a lesson this repository keeps buying.
+
+  That weakens but does not remove the decoupling argument: `editor_test` shows no leak in
+  eight runs and still crashes in three or four of them, so for that suite the crash is
+  not the leak.
+
+  What is not fixed is the crash, and the useful new fact is **where it is not**. With
+  `HARNESS_EXIT_TRACE=1` the teardown prints each step, and the runs that segfault still
+  print `[exit] quit returned`. Every GDScript statement completes, including `quit()`.
+  Whatever remains is in Godot 4.7's own shutdown after the tree is done, exactly as this
+  file already suspected — now measured rather than inferred.
+
+  Rates, on this machine: `editor_test` 4 of 8 and 3 of 8 — far above the "few percent"
+  recorded above, and it is the largest suite by a wide margin. `legalize_test` 1 of 11.
+  `crossing_semantics` caught once. It is not one suite's defect; it scales with how much
+  the suite does.
+
+  Two hypotheses tested and **rejected**, so nobody spends the afternoon again:
+  `queue_free()` → `remove_child()` + `free()` in `editor_test`'s teardown changed nothing
+  (4 of 8 before, 3 of 8 after), and releasing `scope_probe`'s second reference to the
+  engine inside `shutdown_audio()` changed nothing either. That second one is kept anyway:
+  a probe holding a reference to a shut-down engine is wrong regardless of this crash.
+
+  The gate now reads the exit status instead of discarding it, and the tolerated case is
+  drawn as narrowly as the evidence allows. `harness_exit.gd` prints
+  `HARNESS_SCRIPT_COMPLETE` after `quit()` returns, so there are two markers rather than
+  one, and a verdict on its own no longer excuses a dead process:
+
+  ```
+  no verdict                                    refused
+  verdict, no marker, and a bad status          refused — it died inside the suite
+  both markers, exit 0                          passed
+  both markers, then signal 139                 unstable pass, named and counted
+  anything else non-zero                        refused
+  ```
+
+  The last two lines are the point. What is excused is exactly *every assertion passed and
+  every scripted teardown statement completed, and then Godot fell over in its own
+  shutdown* — not "the log contains a happy string". And only signal 139, the one actually
+  observed: a SIGABRT, a timeout or an out-of-memory kill has not earned the exemption
+  just by arriving late, and letting it inherit one is how the next real defect would get
+  waved through.
+
+  Every run ends with
+
+  ```
+  PASS: 7
+  POST-VERDICT TEARDOWN CRASH: 2 — editor_test routes_test
+  FAIL: 0
+  ```
+
+  so a sudden change in the crash rate is visible without blocking unrelated work.
+
 - **The 0xC0000005 exit crash is rarer, not gone.** shutdown_audio() plus two frames took
   it from ~1 in 5 to the point where 36 consecutive clean runs looked like zero — and on
   2026-08-09 it fired twice in 11 runs, then 0 in the next 32. A residual few-percent

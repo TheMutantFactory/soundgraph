@@ -16,19 +16,22 @@
 // too, and the marketing page would become one that cannot be reliably updated. It must
 // live in a directory BELOW this one:
 //
-//   /soundgraph            this page
-//   /soundgraph/editor     the full editor, with its own worker scope
-//   /soundgraph/desktop    the desktop download
+//   /soundgraph              this page
+//   /soundgraph/editor-web   the full editor, with its own worker scope
+//   /soundgraph/desktop      the desktop download
 //
 // Relative URLs, so the same build works on localhost, on a staging host and in
-// production without a rebuild.
+// production without a rebuild. Locally the export sits at ./editor/; in production
+// (the mutant-factory-website repository's routes) that same relative link 301s to
+// /soundgraph/editor-web/, the editor's canonical home in R2. Same origin either way —
+// the handoff is localStorage, and localStorage does not cross origins.
 
 export const SURFACES = [
     {
         id: 'browser',
         name: 'In your browser',
         here: true,
-        summary: 'Hear a patch and change it. Nothing to install, and about 400 KB to load.',
+        summary: 'Hear a patch and change it. Nothing to install, and about 650 KB to load.',
         detail: 'Reads a graph, plays it, and lets you move any control the patch exposes.',
         url: null,
     },
@@ -48,11 +51,16 @@ export const SURFACES = [
         // off the export rather than guessed: `index` is `executable` in export_presets,
         // so renaming that renames all of these. Biggest first, since that is the one whose
         // download decides whether the click feels instant.
+        //
+        // `bytes` is each file's decoded size, measured off the export — the denominator
+        // for the load meter on the "Open in the full editor" button. An export changes
+        // these a little every build; drift only skews the percentage, never correctness,
+        // so refresh them when they stop being roughly true rather than on every export.
         preload: [
-            'index.side.wasm',                              // ~44 MB, the engine
-            'index.pck',                                    // ~4 MB, the editor itself
-            'index.wasm',                                   // ~1.5 MB, the loader
-            'soundgraph_godot.web.wasm32.nothreads.wasm',   // ~1.3 MB, dsp-core
+            { file: 'index.side.wasm', bytes: 44077147 },                            // the engine
+            { file: 'index.pck', bytes: 5006188 },                                   // the editor itself
+            { file: 'index.wasm', bytes: 1508095 },                                  // the loader
+            { file: 'soundgraph_godot.web.wasm32.nothreads.wasm', bytes: 1358047 },  // dsp-core
         ],
     },
     {
@@ -61,7 +69,7 @@ export const SURFACES = [
         summary: 'The full editor as an application, for when the browser is not the point.',
         detail: 'Opens and saves patch files directly, and talks to hardware over serial.',
         url: null,
-        cost: 'No numbered release yet.',
+        cost: 'First release: Knobcon 2026, September 11–13.',
     },
 ];
 

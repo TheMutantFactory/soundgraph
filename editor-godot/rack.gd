@@ -22,6 +22,7 @@ const Seams := preload("res://seams.gd")
 ## case has no coordinates either; you slide modules along a rail.
 
 const Layout := preload("res://layout.gd")
+const CableArt := preload("res://cable_art.gd")
 
 signal parameter_changed(node_id: String, parameter: String, value: float)
 signal edit_started()
@@ -37,7 +38,31 @@ signal theme_requested(node_id: String, at: Vector2)
 
 ## Cable rendering. The A/B is the point: a hanging cable reads as a real instrument, an
 ## orthogonal one reads as a circuit, and it is not obvious which wins in front of people.
-enum CableStyle { CATENARY, PCB }
+## CATENARY hangs a cable under its own weight; PCB routes it in lanes; PHYSICAL is the
+## illustrated patch cord — the same hang, drawn as an object with a plug in a socket.
+##
+## Three styles rather than a replacement, because the point of the A/B is that the
+## catenary is not obviously worse. It is cheaper, it is already tuned, and on a dense
+## rack the extra material may cost more legibility than it buys.
+enum CableStyle { CATENARY, PCB, PHYSICAL }
+
+## Where a cable's colour comes from.
+##
+## TYPE is what the rack has always done: audio one colour, control another, so the
+## picture says something true about the patch. With two signal types in the whole
+## vocabulary that means a rack is two colours, and the physical renderer turns that into
+## a wall of yellow — which is a fact about the palette test, not about the palette.
+##
+## CABLE is what a real case looks like. You reach into the bag and take whatever is
+## there, so colour carries no meaning at all and the eight candy colours are all in play.
+## Nothing has been decided here; it exists so the question can be looked at rather than
+## argued about, and the stress patch is rendered both ways.
+enum CableColouring { TYPE, CABLE }
+
+## The bag, in a fixed order. A cable takes its colour from where it sits in the document,
+## so a patch keeps the same colours every time it is opened.
+const CABLE_BAG: Array[String] = ["cyan", "amber", "magenta", "chartreuse", "violet",
+	"orange", "teal", "coral"]
 
 # Eurorack geometry, in pixels rather than millimetres. HP is the real horizontal pitch
 # unit; module widths are whole numbers of it, which is what makes a wall of modules line
@@ -173,6 +198,28 @@ const JACK_RING := Color(0.62, 0.65, 0.70)
 const JACK_HOLE := Color(0.055, 0.06, 0.07)
 const KNOB_BODY := Color(0.235, 0.251, 0.290)
 const KNOB_TRACK := Color(1, 1, 1, 0.13)
+
+
+## Whether the faceplate is a light material.
+##
+## Everything the case draws on top of itself has to know: a white 13% track reads as a
+## groove on anodised black and as nothing at all on ivory, and the answer is not two sets
+## of constants but one question asked of the panel.
+static func panel_is_light() -> bool:
+	return PANEL.get_luminance() > 0.42
+
+
+## A wash over the faceplate — the light or dark that lies on top of it, whichever the
+## material calls for, at the given strength.
+static func on_panel(alpha: float) -> Color:
+	return Color(0, 0, 0, alpha) if panel_is_light() else Color(1, 1, 1, alpha)
+
+
+## Ink that can be read on this faceplate. 1.0 is the panel legend, lower is secondary.
+static func panel_ink(strength := 1.0) -> Color:
+	var full: Color = Color(0.09, 0.09, 0.10) if panel_is_light() \
+		else Color(0.96, 0.96, 0.97)
+	return PANEL.lerp(full, clampf(strength, 0.0, 1.0))
 const SELECTED := Color(0.43, 0.91, 0.72)
 
 # Category tints, deliberately muted.
@@ -210,6 +257,9 @@ static func skin(key: String) -> Dictionary:
 		return {
 			"panel": PANEL, "panel_low": PANEL_LOW, "panel_edge": PANEL_EDGE,
 			"legend": Color(0, 0, 0, 0),   # empty: the rack's own ink is used
+			"highlight": Color(0, 0, 0, 0), "muted": Color(0, 0, 0, 0),
+			"accent": Color(0, 0, 0, 0), "hardware": Color(0, 0, 0, 0),
+			"hardware_hi": Color(0, 0, 0, 0),
 			"knob": KNOB_BODY, "pointer": Color(0, 0, 0, 0),
 			"jack": JACK_HOLE, "ring": JACK_RING, "screw": SCREW,
 			"stripe": true, "finish": "", "grain": 0.0,
@@ -223,6 +273,15 @@ static func skin(key: String) -> Dictionary:
 		# be. A matte panel catches less light than a machined one.
 		"panel_edge": Color(1, 1, 1, clampf(grain, 0.02, 0.14)),
 		"legend": ModuleThemes.token(key, "legend"),
+		# The lit top of the plate, the thinner ink, the one functional colour, and the
+		# moulded black every board in the family puts its knobs in. Carried on the skin
+		# rather than looked up at each drawing site, so that a panel drawn in the rack
+		# and the same panel drawn in the graph cannot drift apart.
+		"highlight": ModuleThemes.token(key, "highlight"),
+		"muted": ModuleThemes.token(key, "muted"),
+		"accent": ModuleThemes.token(key, "accent"),
+		"hardware": ModuleThemes.token(key, "hardware"),
+		"hardware_hi": ModuleThemes.token(key, "hardware_hi"),
 		"knob": ModuleThemes.token(key, "knob"),
 		"pointer": ModuleThemes.token(key, "pointer"),
 		"jack": ModuleThemes.token(key, "jack"),
@@ -259,6 +318,37 @@ var type_colours: Dictionary = {}
 ## however the panels are painted.
 const SIGNAL_ORDER := ["audio", "control", "event", "note"]
 
+## The cable-colour override for diagnostic nodes, in one place so the rack, the graph
+## and the landing marks cannot disagree about what a lane wears.
+##
+## A cable leaving a CableTest output takes the candy palette by lane — out1 wears the
+## first cable colour, out8 the eighth — overriding the signal-type colour entirely.
+## That is the node's whole job: two of them wired straight across show every cable
+## colour once, in order, and a rendering change that costs a colour its identity shows
+## up as two cables that suddenly match. Transparent means no override.
+static func cable_override(from_type: String, output_index: int) -> Color:
+	if from_type != "CableTest" or output_index < 0:
+		return Color(0, 0, 0, 0)
+	return CableArt.PALETTE[CableArt.PALETTE_ORDER[
+		output_index % CableArt.PALETTE_ORDER.size()]]
+
+
+## A named output's position among its type's outputs, from the registry. -1 for a port
+## the registry does not know, which no override should touch.
+func output_index(type_name: String, port: String) -> int:
+	var outputs: Array = registry.get(type_name, {}).get("outputs", [])
+	for index in outputs.size():
+		if str((outputs[index] as Dictionary).get("name", "")) == port:
+			return index
+	return -1
+
+
+func node_type(node_id: String) -> String:
+	for node in patch.get("nodes", []):
+		if str((node as Dictionary).get("id", "")) == node_id:
+			return str((node as Dictionary).get("type", ""))
+	return ""
+
 func signal_colour(type_name: String, fallback: Color = Color.WHITE) -> Color:
 	var palette: Array = ModuleThemes.cables(
 		str(patch.get("arrangement", {}).get("theme", "")))
@@ -266,6 +356,11 @@ func signal_colour(type_name: String, fallback: Color = Color.WHITE) -> Color:
 	if not palette.is_empty() and index >= 0 and index < palette.size():
 		return palette[index]
 	return type_colours.get(type_name, fallback)
+## TYPE or CABLE. See CableColouring.
+var cable_colouring: int = CableColouring.TYPE:
+	set(value):
+		cable_colouring = value
+		redraw_cables()
 
 ## Returns the samples on a node's output, or an empty array. Set by the editor.
 ##
@@ -277,14 +372,19 @@ var read_port: Callable = Callable()
 ## answered by the editor from the values the node entered the document with. Left
 ## unset, the descriptor's factory default stands.
 var home_lookup: Callable = Callable()
-var ink := Color(0.96, 0.96, 0.97)
-var ink_dim := Color(0.72, 0.74, 0.78)
+var ink: Color = Rack.panel_ink(1.0)
+var ink_dim: Color = Rack.panel_ink(0.62)
 
-var cable_style: int = CableStyle.CATENARY:
+## PHYSICAL by default: this is the physical lens, and the cords — the landing marks,
+## the material stack, the crossing occlusion — are its cable language. The thin
+## catenary and PCB modes remain reachable in code for the lab and for tests, but the
+## app itself no longer starts the rack in a diagram style. Which is exactly how weeks
+## of cord work stayed invisible: every render script flipped this to PHYSICAL by hand,
+## the menu only offered the other two, and the default made the screenshots a fiction.
+var cable_style: int = CableStyle.PHYSICAL:
 	set(value):
 		cable_style = value
-		if _cables != null:
-			_cables.queue_redraw()
+		redraw_cables()
 
 ## Case width in HP, or 0 to fill whatever space there is.
 ##
@@ -326,6 +426,48 @@ var selected_id := ""
 ## Which cable the pointer is over, as an index into cable_endpoints(), or -1.
 var hovered_cable := -1
 
+## A cable held in view until something else is asked for. Selection is persistent hover:
+## the same hierarchy, kept, because tracing a cable across a rack usually means looking
+## away from it — at the module it lands on — and a highlight that dies on mouse-out is no
+## use for the one job it exists to do.
+var selected_cable := -1:
+	set(value):
+		selected_cable = value
+		redraw_cables()
+
+## The jack under the pointer, as {"node": id, "port": name, "input": bool}, or empty.
+##
+## Hovering a plugged jack asks the same question as hovering the cable — where does this
+## go — from the other end, and it is the end you are usually looking at when you ask.
+var hovered_jack: Dictionary = {}:
+	set(value):
+		hovered_jack = value
+		redraw_cables()
+
+## A module whose panel is being read, so the cables lying across it stand down.
+##
+## Set on hover, after a pause. Without the pause every sweep of the pointer across the
+## case flickers half the patch, and a cue that fires when you were not asking is worse
+## than no cue.
+var inspected_id := "":
+	set(value):
+		inspected_id = value
+		redraw_cables()
+
+## Every cable out of the way at once, while a key is held.
+##
+## The panel-first view without leaving the instrument for the diagram. Temporary on
+## purpose: a mode you can be in without noticing is how the physical renderer would end
+## up quietly abandoned.
+var cables_ghosted := false:
+	set(value):
+		if cables_ghosted == value:
+			return
+		cables_ghosted = value
+		redraw_cables()
+
+var _inspect_candidate := ""
+
 ## Where a hand-set rack order lives in the document.
 ##
 ## Under "arrangement" rather than "metadata". Metadata is what a person wrote about the
@@ -351,6 +493,9 @@ var _content_size := Vector2.ZERO
 
 
 func _ready() -> void:
+	# The ghost modifier is a key held anywhere over the case, not a click on a control,
+	# so it comes through _input rather than _gui_input.
+	set_process_input(true)
 	_cables = CableLayer.new()
 	_cables.rack = self
 	_cables.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -394,6 +539,9 @@ func refresh_displays() -> void:
 
 
 func rebuild() -> void:
+	# The cables are redrawn again once this has settled: they are drawn between jacks,
+	# and the jacks do not know where they are until the layout that follows this call.
+	redraw_cables_when_settled()
 	# Before anything is placed, because every module is built against it.
 	module_height = measure(patch.get("nodes", []), registry)
 	for child in get_children():
@@ -562,8 +710,7 @@ func _relayout() -> void:
 			_content_size.x * view_zoom if case_hp > 0 else 0.0,
 			_content_size.y * view_zoom)
 	queue_redraw()
-	if _cables != null:
-		_cables.queue_redraw()
+	redraw_cables()
 
 
 ## Moves a module to the slot nearest a point, in rack coordinates.
@@ -626,8 +773,7 @@ func select(node_id: String) -> void:
 		_modules[id].queue_redraw()
 	# The cables care too, now that selecting a module turns down everything it is not
 	# connected to. They live in their own layer, so redrawing the modules misses them.
-	if _cables != null:
-		_cables.queue_redraw()
+	redraw_cables()
 
 
 ## Called when a value changed somewhere else — the graph view's slider, an undo, a reload —
@@ -702,7 +848,7 @@ static func draw_rail(canvas: CanvasItem, rect: Rect2) -> void:
 	# The threaded strip along a rail, suggested rather than drawn to scale.
 	var slot := rect.position + Vector2(14.0, rect.size.y * 0.5)
 	while slot.x < rect.end.x - 8.0:
-		canvas.draw_circle(slot, 1.6, Color(1, 1, 1, 0.06))
+		canvas.draw_circle(slot, 1.6, on_panel(0.06))
 		slot.x += 24.0
 
 
@@ -720,6 +866,13 @@ func _gui_input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion != null:
 		_update_cable_hover(motion.position)
+	# A click on the case selects the cable under it, or clears the selection when there
+	# is none. Selection is persistent hover, so it is picked up the same way.
+	var click := event as InputEventMouseButton
+	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT \
+			and not click.ctrl_pressed:
+		selected_cable = cable_at(click.position)
+		accept_event()
 	# Ctrl+wheel is the view's zoom gesture here as on the graph. Claimed loudly, or
 	# the ScrollContainer would spend the same notches scrolling.
 	var wheel := event as InputEventMouseButton
@@ -737,8 +890,28 @@ func _gui_input(event: InputEvent) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_MOUSE_EXIT and hovered_cable != -1:
 		hovered_cable = -1
-		if _cables != null:
-			_cables.queue_redraw()
+		redraw_cables()
+	# A modifier held while the window goes away is never released, because the key-up
+	# lands somewhere else. Focus leaving is the only notice we get that it happened.
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		cables_ghosted = false
+
+
+## Held, to see the rack under the cables.
+##
+## The action rather than the key. Which key it is belongs in the input map, where it can
+## differ by platform and be remapped without editing a renderer — and the current binding
+## is provisional: it is Alt, which is Option on macOS, where it composes characters and
+## is spoken for by parts of the window manager. Ctrl was already the zoom gesture here
+## and the MIDI-learn click, and Shift is the usual multi-select modifier to leave alone,
+## but that reasoning belongs to the binding and not to this file.
+##
+## Watched as events rather than polled so it releases the moment the key does.
+func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("ghost_cables"):
+		cables_ghosted = true
+	elif event.is_action_released("ghost_cables"):
+		cables_ghosted = false
 
 
 ## The cable nearest a point, or -1 if none is close enough.
@@ -789,15 +962,149 @@ func cable_at(point: Vector2) -> int:
 ## Pass the endpoints in if you already have them — the drawing does, and re-reading the
 ## patch once per cable would make painting the case quadratic in the number of cables.
 func cable_related(index: int, cables: Array = []) -> bool:
-	if hovered_cable >= 0:
-		return index == hovered_cable
-	if selected_id == "":
-		return true
+	return cable_dim_target(index, cables) == 0.0
+
+
+## The contrast floor a cable should be held at, or 0.0 for full strength.
+##
+## Stated as a floor rather than an opacity because that is the only form of the
+## instruction that survives five palettes — a fixed mix lands at 4.2:1 on Lab and 2.5:1
+## on Paper Lab, one inside the readable range and one under it.
+##
+## The order is the order of how direct the question was. A pointer resting on a cable, or
+## on one of its jacks, is a question about that cable; a selected module is a question
+## about a handful; and the ghost key is not a question about cables at all, so it beats
+## everything and turns the lot down.
+func cable_dim_target(index: int, cables: Array = []) -> float:
+	if cables_ghosted:
+		return CableLayer.GHOST_TARGET
+
 	var entries: Array = cables if not cables.is_empty() else cable_endpoints()
 	if index < 0 or index >= entries.size():
-		return false
+		return CableLayer.DIM_TARGET
 	var entry: Array = entries[index]
-	return str(entry[3]) == selected_id or str(entry[4]) == selected_id
+
+	if hovered_cable >= 0:
+		return 0.0 if index == hovered_cable else CableLayer.TRACE_TARGET
+	if not hovered_jack.is_empty():
+		return 0.0 if _touches_jack(entry, hovered_jack) else CableLayer.TRACE_TARGET
+	if selected_cable >= 0:
+		return 0.0 if index == selected_cable else CableLayer.TRACE_TARGET
+	if selected_id != "":
+		var mine: bool = str(entry[3]) == selected_id or str(entry[4]) == selected_id
+		return 0.0 if mine else CableLayer.DIM_TARGET
+	return 0.0
+
+
+## Whether one cable in particular is being asked about, by any of the three routes.
+##
+## Which is what decides both the z-raise and the endpoint marks: a cable held at full
+## strength while its neighbours recede is being traced, however the question was put —
+## pointer on the cable, pointer on one of its jacks, or a selection made earlier.
+func tracing() -> bool:
+	return hovered_cable >= 0 or selected_cable >= 0 or not hovered_jack.is_empty()
+
+
+## Whether a cable ends at a particular jack. Ports as well as nodes: a module with four
+## inputs would otherwise light all four cables for whichever one is under the pointer.
+func _touches_jack(entry: Array, jack: Dictionary) -> bool:
+	var node: String = str(jack.get("node", ""))
+	var port: String = str(jack.get("port", ""))
+	if bool(jack.get("input", true)):
+		return str(entry[4]) == node and str(entry[7]) == port
+	return str(entry[3]) == node and str(entry[6]) == port
+
+
+## Repaint the cables.
+##
+## Because queue_redraw() on the rack does not: the cables are a child layer, and a
+## Control's redraw does not descend. Dragging a module repainted the case and left every
+## cable attached to where the module used to be until some unrelated event repainted the
+## layer, which looked like the cables had come unplugged.
+func redraw_cables() -> void:
+	if _cables != null:
+		_cables.queue_redraw()
+
+
+## Draw the cables again once the modules have finished being placed.
+##
+## A cable is drawn between two jacks, and a jack does not know where it is until the
+## containers above it have laid it out — which happens after the frame a rebuild is
+## asked for. Draw in that frame and every jack answers with the position it has before
+## layout, which is its module's top-left corner. The cables then sit along the top edge
+## of each panel, plugged into nothing, and stay there, because nothing asks the layer to
+## think again once the real positions exist.
+##
+## That is what "cables appear to originate from anonymous points along the top edge" was.
+## Not a rendering grammar to be retired — a redraw that was one frame early, in a view
+## that only redraws when something asks it to. Two frames, because the first settles the
+## modules and the second settles the jacks inside them.
+func redraw_cables_when_settled() -> void:
+	for _frame in 2:
+		await get_tree().process_frame
+	redraw_cables()
+
+
+## Whether the surface the cables are lying on is a light one.
+##
+## Not Rack.panel_is_light(), which asks the default case and is a constant: since the
+## faceplate merge that static has answered "dark" for every patch ever loaded, so the
+## light-surface cable response has never once fired. Ivory Lab racks have been drawing
+## their cables with the construction tuned for anodised black, which is exactly the
+## kind of thing a stress test exists to find.
+##
+## The patch's own panel style decides, because that is what most of the surface under
+## a cable is. A rack with per-module overrides is approximated by its prevailing
+## theme, which is the honest answer short of asking each cable what it crosses — and
+## that question belongs with the stand-down work, where it is already noted.
+##
+## The approximation has one measured edge, found by the integration sweep and left
+## deliberately unfixed. A cable crosses cream panels *and* the dark canvas in the gaps
+## between rack rows, and it is built once for the whole run. On Ivory Lab, whose audio
+## lead is a near-black 1a1a1a chosen to look like a real black patch cord on cream —
+## which it does, beautifully — that lead measures 1.43:1 against the canvas while it
+## is in a gap. Its red neighbours measure 4.6:1 and are fine, and no other theme
+## carries a near-black cable, so this is one lead of one palette for the width of a
+## rail.
+##
+## Every available fix reopens something already settled: the glint strength Goal 9
+## approved, the palette Goal 9 froze, or the per-surface sampling that was deliberately
+## deferred as a much larger rendering problem. So it is written down rather than
+## patched around, which is the cheaper mistake to undo.
+func cables_on_light_panel() -> bool:
+	var theme := str(patch.get("arrangement", {}).get("theme", ""))
+	if theme == "" or theme == ModuleThemes.CATEGORY:
+		return Rack.panel_is_light()
+	return ModuleThemes.token(theme, "faceplate").get_luminance() > 0.42
+
+
+## The panel being read, in rack space, or an empty rect.
+func inspected_rect() -> Rect2:
+	if inspected_id == "":
+		return Rect2()
+	var module: RackModule = _modules.get(inspected_id)
+	if module == null:
+		return Rect2()
+	return Rect2(module.position, module.size)
+
+
+## A module has been under the pointer long enough to count as being read.
+##
+## The pause is the whole design. Firing on entry means every sweep of the pointer across
+## the case flickers half the patch, and a cue that answers a question nobody asked is
+## worse than no cue — so the pointer has to stay put, and leaving cancels it.
+func inspect_after_pause(node_id: String) -> void:
+	_inspect_candidate = node_id
+	await get_tree().create_timer(0.45).timeout
+	if _inspect_candidate == node_id:
+		inspected_id = node_id
+
+
+func cancel_inspection(node_id: String) -> void:
+	if _inspect_candidate == node_id:
+		_inspect_candidate = ""
+	if inspected_id == node_id:
+		inspected_id = ""
 
 
 ## Tracks the cable under the pointer.
@@ -806,8 +1113,7 @@ func _update_cable_hover(point: Vector2) -> void:
 	if found == hovered_cable:
 		return
 	hovered_cable = found
-	if _cables != null:
-		_cables.queue_redraw()
+	redraw_cables()
 
 
 func cable_endpoints() -> Array:
@@ -824,8 +1130,31 @@ func cable_endpoints() -> Array:
 		var signal_type := from_module.port_type(str(connection["from"]["port"]), false)
 		# The node ids travel with the geometry, so the layer can tell which cables
 		# belong to what without going back to the patch for every one of them.
-		cables.append([a, b, signal_colour(signal_type),
-			str(connection["from"]["node"]), str(connection["to"]["node"])])
+		# The tighter of the two ends: one style is built per cable, and a plug that fits
+		# at one end and overlaps the jack below at the other is still wrong.
+		var ink: Color = signal_colour(signal_type)
+		var from_port_name := str(connection["from"]["port"])
+		var override := Rack.cable_override(node_type(str(connection["from"]["node"])),
+			output_index(node_type(str(connection["from"]["node"])), from_port_name))
+		if override.a > 0.0:
+			ink = override
+		if cable_colouring == CableColouring.CABLE:
+			# One colour per cable rather than per signal type, taken from the patch's
+			# own palette. It reached into CableArt.PALETTE for a bag of candy names,
+			# which is a second styling system living beside the first: a rack painted
+			# Bakelite Brown would have drawn neon chartreuse leads because the bag said
+			# so. The theme already carries four cable colours; this mode cycles them.
+			var palette: Array = ModuleThemes.cables(
+				str(patch.get("arrangement", {}).get("theme", "")))
+			if palette.is_empty():
+				palette = []
+				for kind: String in SIGNAL_ORDER:
+					palette.append(signal_colour(kind))
+			ink = palette[cables.size() % palette.size()]
+		cables.append([a, b, ink,
+			str(connection["from"]["node"]), str(connection["to"]["node"]),
+			minf(from_module.jack_pitch(), to_module.jack_pitch()),
+			str(connection["from"]["port"]), str(connection["to"]["port"])])
 	return cables
 
 
@@ -913,19 +1242,31 @@ static func _chamfer(points: PackedVector2Array, radius: float) -> PackedVector2
 
 
 class CableLayer extends Control:
+	const CableArt := preload("res://cable_art.gd")
+
 	var rack: Control
 
 	## How far a cable is turned down when it has nothing to do with what is selected.
 	##
-	## Stated as the contrast a dimmed cable should still hold against the case, and handed
-	## to Design.recede() to work out the mixing, which is not the same as fading out.
+	## The contrast floors, from the palette's own scale.
 	##
-	## At alpha 0.3 an unrelated cable fell to 1.86:1 — under even the 3.25:1 this project
-	## holds a plain UI boundary to, so "still part of the patch" was not what was on
-	## screen. Naming a floor rather than an amount is what makes it hold on all five
-	## palettes: a fixed 45% mix landed at 4.2:1 on Lab and 2.5:1 on Paper Lab, the same
-	## instruction giving one result inside the floor and one under it.
-	const DIM_TARGET := 3.6
+	## Named there rather than here because none of this is about cables: a floor is how
+	## far anything is asked to stand down, and the cables were only the first thing that
+	## needed four different amounts of it. See Design.STAND_DOWN.
+	const DIM_TARGET: float = Design.STAND_DOWN["ASIDE"]
+	const TRACE_TARGET: float = Design.STAND_DOWN["TRACE"]
+	const INSPECT_TARGET: float = Design.STAND_DOWN["BEHIND"]
+	const GHOST_TARGET: float = Design.STAND_DOWN["GHOST"]
+
+	## The mix that goes with each floor, by the floor's own value. Looked up rather than
+	## passed around, so a caller that knows how far to stand something down does not also
+	## have to know the second half of what that means.
+	static func stand_down(ink: Color, surface: Color, target: float) -> Color:
+		for level: String in Design.STAND_DOWN:
+			if is_equal_approx(Design.STAND_DOWN[level], target):
+				return Design.recede(ink, surface, target,
+					Design.STAND_DOWN_MIX[level])
+		return Design.recede(ink, surface, target)
 
 	## A dimmed cable is drawn thinner as well as quieter.
 	##
@@ -953,6 +1294,10 @@ class CableLayer extends Control:
 		var cables: Array = rack.cable_endpoints()
 		var lane_step := 13.0
 
+		if rack.cable_style == Rack.CableStyle.PHYSICAL:
+			_draw_physical_all(cables)
+			return
+
 		# The rack draws its own cables, which is why the dimming half of this is here
 		# and not in the graph view: GraphEdit paints connections itself and offers no
 		# per-cable alpha, so there the best available answer was to brighten a path and
@@ -975,11 +1320,14 @@ class CableLayer extends Control:
 				var lane := maxf(a.y, b.y) + 34.0 + index * lane_step
 				points = Rack.pcb_route(a, b, lane)
 
+			if rack.cable_style == Rack.CableStyle.PHYSICAL:
+				continue
+
 			var width: float = 5.0 if hovered else 4.0
 			if not related:
 				width *= DIM_WIDTH
 			var ink: Color = colour if related \
-				else Design.recede(colour, Design.SURFACES[Design.Surface.CANVAS], DIM_TARGET)
+				else stand_down(colour, Rack.PANEL, DIM_TARGET)
 			var shadow: float = 0.45 if related else 0.45 * DIM_SHADOW
 
 			# Drawn twice: a dark, slightly wider pass underneath reads as the shadow side
@@ -995,6 +1343,204 @@ class CableLayer extends Control:
 			if hovered:
 				for spot: Vector2 in [a, b]:
 					draw_arc(spot, 12.0, 0.0, TAU, 28, colour, 2.0, true)
+
+	## Every physical cable, in document order, with the crossings marked as they arrive.
+	##
+	## The whole set is planned before anything is drawn, because a cable cannot know it is
+	## passing over another one until the other one's path exists. Document order is the
+	## z-order: later cables lie on top, which is arbitrary but stable, and stability is
+	## what the eye needs from it — a crossing that swapped which cable was on top between
+	## redraws would be worse than no cue at all.
+	func _draw_physical_all(cables: Array) -> void:
+		var paths: Array[PackedVector2Array] = []
+		var styles: Array = []
+		var inks: PackedColorArray = PackedColorArray()
+		# The rack's own panel, not the editor's canvas. Those are different surfaces and
+		# on a light palette they disagree by everything: a cable asked to stand down was
+		# mixed towards cream while lying on a dark faceplate, which made it paler and
+		# more assertive rather than quieter. Receding means going towards what is behind
+		# the thing, and what is behind a cable is the module it crosses.
+		var canvas: Color = Rack.PANEL
+		var inspect: Rect2 = rack.inspected_rect()
+
+		for index in cables.size():
+			var entry: Array = cables[index]
+			var dim: float = rack.cable_dim_target(index, cables)
+			var style: CableArt.Style = _physical_style(
+				index == rack.hovered_cable or index == rack.selected_cable,
+				dim, float(entry[5]))
+			var ink: Color = entry[2]
+			var out := Vector2.DOWN
+			# Seeded from the endpoints, so a cable keeps its own hang between redraws and
+			# two cables between the same pair of modules do not lie on top of each other.
+			var seed := "%d:%d" % [int(entry[0].x) * 31 + int(entry[0].y),
+				int(entry[1].x) * 31 + int(entry[1].y)]
+			# Slack follows the span. A neighbour-to-neighbour cable at the full 0.82
+			# drooped into a little hanging loop — a folded dart between two jacks a
+			# module apart — where a real short patch lead pulls almost straight. Long
+			# runs keep the full drape.
+			var slack := clampf(entry[0].distance_to(entry[1]) / 420.0, 0.18, 0.82)
+			var path := CableArt.cable_path(entry[0], out, entry[1], out, slack, style, seed)
+			# Anything lying across the panel stands down, including the module's own
+			# cables. They cross it too — a cable plugged into this module leaves towards
+			# the viewer and falls straight over the legend it is nearest. The question
+			# being asked is about what is on top, not about what belongs to what, and a
+			# rule that exempted the module's own connections would leave the cables
+			# closest to its labels exactly where they were.
+			if inspect.has_area() and _crosses(path, inspect):
+				dim = maxf(dim, INSPECT_TARGET) if dim > 0.0 else INSPECT_TARGET
+				style = _physical_style(false, dim, float(entry[5]))
+				path = CableArt.cable_path(entry[0], out, entry[1], out, slack, style, seed)
+			if dim > 0.0:
+				ink = stand_down(ink, canvas, dim)
+			paths.append(path)
+			styles.append(style)
+			inks.append(ink)
+
+		# Document order, except that whatever is being traced goes last. Order is
+		# otherwise the connection order in the file and nothing else — a z-order that
+		# reshuffled when unrelated state changed would make crossings swap under the
+		# pointer, which is worse than an arbitrary order held steady.
+		var order: Array[int] = []
+		var raised: Array[int] = []
+		var tracing: bool = rack.tracing()
+		for index in paths.size():
+			if tracing and rack.cable_dim_target(index, cables) == 0.0:
+				raised.append(index)
+			else:
+				order.append(index)
+		order.append_array(raised)
+
+		var drawn: Array[int] = []
+		for index in order:
+			var style: CableArt.Style = styles[index]
+			# Under this cable, where it lies across the ones already down.
+			for earlier in drawn:
+				for at: Vector2 in CableArt.crossings(paths[index], paths[earlier]):
+					CableArt.draw_crossing_shadow(self, paths[index], at, style)
+			CableArt.draw_cable(self, paths[index], inks[index], style)
+			for side in 2:
+				_draw_landing(cables[index][side], inks[index], style)
+			drawn.append(index)
+
+		# The traced cable's ends, last of all. A brightened curve still has to be followed
+		# by eye to find where it lands, which in a rack means across a tangle of others
+		# doing the same thing — so both ends are marked and the eye can jump.
+		for index in raised:
+			for spot: Vector2 in [cables[index][0], cables[index][1]]:
+				draw_arc(spot, 12.0, 0.0, TAU, 28,
+					Color(cables[index][2], 0.75), 1.5, true)
+
+	## The endpoint: a cable arriving cleanly at a socket, and nothing more.
+	##
+	## This replaces the plug. The plug was built to say "the cable goes into the
+	## hardware", and it did — at the cost of a barrel, a collar band, a strain relief
+	## and an occlusion lip at every end of every cable, which together were a
+	## miniature hardware rendering exercise fighting the flat language of the merged
+	## faceplates. The whole message fits in two marks: the socket's mouth filled with
+	## the cable's own colour, and a collar ring of that colour around it. An occupied
+	## jack reads as lit by its cable; an empty one keeps its plain ring, so occupancy
+	## is readable across the rack at a glance. Depth budget goes to the cable body,
+	## which is the thing you actually trace.
+	func _draw_landing(at: Vector2, ink: Color, style: CableArt.Style) -> void:
+		var radius := Rack.jack_radius()
+		# The mouth as the cable's cut end — dark rim, lighter tube face — the same two
+		# marks the graph draws, so the transition is one grammar in both views. Goal 5
+		# aligned this; before it the rack's mouth was a single flat darkened disc.
+		draw_circle(at, style.thickness * 0.62, CableArt.darken(ink, 0.35))
+		draw_circle(at, style.thickness * 0.38, ink.lightened(0.12))
+		# The collar: the occupancy cue, and the only ring the endpoint needs. Inside
+		# the module's own metal ring, so the hardware stays the hardware and the
+		# colour reads as something seated in it.
+		draw_arc(at, radius * 0.62, 0.0, TAU, 24, ink,
+			maxf(style.thickness * 0.4, 2.0), true)
+
+
+	## Whether a cable passes across a module's panel.
+	static func _crosses(path: PackedVector2Array, rect: Rect2) -> bool:
+		for point: Vector2 in path:
+			if rect.has_point(point):
+				return true
+		return false
+
+	## A cable as an illustrated object: plug, collar, relief, body, and a hang of its own.
+	##
+	## The path comes from cable_art rather than from Rack.catenary, because the plug has
+	## to agree with where the cable actually leaves — the whole point of the lead-out is
+	## that the plug's angle and the cable's fall are separate, and a curve computed
+	## elsewhere cannot know about either.
+	##
+	## Cables leave a faceplate towards the viewer, which in this projection is down. Not
+	## along the line to the other jack: a cable that exits sideways is a cable entering
+	## the module's edge, which is the thing the whole exercise exists to avoid.
+	func _physical_style(traced: bool, dim: float, pitch: float) -> CableArt.Style:
+		var style: CableArt.Style = CableArt.Style.new()
+		# A cord, not a line. The material stack was always four passes — shadow, dark
+		# same-hue edge, saturated body, same-hue highlight — and at five pixels of body
+		# every pass but the body was subliminal: the edge crescent was under a pixel,
+		# the highlight a thread, and the whole thing read as a flat spline wearing a
+		# description of juiciness. Eight and a half gives the passes room to exist,
+		# and the offsets and widths below scale with the body instead of being fixed
+		# figures tuned for the thin one.
+		style.thickness = 10.0 if traced else 8.5
+		style.edge_offset = Vector2(1.3, 1.5)
+		# Goal 2: the shell does the form work. The body keeps 84% of the width and
+		# the dark same-hue shell takes the rest, a shade deeper than before — 0.42
+		# keeps every hue obviously itself while making the tube read as a volume.
+		style.body_core = 0.84
+		style.edge_darken = 0.42
+		# Goal 3: the highlight narrows and commits to its direction. At 2.2 wide it
+		# read as a stripe painted along the tube; at 1.5, pushed further toward the
+		# upper-left where the light actually is, it reads as the sheen on a curved
+		# surface. It kisses the top of the body into the shell — 3.8px of reach
+		# against the 4.25px envelope — so it stays inside the silhouette Goal 1
+		# froze. Width and position only: lighten, alpha, and everything Goal 2
+		# settled are untouched.
+		style.highlight_width = 1.5
+		style.highlight_offset = Vector2(-2.0, -2.3)
+		# Goal 4: the cast shadow seats the cable. At 0.2 alpha a black shadow on a
+		# near-black canvas was a rumour, and the cable floated; denser, a step
+		# tighter, and pushed further lower-right — opposite the highlight, one light
+		# — it reads as a cord hanging just off the surface. Shadow family only:
+		# everything above this line is frozen where Goals 1-3 left it.
+		style.shadow_alpha = 0.32
+		style.shadow_width = 9.5
+		style.shadow_offset = Vector2(2.0, 2.8)
+		style.highlight_alpha = 0.6
+		# What the plug has to fit inside. Measured, not assumed: it is the difference
+		# between a rack whose modules have four ports in a column and one whose modules
+		# have two, and the renderer should not have to be retuned when that changes.
+		if pitch > 0.0:
+			style.max_reach = pitch - Rack.jack_radius()
+		# The rack zooms by scaling itself, so everything above is in rack pixels and the
+		# tier has to be decided in screen ones. The floor has to come back the other way:
+		# a 2.75 px minimum cable is 2.75 px of glass, which at half zoom is 5.5 of ours.
+		var zoom: float = maxf(get_global_transform().get_scale().x, 0.01)
+		style.screen_scale = zoom
+		style.panel_is_light = rack.cables_on_light_panel()
+		# Goal 9: the same hue on every surface, and only the material response adapts.
+		#
+		# A candy cable on cream loses its silhouette long before it loses its identity,
+		# so the shell works harder, the sheen stands down — a bright glint against a
+		# bright plate is one more light thing on a light thing — and the shadow holds
+		# its ground, since on cream it is doing more of the separating than it does on
+		# black. Three strengths, and nothing else: the mass, the shell geometry, the
+		# glint geometry, the shadow geometry, the hang, the fan, the crossings and the
+		# hues are all as frozen.
+		#
+		# Chartreuse is the one that decides these numbers. It is the closest of the
+		# four to cream in luminance and the temptation is to darken the body until it
+		# separates, which turns it olive and throws away the one thing it is for. The
+		# core stays radioactive; the shell earns the contrast.
+		if style.panel_is_light:
+			style.edge_darken = 0.55
+			style.highlight_alpha = 0.38
+			style.shadow_alpha = 0.30
+		style.thickness = maxf(style.thickness, style.min_thickness / zoom)
+		if dim > 0.0:
+			style.thickness *= DIM_WIDTH
+			style.shadow_alpha *= DIM_SHADOW
+		return style
 
 
 # ---------------------------------------------------------------------------------
@@ -1121,7 +1667,9 @@ class RackModule extends Control:
 			var jack := Jack.new()
 			jack.rack = rack
 			jack.skin = skin()
+			jack.node_id = node_id
 			jack.port_name = str(port["name"])
+			jack.face_label = Rack.face_text(port)
 			jack.type_name = str(port.get("type", ""))
 			jack.is_input = is_input
 			column.add_child(jack)
@@ -1135,12 +1683,46 @@ class RackModule extends Control:
 		return ""
 
 	## Centre of a jack, in rack space, or null when this module has no such port.
+	## The vertical room one jack has before the next one starts.
+	##
+	## The jacks are stacked in a VBoxContainer with no separation, so the pitch is simply
+	## a jack's own height — but it is the number that decides whether an illustrated plug
+	## fits, and nothing outside this class knows it.
+	func jack_pitch() -> float:
+		var pitch := INF
+		for jack: Jack in _jacks:
+			pitch = minf(pitch, jack.size.y)
+		return pitch if pitch < INF else 0.0
+
+	## Where a jack's socket is, in the rack's own coordinates.
+	##
+	## Through the transforms rather than by adding positions up. The arithmetic version —
+	## module position plus the jack's global offset from the module — is only correct
+	## while nothing between the jack and the rack is scaled, and the rack zooms by
+	## scaling itself: a global-space delta is then twice a local one, so at 2x every
+	## cable landed short of the jack it was plugged into by half the distance from the
+	## rack's own corner. Which looks like a rendering bug and is an arithmetic one.
 	func jack_position(port_name: String, is_input: bool):
 		for jack: Jack in _jacks:
 			if jack.port_name == port_name and jack.is_input == is_input:
-				return position + jack.global_position - global_position \
-					+ jack.socket_centre()
+				var point: Vector2 = jack.get_global_transform() * jack.socket_centre()
+				return rack.get_global_transform().affine_inverse() * point
 		return null
+
+	## Resting on a module asks to read its panel, so the cables lying across it stand down.
+	##
+	## After a pause, and only while the pointer stays: see Rack.inspect_after_pause. The
+	## cables are not moved and nothing is put in front of them permanently — the physical
+	## layering is the metaphor, and a schematic editor where every label floats on top is
+	## the thing this view exists not to be. It is a way of looking through the patch cords
+	## for as long as you are looking.
+	func _notification(what: int) -> void:
+		if rack == null:
+			return
+		if what == NOTIFICATION_MOUSE_ENTER:
+			rack.inspect_after_pause(node_id)
+		elif what == NOTIFICATION_MOUSE_EXIT:
+			rack.cancel_inspection(node_id)
 
 	# Dragging slides a module along the rail — the one thing you can do to a real rack
 	# that the graph view has no equivalent for. Knobs sit on top and take their own input
@@ -1167,6 +1749,7 @@ class RackModule extends Control:
 		elif event is InputEventMouseMotion and _dragging:
 			position += event.position - _grab_offset
 			rack.queue_redraw()
+			rack.redraw_cables()
 			accept_event()
 
 	## What this module is doing, in the band Analysis density reserves.
@@ -1311,7 +1894,14 @@ class Jack extends Control:
 	## Set by the module that owns it: a jack belongs to a panel, and the panel decides
 	## what colour its hardware is.
 	var skin: Dictionary = {}
+	## Which module this jack belongs to. A port name alone does not identify a jack —
+	## half the rack has a port called `in` — and the cable being asked about is the one
+	## that ends at this module's copy of it.
+	var node_id := ""
 	var port_name := ""
+	## What is printed beside the socket. port_name stays the lookup key — jack_position
+	## and the hover dictionary match on it — so the two must never be conflated.
+	var face_label := ""
 	var type_name := ""
 	var is_input := true
 
@@ -1319,6 +1909,20 @@ class Jack extends Control:
 		# The full name, always, whatever the panel had room to print.
 		tooltip_text = port_name
 		mouse_filter = Control.MOUSE_FILTER_PASS
+
+	## Hovering a plugged jack asks where its cable goes, from the end you are looking at.
+	##
+	## An empty jack invents nothing: there is no connection to emphasise, and lighting up
+	## the rack's other cables because the pointer crossed a hole would be an answer to a
+	## question that was not asked. The rack works out whether anything lands here.
+	func _notification(what: int) -> void:
+		if rack == null:
+			return
+		if what == NOTIFICATION_MOUSE_ENTER:
+			rack.hovered_jack = {"node": node_id, "port": port_name, "input": is_input}
+		elif what == NOTIFICATION_MOUSE_EXIT and rack.hovered_jack.get("node", "") == node_id \
+				and rack.hovered_jack.get("port", "") == port_name:
+			rack.hovered_jack = {}
 
 	func _label_font() -> Font:
 		return Design.font(Design.WEIGHT_MEDIUM)
@@ -1330,7 +1934,8 @@ class Jack extends Control:
 		var font := _label_font()
 		if font == null:
 			return 0.0
-		return minf(font.get_string_size(port_name, HORIZONTAL_ALIGNMENT_LEFT, -1,
+		return minf(font.get_string_size(face_label if face_label != "" else port_name,
+			HORIZONTAL_ALIGNMENT_LEFT, -1,
 			_label_size()).x, Design.scale(Rack.JACK_LABEL_MAX))
 
 	func _get_minimum_size() -> Vector2:
@@ -1354,7 +1959,8 @@ class Jack extends Control:
 		var room := size.x - Rack.jack_radius() * 2.0 - 6.0
 		if room <= 4.0:
 			return
-		var text := Rack.elided(font, port_name, _label_size(), room)
+		var text := Rack.elided(font, face_label if face_label != "" else port_name,
+			_label_size(), room)
 		var baseline := size.y * 0.5 + float(_label_size()) * 0.36
 		draw_string(font,
 			Vector2(Rack.jack_radius() * 2.0 + 6.0 if is_input else 0.0, baseline), text,
@@ -1414,6 +2020,21 @@ class Knob extends Control:
 	## than the sliders it replaced, which is the opposite of the point. Same control,
 	## same keyboard, same signal path — one draws its own caption and one does not.
 	var compact := false
+	## Drawn as a diagram rather than as a piece of hardware.
+	##
+	## The rack's knob is a moulded part: collar, cap, moulding line, sheen, a shadow
+	## under it and a printed scale around it. That is right on a faceplate and wrong in
+	## the graph, which is a drawing of the patch rather than a photograph of it — and
+	## the detail does not survive being shrunk anyway. Nine primitives at 100% become
+	## a textured grey circle at 40%.
+	##
+	## The diagram keeps what says where the knob is set and drops everything that says
+	## what it is made of.
+	var diagram := false
+	## Whether the diagram prints three reference marks. Off by default: see the proof
+	## sheet in docs/graph-nodes.md — at the size a graph node actually draws a knob, the
+	## marks are three grey pixels that read as dirt on the glass.
+	var diagram_ticks := false
 
 	## Dial size, as a fraction of the rack's. The panel packs knobs three to a module
 	## where the rack fits two, and it gets the room by shrinking the dial rather than
@@ -1444,13 +2065,17 @@ class Knob extends Control:
 		tooltip_text = str(descriptor["name"]) + ("\n" + doc if doc != "" else "")
 
 	func _name_text() -> String:
-		return str(descriptor["name"])
+		# A caption somebody typed on the face wins; then the registry's label; then the
+		# name, read aloud rather than as an identifier.
+		if str(descriptor.get("display_name", "")) != "":
+			return str(descriptor["display_name"])
+		return Rack.face_text(descriptor)
 
 	func _value_text() -> String:
-		if descriptor.has("enum"):
-			var options: Array = descriptor["enum"]
-			return str(options[clampi(int(value()), 0, options.size() - 1)])
-		return Rack.format_value(value())
+		# Without its unit: a faceplate says the unit once, under the name, the way a
+		# panel does. The graph says it beside the number because a graph node has no
+		# legend to put it on.
+		return ValueText.number(descriptor, value())
 
 	## The widest this knob's value will ever be, so the cell does not resize while it is
 	## being turned.
@@ -1466,16 +2091,20 @@ class Knob extends Control:
 				if str(option).length() > longest.length():
 					longest = str(option)
 			return longest
-		var low := Rack.format_value(float(descriptor.get("min", 0.0)))
-		var high := Rack.format_value(float(descriptor.get("max", 1.0)))
-		return low if low.length() > high.length() else high
+		# Not the longer of the two ends. Once trailing zeros are gone the ends are often
+		# the *shortest* readings a parameter has — a gain of 0 to 4 writes them as "0"
+		# and "4" while everything between writes "0.75" — so a cell sized on the ends
+		# would be too narrow for almost every value it goes on to hold.
+		return ValueText.widest(descriptor, false)
 
 	func _get_minimum_size() -> Vector2:
 		if compact:
 			# The dial plus the arc that rides five px outside it — the first version
 			# measured the dial alone and the arc shaved its top on the cell edge.
 			# The hit area still has to clear the rule every other control obeys.
-			var across := _radius() * 2.0 + 17.0
+			# Room for the printed scale, which sits nine px past the body — the old 17
+			# was measured against a value arc five px out and nothing beyond it.
+			var across := _radius() * 2.0 + 22.0
 			return Vector2(across, maxf(across, Design.scale(Design.HIT_TARGET)))
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
 		var label_size := Design.type(Design.SIZE_SECONDARY)
@@ -1662,11 +2291,41 @@ class Knob extends Control:
 		var centre := Vector2(size.x * 0.5,
 			size.y * 0.5 if compact else radius + 6.0)
 		var angle := START + SWEEP * _position
+		if diagram:
+			_draw_diagram(centre, radius, angle)
+			return
 
-		draw_arc(centre, radius + 5.0, START, START + SWEEP, 40,
-			Rack.KNOB_TRACK, 3.0, true)
-		draw_arc(centre, radius + 5.0, START, angle, 40,
-			Rack.SELECTED, 3.0, true)
+		# Printed ticks around the travel, the way a panel marks a pot's range.
+		#
+		# Eleven, because a scale wants a middle and an odd count gives it one — a knob
+		# at noon should be pointing at a mark. Drawn in the panel's own thinner ink
+		# where it has one.
+		#
+		# The first version put them in the gap between the body and the value arc,
+		# where they were a pixel and a half long and gone by 75% zoom. A detail that
+		# only exists at 100% is not a detail, it is a rumour: the scale is outside the
+		# arc now, where a panel actually prints it, longer, and with the extremes and
+		# the centre marked heavier than the rest — the three positions anybody reads a
+		# pot against.
+		var marks: Color = skin.get("muted", Color(0, 0, 0, 0))
+		if marks.a <= 0.0:
+			marks = Color(rack.ink_dim, 0.7)
+		const TICKS := 11
+		for tick in TICKS:
+			var at := START + SWEEP * (float(tick) / float(TICKS - 1))
+			var out := Vector2(cos(at), sin(at))
+			var cardinal: bool = tick == 0 or tick == TICKS - 1 or tick == (TICKS - 1) / 2
+			draw_line(centre + out * (radius + 6.0),
+				centre + out * (radius + (9.0 if cardinal else 7.6)),
+				marks, 1.8 if cardinal else 1.2, true)
+
+		# The value ring, brought in to hug the body. It used to sit five px out, in the
+		# middle of the space the scale wants, so the two rings competed and neither read
+		# as belonging to the knob.
+		draw_arc(centre, radius + 3.0, START, START + SWEEP, 40,
+			Rack.KNOB_TRACK, 2.5, true)
+		draw_arc(centre, radius + 3.0, START, angle, 40,
+			Rack.SELECTED, 2.5, true)
 
 		# Focus is drawn around the whole cell, not around the dial: the name and the
 		# value are part of what is focused, and a ring that hugged the circle looked
@@ -1676,18 +2335,50 @@ class Knob extends Control:
 				false, 2.0)
 
 		var body: Color = skin.get("knob", Rack.KNOB_BODY)
+		# Sitting on the panel rather than printed on it: a short dense shadow under the
+		# body, offset down because the light on these panels comes from the top. It is
+		# the same argument as the module's own shadow, one size down.
+		draw_circle(centre + Vector2(0.0, 2.0), radius + 1.0, Color(0.0, 0.0, 0.0, 0.34))
+		# The collar the shaft comes through, in the same moulded black as every other
+		# piece of hardware on these panels. It is what makes a knob look bolted through
+		# the plate rather than laid on top of it, and it is the widest thing here, so
+		# it is what carries the silhouette when everything else has shrunk away.
+		var collar: Color = skin.get("hardware", Color(0, 0, 0, 0))
+		if collar.a > 0.0:
+			draw_circle(centre, radius + 1.6, collar)
+			draw_arc(centre, radius + 1.6, 0.0, TAU, 48,
+				skin.get("hardware_hi", collar.lightened(0.25)), 1.0, true)
 		draw_circle(centre, radius, body)
 		draw_circle(centre, radius, Color(0, 0, 0, 0.5), false, 1.0)
 		# The cap catches the light. A pale knob is lit by darkening rather than
 		# lightening it, or a cream bakelite cap turns into a white disc with no edge.
-		draw_circle(centre - Vector2(0, 1), radius - 5.0,
-			body.darkened(0.08) if body.get_luminance() > 0.5 else body.lightened(0.10))
+		# The moulding line, then the cap. A knob is two pieces — a skirt you grip and a
+		# top face — and the step between them is what says so. It was a lightened disc
+		# with no edge, which reads as a lit sphere rather than as a moulded part.
+		var cap := body.darkened(0.10) if body.get_luminance() > 0.5 \
+			else body.lightened(0.14)
+		draw_arc(centre - Vector2(0.0, 1.0), radius - 4.0, 0.0, TAU, 40,
+			Color(0.0, 0.0, 0.0, 0.45), 1.4, true)
+		draw_circle(centre - Vector2(0, 1), radius - 5.0, cap)
+		# One short highlight across the top left of the cap, and no more than one. This
+		# is where a knob turns into a 2010 gel button if it is overdone: the reference
+		# is small moulded hardware under diffuse light, which has a soft sheen on one
+		# side and nothing anywhere else.
+		draw_arc(centre - Vector2(0.0, 1.0), radius - 6.5, PI * 1.08, PI * 1.62, 12,
+			Color(1.0, 1.0, 1.0, 0.10 if body.get_luminance() > 0.5 else 0.16),
+			1.6, true)
 		# The pointer, which is what actually tells you where the knob is set, and the
 		# one part of a knob that has to be visible from across a desk.
+		# The pointer, which is what actually tells you where the knob is set, and the
+		# one part of a knob that has to survive being shrunk. It runs from the middle of
+		# the cap to its edge — not from a third of the way out — and it is drawn on its
+		# own dark line so that a pale pointer on a pale cap still has an edge.
 		var pointer: Color = skin.get("pointer", Color(0, 0, 0, 0))
-		draw_line(centre + Vector2(cos(angle), sin(angle)) * 6.0,
-			centre + Vector2(cos(angle), sin(angle)) * (radius - 3.0),
-			rack.ink if pointer.a <= 0.0 else pointer, 2.5, true)
+		var index := Vector2(cos(angle), sin(angle))
+		var from := centre - Vector2(0.0, 1.0) + index * 2.5
+		var to := centre - Vector2(0.0, 1.0) + index * (radius - 3.5)
+		draw_line(from, to, Color(0.0, 0.0, 0.0, 0.45), 4.4, true)
+		draw_line(from, to, rack.ink if pointer.a <= 0.0 else pointer, 2.8, true)
 
 		# Compact draws the dial and stops: its name and its number belong to whatever
 		# placed it, and drawing them here too would print one over the other.
@@ -1718,6 +2409,60 @@ class Knob extends Control:
 		draw_string(value_font, Vector2(Rack.KNOB_PAD, value_baseline),
 			Rack.elided(value_font, _value_text(), value_size, room),
 			HORIZONTAL_ALIGNMENT_CENTER, room, value_size, _legend(false))
+
+
+	## The knob as a diagram: four marks, and every one of them says where it is set.
+	##
+	##   track     where it can go        one thin arc, quiet
+	##   arc       where it is            the same arc in mint, from the minimum
+	##   body      the control itself     one disc, one edge
+	##   pointer   where it is, again     the strongest thing on it
+	##
+	## The value is said twice on purpose — by the arc's length, which is readable at a
+	## glance and at any size, and by the pointer, which is readable precisely. That
+	## redundancy is the whole reason this survives being shrunk while nine layers of
+	## moulding did not.
+	##
+	## What is gone: the collar, the cast shadow, the cap, the moulding line, the sheen,
+	## the dark under-stroke on the pointer and the eleven printed ticks. None of them
+	## carried state.
+	func _draw_diagram(centre: Vector2, radius: float, angle: float) -> void:
+		# The body first, so the arcs outside it read as a scale around a control rather
+		# than as a ring with something in the middle.
+		var body: Color = skin.get("knob", Rack.KNOB_BODY)
+		draw_circle(centre, radius, body)
+		draw_arc(centre, radius, 0.0, TAU, 40, Color(0.0, 0.0, 0.0, 0.35), 1.0, true)
+
+		# Travel, then value. Two pixels of arc rather than two and a half, hugging the
+		# body at the same distance the rack's does, so a knob is the same object in both
+		# views even though it is drawn differently.
+		var track_width := maxf(radius * 0.14, 2.0)
+		draw_arc(centre, radius + 3.0, START, START + SWEEP, 40, Rack.KNOB_TRACK,
+			track_width, true)
+		if _position > 0.001:
+			draw_arc(centre, radius + 3.0, START, angle, 40, Rack.SELECTED,
+				track_width, true)
+
+		if diagram_ticks:
+			var marks: Color = skin.get("muted", Color(0, 0, 0, 0))
+			if marks.a <= 0.0:
+				marks = Color(rack.ink_dim, 0.7)
+			for tick in 3:
+				var at := START + SWEEP * (float(tick) * 0.5)
+				var out := Vector2(cos(at), sin(at))
+				draw_line(centre + out * (radius + 6.0),
+					centre + out * (radius + 9.0), marks, 1.4, true)
+
+		# The pointer, which is the one part that has to survive everything. From the
+		# middle to the edge, in the ink the panel letters with, and thick enough that
+		# shrinking it leaves a line rather than a suggestion — a fifth of the radius,
+		# floored at two pixels, where the rack's was a fixed 2.8 over a dark 4.4 and
+		# became a grey smudge on top of a darker smudge.
+		var pointer: Color = skin.get("pointer", Color(0, 0, 0, 0))
+		var index := Vector2(cos(angle), sin(angle))
+		draw_line(centre + index * radius * 0.18, centre + index * (radius - 1.5),
+			rack.ink if pointer.a <= 0.0 else pointer,
+			maxf(radius * 0.2, 2.0), true)
 
 
 ## A vertical fader: the same control as Knob wearing a different picture.
@@ -1814,36 +2559,65 @@ class Fader extends Knob:
 ##
 ## The title is left to the caller: the rack draws its own into the band, the panel gives
 ## the band to a Label so it can clip and ellipsise like every other name in the inspector.
+## What the panel prints for a port or a parameter: the registry's label where it has
+## one, the stable name with its underscores read as spaces where it does not.
+##
+## The name is wiring identity and never changes for presentation; the label is
+## presentation and never participates in wiring. Every view asks this one question in
+## this one place, so the graph, the rack and anything drawn later cannot drift into
+## calling the same jack two things.
+static func face_text(descriptor: Dictionary) -> String:
+	var label := str(descriptor.get("label", ""))
+	if label != "":
+		return label
+	return str(descriptor.get("name", "")).replace("_", " ")
+
+
 static func draw_plate(canvas: CanvasItem, rect: Rect2, band: float,
 		tint: Color, skin_colours: Dictionary = {}) -> void:
 	var face: Color = skin_colours.get("panel", PANEL)
 	var low: Color = skin_colours.get("panel_low", PANEL_LOW)
 	var edge: Color = skin_colours.get("panel_edge", PANEL_EDGE)
 
-	# Panel, with a faint vertical gradient. Aluminium is not flat.
+	# Macro-flat. The plate used to be eight stacked rects lerping from the faceplate
+	# all the way down to the edge colour, which is not a gradient — it is eight
+	# horizontal strips with visible boundaries, and on orange or mustard it read as
+	# exactly that. A painted panel is one colour first and a material second, so the
+	# field is flat, and the drift below is the only interior shading left.
 	canvas.draw_rect(rect, face)
-	var step := rect.size.y / 8.0
-	for i in 8:
-		canvas.draw_rect(Rect2(rect.position.x, rect.position.y + i * step,
-			rect.size.x, step + 1.0), face.lerp(low, i / 7.0))
+
+	# One broad luminance drift, about two percent corner to corner, lit from the top
+	# left like everything else in the rack. Drawn as a single polygon with per-vertex
+	# colours so the interpolation happens in the renderer: there are no stops, so
+	# there is nothing to point at where one tone becomes the next.
+	canvas.draw_polygon(PackedVector2Array([rect.position,
+		Vector2(rect.end.x, rect.position.y), rect.end,
+		Vector2(rect.position.x, rect.end.y)]),
+		PackedColorArray([face.lightened(0.02), face.lightened(0.008),
+			face.darkened(0.025), face.darkened(0.008)]))
 
 	# The finish, over the colour and under everything else. Tiled rather than stretched,
 	# so a tall module and a short one have the same size of grain - a stretched texture
-	# would make the finish a property of the module's height, which it is not.
+	# would make the finish a property of the module's height, which it is not. The alpha
+	# is the shared formula, so the rack and the graph cannot disagree about how grainy a
+	# style is.
 	var finish := str(skin_colours.get("finish", ""))
 	if finish != "":
-		# Grain runs 0.03 to 0.12, so the multiplier decides everything. Six put a 0.43
-		# alpha over the mustard panel and the finish stopped being a finish - it read as
-		# upholstery. Three, ceilinged at a third, leaves a surface you notice only when
-		# you look for it, which is what a finish is.
 		var grain := float(skin_colours.get("grain", 0.06))
 		canvas.draw_texture_rect(Faceplate.texture(finish), rect, true,
-			Color(1, 1, 1, clampf(grain * 3.0 * Faceplate.strength(finish), 0.0, 0.33)))
+			Color(1, 1, 1, Faceplate.veil_alpha(finish, grain)))
 		if finish == "worn":
 			_draw_wear(canvas, rect)
 
+	# Depth lives at the perimeter now: a hairline of light along the top and left where
+	# the plate faces the light, a hairline of dark along the bottom and right where it
+	# turns away. The edge does the work the interior stripes used to fail at.
+	canvas.draw_line(Vector2(rect.position.x, rect.position.y + 0.5),
+		Vector2(rect.end.x, rect.position.y + 0.5), Color(1, 1, 1, 0.10), 1.0)
 	canvas.draw_line(Vector2(rect.position.x + 0.5, rect.position.y),
 		Vector2(rect.position.x + 0.5, rect.end.y), edge, 1.0)
+	canvas.draw_line(Vector2(rect.position.x, rect.end.y - 0.5),
+		Vector2(rect.end.x, rect.end.y - 0.5), Color(low, 0.8), 1.5)
 	canvas.draw_line(Vector2(rect.end.x - 0.5, rect.position.y),
 		Vector2(rect.end.x - 0.5, rect.end.y), Color(0, 0, 0, 0.35), 1.0)
 
@@ -1995,12 +2769,4 @@ static func elided(font: Font, text: String, size: int, room: float) -> String:
 	return "…"
 
 
-static func format_value(value: float) -> String:
-	var magnitude := absf(value)
-	if magnitude >= 1000.0:
-		return "%.0f" % value
-	if magnitude >= 10.0:
-		return "%.1f" % value
-	if magnitude >= 1.0:
-		return "%.2f" % value
-	return "%.3f" % value
+

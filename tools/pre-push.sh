@@ -118,27 +118,99 @@ fi
 suite_logs="$build/editor-suites"
 mkdir -p "$suite_logs" 2>/dev/null || suite_logs=$(mktemp -d)
 
+# SIGSEGV as bash reports it. The one late death that is tolerated, and only in the
+# company of both markers — see docs/current-phase.md for what is known about it.
+teardown_signal=139
+
+passed=0
+crashed=0
+crashers=""
+
 if [ -n "$godot" ] && [ -x "$godot" ]; then
-    for suite in editor_test design_test layout_test; do
+    # legalize_test joins them because it turned out to run headless: the router is pure
+    # geometry against the obstacle list, so a fault can be measured without a rendering
+    # server. Every other harness in the layout and cable passes needs pixels and stays out.
+    for suite in editor_test design_test layout_test panel_style_test legalize_test tidy_test routes_test crossing_semantics hit_geometry geometry_contract_test design_tokens; do
         say "godot: $suite"
         log="$suite_logs/$suite.log"
-        ( cd editor-godot && "$godot" --headless --path . --script "$suite.gd" )             > "$log" 2>&1 || true
+        status=0
+        ( cd editor-godot && "$godot" --headless --path . --script "$suite.gd" )             > "$log" 2>&1 || status=$?
         grep -E "FAIL|checks passed|checks failed" "$log" || true
-        # Tested for the word "passed" rather than for "failed", and its exit status is
-        # not consulted at all: Godot exits non-zero on a clean run here (leaked
-        # ObjectDB instances at teardown), and a script error inside _initialize skips
-        # quit() entirely, so a broken suite can print no verdict at all. Requiring the
-        # conclusion is the only reading that treats silence as bad news.
+        # The contract, in the order that makes each case mean one thing.
+        #
+        # Two markers have to line up. "checks passed" says every assertion ran and
+        # agreed. HARNESS_SCRIPT_COMPLETE, printed by harness_exit.gd after quit() has
+        # returned, says every scripted teardown statement ran too. A verdict on its own
+        # is not enough to excuse a dead process: a suite can print its conclusion and
+        # then die *in its own teardown*, which is a defect we own and want refused.
+        #
+        #   no verdict                              refused
+        #   verdict, no marker, and a bad status    refused — it died in our code
+        #   both markers, exit 0                    passed
+        #   both markers, then the one signal we
+        #     have actually observed                unstable pass, named and counted
+        #   anything else non-zero                  refused
+        #
+        # A script error inside _initialize skips quit() entirely, so a broken suite can
+        # print no verdict at all. Requiring the conclusion is the only reading that
+        # treats silence as bad news.
         if ! grep -q "checks passed" "$log"; then
             echo "$suite did not report success — fix it before pushing" >&2
             echo "  the whole run is in $log" >&2
             exit 1
         fi
+
+        if [ "$status" -eq 0 ]; then
+            passed=$((passed + 1))
+            continue
+        fi
+
+        # Past here the process did not exit cleanly, and the marker decides whether that
+        # happened before or after our last statement.
+        if ! grep -q "HARNESS_SCRIPT_COMPLETE" "$log"; then
+            echo "$suite reported success but did not finish its teardown (status $status)" >&2
+            echo "  no HARNESS_SCRIPT_COMPLETE: it died inside the suite, not after it" >&2
+            echo "  the whole run is in $log" >&2
+            exit 1
+        fi
+
+        # Only the signal actually observed. A SIGABRT, a timeout, an out-of-memory kill
+        # or anything else arriving late has not earned this exemption just by being
+        # late, and inheriting it would be how the next real defect gets waved through.
+        if [ "$status" -ne "$teardown_signal" ]; then
+            echo "$suite finished its script and then exited $status" >&2
+            echo "  that is not the known teardown crash ($teardown_signal); look at it" >&2
+            echo "  the whole run is in $log" >&2
+            exit 1
+        fi
+
+        crashed=$((crashed + 1))
+        crashers="$crashers $suite"
+        echo "  $suite: script complete, then Godot died in engine shutdown" >&2
     done
 else
     echo "" >&2
     echo "godot not configured; the editor suites did not run." >&2
     echo "  git config soundgraph.godot /path/to/godot_console" >&2
+fi
+
+if [ -n "$godot" ] && [ -x "$godot" ]; then
+    echo "" >&2
+    echo "PASS: $passed" >&2
+    if [ "$crashed" -gt 0 ]; then
+        echo "POST-VERDICT TEARDOWN CRASH: $crashed —$crashers" >&2
+    else
+        echo "POST-VERDICT TEARDOWN CRASH: 0" >&2
+    fi
+    # Zero by construction: a failure exits above rather than reaching here. Printed so
+    # the three numbers can be read as one shape, and so a run that ends without them is
+    # obviously a run that stopped early.
+    echo "FAIL: 0" >&2
+    if [ "$crashed" -gt 0 ]; then
+        echo "  Known and unfixed; every verdict above is complete. The exit-crash entry" >&2
+        echo "  in docs/current-phase.md has the measurements. Watch this number: it is" >&2
+        echo "  how a sudden change in the crash rate becomes visible." >&2
+    fi
 fi
 
 say "all checks passed"

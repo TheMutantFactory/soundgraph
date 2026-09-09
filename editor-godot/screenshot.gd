@@ -63,12 +63,35 @@ func _stage(main, shot: Dictionary) -> void:
 	# inherited the Outline tab from shot 21 and were six photographs of a text listing.
 	# Two of them are the large-patch pair, whose entire question is how a fifteen-node
 	# DX7 patch lays out at 100% and 63% — asked, rendered, filed, and never answered.
+	# Two vocabularies, and the miss was silent. "View" here can mean a lens — Rack,
+	# Graph, Schematic, Face — or a tab of `main.views`, which are Patch, Sandbox and
+	# Outline. The canonical shots asked for lenses, this loop only knew tabs, nothing
+	# matched, and rack.png and schematic.png shipped as two identical photographs of the
+	# Graph — found by the web funnel putting them side by side on a page, not by anything
+	# here. A name that matches neither vocabulary is now an error instead of a shrug.
 	var view := str(shot.get("view", "Graph"))
+	var lenses := {"rack": main.PatchView.RACK, "graph": main.PatchView.GRAPH,
+		"schematic": main.PatchView.SCHEMATIC, "face": main.PatchView.FACE}
+	var named := false
+	if lenses.has(view.to_lower()):
+		main._set_patch_view(int(lenses[view.to_lower()]))
+		named = true
 	for index in main.views.get_tab_count():
 		if main.views.get_tab_title(index).to_lower() == view.to_lower():
 			main.views.current_tab = index
+			named = true
+	if not named:
+		printerr("no lens or tab called '%s'" % view)
 	for i in 8:
 		await process_frame
+
+	# `fit` frames the whole patch, which is what almost every review shot wants and what
+	# none of them could ask for. Without it a shot inherits whatever scroll the load left,
+	# and the canonical Graph picture came out showing two nodes and a corner of a third.
+	if bool(shot.get("fit", false)):
+		main._fit_view_zoom()
+		await main.get_tree().process_frame
+		await main.get_tree().process_frame
 
 	if shot.get("zoom", 0.0) > 0.0:
 		# Set from full detail so the level of detail is reached the same way every time,
@@ -81,10 +104,55 @@ func _stage(main, shot: Dictionary) -> void:
 		for i in 6:
 			await process_frame
 
+	# The cable pass's whole result in one frame: a focused route at its ordinary resting
+	# appearance and everything else mixed toward the canvas. There was no way to ask for it
+	# from a spec, so the only pictures of it were taken by its own proof sheets and are
+	# about the measurement rather than about the product.
+	#
+	# `lock` names an output port as `<widget>:right:<index>`; the family leaving it stays
+	# lit and everything else is mixed toward the canvas.
+	#
+	# Both fields are set. `lock_focus_on_port` is the persistent half and `focus_port` is
+	# what the cord layer reads when it decides which cords are quieted — setting only the
+	# first produced a picture with no suppression in it at all, which is a picture of the
+	# ordinary graph wearing the caption of the golden moment.
+	if str(shot.get("lock", "")) != "":
+		main.graph_edit.clear_focus_lock()
+		main.graph_edit.lock_focus_on_port(str(shot["lock"]))
+		main.graph_edit.focus_port = str(shot["lock"])
+		main.graph_edit.queue_redraw()
+		await main.get_tree().process_frame
+		await main.get_tree().process_frame
+	else:
+		main.graph_edit.clear_focus_lock()
+		main.graph_edit.focus_port = ""
+
 	if str(shot.get("select", "")) != "":
 		main._focus_node(str(shot["select"]))
 		for i in 6:
 			await process_frame
+
+	# `probe` points the scope at an output port, "<node>:<port>", through the panel's own
+	# picker — the same path a hand takes, so the labels and the frozen state behave. Pair
+	# it with `play` in the same shot: the scope draws the engine's own ring, and a silent
+	# engine is a flat trace wearing the caption of a waveform.
+	if str(shot.get("probe", "")) != "":
+		var half := str(shot["probe"]).split(":")
+		var found := false
+		for index in main.scope_probe._sources.size():
+			var entry: Dictionary = main.scope_probe._sources[index]
+			if str(entry["node"]) == half[0] and str(entry["port"]) == half[1]:
+				main.scope_probe.source_pick.selected = index + 1
+				main.scope_probe._on_source_picked(index + 1)
+				found = true
+				break
+		if not found:
+			printerr("no probe wire called '%s'" % str(shot["probe"]))
+		for i in 4:
+			await process_frame
+	else:
+		main.scope_probe.source_pick.selected = 0
+		main.scope_probe._on_source_picked(0)
 
 	if bool(shot.get("play", false)):
 		main._hold_note(57)

@@ -1,0 +1,416 @@
+class_name NodeIdentity
+extends RefCounted
+
+## What a node is called when there is less room to say it.
+##
+## A node on the canvas has a name its author gave it — "Amp Envelope", "Main Oscillator"
+## — and at some distance that name stops fitting the box it is written in. The editor's
+## answer was to cut the name and add an ellipsis, which is how "Amplifier" became
+## "Ampli…" and then "Ampl…" and eventually says nothing at all except that something has
+## been taken away.
+##
+## So a second name, written down rather than derived. `compact` is an optical
+## representation, not a nickname: it is what this kind of node is called when the label
+## has to be short, chosen by somebody rather than produced by a slice.
+##
+## Keyed by type rather than by the name on the node, for two reasons. A person who
+## renames their oscillator "Bass" still gets a compact identity, because what the node
+## *is* has not changed. And an author cannot be asked to think of a short form for every
+## node they name — the type already knows one.
+##
+## The compact name is used only when the canonical one will not fit. At every size where
+## the real name fits, the real name is what is drawn.
+##
+## ## The reserved-cell policy, settled at 15B
+##
+## Twelve of the fifty-one runtime types have an identity cell and no mark in it, each for
+## a written reason recorded beside its entry in `GLYPH` below. That is a finished answer:
+##
+## > **A reserved identity cell is an intentional terminal state, not incomplete work.**
+##
+## The cell is reserved rather than removed so that every title in the graph starts at the
+## same x whether its type has a mark or not — measured at 15B across thirty nodes, five
+## palettes and four interface scales, and it does not vary by a pixel. `reserved_sheet.gd`
+## puts all twelve side by side with three glyph-bearing headers for scale, and they read
+## as a set of nodes whose identity is the word.
+##
+## There is no target of one hundred per cent icon coverage. A future mark arrives when a
+## type earns one under the nine rules in `GlyphGrammar`, or it does not arrive.
+
+## The types that speak the new language.
+##
+## It began as three — a proving ground, so that the anatomy could be designed on
+## something small enough to look at properly. It is seven now, which is every node in
+## First Synth: the first patch where nothing is left over from the old generation and
+## the graph can be judged as a composition rather than as three islands.
+##
+## The last two are seams rather than ordinary types. A patch's edges are nodes like any
+## other on the canvas, they are keyed by the port they stand for, and the language does
+## not have an opinion about which kind of node it is dressing.
+const MIGRATED := ["Gain", "StateVariableFilter", "ADSR",
+	"SawOscillator", "LFO", "seam:Input/note", "seam:Output/stereo",
+	# The first family batch. Three of the six candidates went in and three did not:
+	# SineOscillator, SquareOscillator and OnePoleFilter measure 413, 410 and 405 at the
+	# Comfortable scale against a Wide class of 376, and no class holds them. Three
+	# independent types inside eight units of each other is evidence for a fourth class
+	# rather than for stretching a third, and a new class is a design decision and not
+	# something a migration gets to make. See docs/graph-nodes.md.
+	"NoiseOscillator", "Noise", "Phaser",
+	# 14C: the three that were waiting on the 416 class, and the control family.
+	# Slide is not here. It measures 433 at Comfortable against an Extra class of 416,
+	# and one type 17 units past the top of the set is an outlier rather than a cluster
+	# — the rule the class set grows by wants several independent types agreeing before
+	# a rung is added. Reported in docs/graph-nodes.md and held for the next batch.
+	"SineOscillator", "SquareOscillator", "OnePoleFilter",
+	"SampleHold", "Clock", "Constant", "StepSequencer",
+	# 14D: where signals meet. There is no routing batch to run — see the note in GLYPH
+	# and docs/graph-nodes.md — so this is the combining half of it.
+	"Mixer", "Add", "Multiply", "Level", "StereoLevel",
+	# 14E: time and response shapes.
+	"Delay", "Comb", "Allpass", "Formant",
+	# 14F: the maths types that exist. There is no Subtract, Divide, Negate or Modulo in
+	# the registry, so the ring family gained no siblings — it is Add and Multiply and
+	# that is all there is to be consistent with.
+	"Compare", "MinMax", "Clip", "Abs",
+	# 14G: the specialty types. There are no DX7 or OPL2 operator node types to migrate —
+	# those are importers that build graphs out of the ordinary ones.
+	"Sampler", "Speech", "AudioInput", "PluginEffect", "PluginInstrument", "CableTest",
+	# 14H.1: dynamics and signal shaping.
+	"Compressor", "Crush", "Drive", "AhdEnvelope",
+	# 14H.2: musical and event control. Two of the seven are held rather than migrated,
+	# and for the first time it is a width rather than a glyph: Arpeggio needs about 433
+	# and Scale Quantizer about 587, against an Extra class of 416. They are a hundred
+	# and fifty apart, so they are two outliers and not a cluster, and one outlier does
+	# not earn a rung. Their marks are drawn and waiting. See docs/graph-nodes.md.
+	"Retrigger", "Euclid", "MidiCC", "NoteTriggers", "TriggerBus",
+	# 15A.1. The inventory found three types held for bookkeeping rather than design:
+	# NoteInput and StereoOutput are the bare registry keys for terminals whose seam
+	# forms were already migrated, and seam:Input/audio is the third seam kind that
+	# never came up because no example patch uses one. Same nodes, same marks.
+	"NoteInput", "StereoOutput", "seam:Input/audio",
+	# And the two that were only ever waiting on a width rung, now that 448 exists.
+	"Arpeggio", "Slide",
+	# 15A.3. Held until the grid could measure a control rather than predict it. Its glyph
+	# stays reserved: snapping a pitch to a scale is quantisation, and Crush already owns
+	# the coarse-levels staircase.
+	"ScaleQuantizer"]
+
+## Type name -> what to call it when the room runs out.
+##
+## Three entries, for the three types above. The rest of the library keeps eliding until
+## the anatomy is approved and rolled out, which is what the before-and-after is for.
+const COMPACT := {
+	"Gain": "Amp",
+	"StateVariableFilter": "Filter",
+	"ADSR": "Envelope",
+	# The four that finished First Synth. Two of them have none, and that is an answer
+	# rather than an omission: "Keyboard" and "Output" are already the shortest true
+	# names those things have, and inventing "Keys" and "Out" would be shortening for
+	# its own sake. A type with no compact name simply keeps its canonical one until it
+	# stops fitting, and then draws nothing — which is the step 12 rule and is right.
+	# Saw, not Oscillator. It was the only oscillator in the language when that was
+	# chosen and it is one of three now, so `Oscillator` had become the odd member of a
+	# set that otherwise reads Sine, Square, Saw — and at map size First Synth said
+	# "Oscillator" where a sine beside it would have said "Sine".
+	"SawOscillator": "Saw",
+	"LFO": "Sweep",
+	# The seams. Their registry names are "Input port · note" and "Output port · stereo",
+	# which say the binding as well as the direction; at map size the direction is the
+	# part worth keeping and the socket says the rest.
+	"seam:Input/note": "Input",
+	"seam:Output/stereo": "Output",
+	# The rollout's own names. Every migrated type needs one of these, and it is not a
+	# judgement about whether the canonical will fit — a compact name is what a type is
+	# called when there is no room, and a type without one falls back to cutting.
+	#
+	# It does not have to fit either. A narrow node at a quarter zoom has room for about
+	# three characters and no real word is three characters, so the compact name will
+	# sometimes not fit and the renderer will draw nothing at all. That is the step 12
+	# rule working: remove information rather than reduce its legibility, and "Co…" is
+	# not an identity.
+	"SineOscillator": "Sine",
+	"SquareOscillator": "Square",
+	"NoiseOscillator": "Noise osc",
+	"OnePoleFilter": "One-pole",
+	"SampleHold": "S&H",
+	"StepSequencer": "Steps",
+	"Constant": "Value",
+	"Mixer": "Mixer",
+	"Add": "Add",
+	"Multiply": "Multiply",
+	"Level": "Level",
+	"StereoLevel": "Stereo",
+	"Delay": "Delay",
+	"Comb": "Comb",
+	"Allpass": "Allpass",
+	"Formant": "Formant",
+	"Compare": "Compare",
+	"MinMax": "Min/Max",
+	"Clip": "Clip",
+	"Abs": "Abs",
+	"Sampler": "Sampler",
+	"Speech": "Speak",
+	"AudioInput": "Audio in",
+	"PluginEffect": "Plugin",
+	"PluginInstrument": "Plugin",
+	"CableTest": "Cables",
+	"Compressor": "Comp",
+	"Crush": "Crush",
+	"Drive": "Drive",
+	"AhdEnvelope": "AHD",
+	"Arpeggio": "Arp",
+	"Retrigger": "Retrig",
+	"Euclid": "Euclid",
+	"ScaleQuantizer": "Scale",
+	"MidiCC": "MIDI CC",
+	"NoteTriggers": "Triggers",
+	"TriggerBus": "Bus",
+	"NoteInput": "Notes",
+	"seam:Input/audio": "Audio in",
+	"StereoOutput": "Output",
+	"Slide": "Slide",
+	# And three whose canonical name is already short enough to fit anywhere. They are
+	# written down anyway, because a compact name is part of a migrated type's contract
+	# rather than a repair applied when today's geometry happens to need one. A type
+	# whose two names are the same has said so on purpose.
+	"Noise": "Noise",
+	"Phaser": "Phaser",
+	"Clock": "Clock",
+}
+
+
+## The identity glyphs for the four that finished First Synth, and why each is what it is
+## — see `docs/node-glyph-grammar.md` for the family rules they are built from.
+
+
+## The mark on a node's header, by type.
+##
+## It answers "what kind of signal operation is this" before the title is read, which is
+## why every one of these describes behaviour rather than equipment: a response curve
+## rather than a filter, the amplifier symbol rather than an amplifier. A picture of the
+## hardware would be the third time this pass has had to walk back out of a rack.
+##
+## Node identity and port semantics are separate systems, so these are drawn in the
+## editor's own identity ink and never in a signal colour — a lowpass is not green
+## because audio is green.
+const GLYPH := {
+	"Gain": Icons.Kind.GAIN_TRIANGLE,
+	"StateVariableFilter": Icons.Kind.RESPONSE_LOW,
+	"ADSR": Icons.Kind.ENVELOPE,
+	# The generator family draws the waveform the node makes, so a SawOscillator wears a
+	# sawtooth. That rule is what keeps this apart from the modulator below without
+	# either of them needing a distinguishing decoration bolted on.
+	"SawOscillator": Icons.Kind.SAW_WAVE,
+	# And the control family draws the shape of a value over time. Angular against
+	# smooth: the two marks differ in silhouette rather than in a detail, which is rule
+	# 9, and it is where the corpus landed independently — everything filed under
+	# "modulation" is a sinuous curve and everything under "sawtooth" is a ramp.
+	"LFO": Icons.Kind.MODULATION,
+	# A seam is the edge of the patch, so it is drawn as an edge: a bar for the boundary
+	# and a line for the signal crossing it, mirrored for the direction. Not a keyboard
+	# and not a speaker — a seam is not the equipment on the other side of it, and what
+	# kind of signal crosses is already said by the socket.
+	#
+	# A keyboard was tried first and three cuts of it were drawn. All three fill in at
+	# header size, and the reason is structural rather than fixable: a keyboard's
+	# identity is many parallel elements and the glyph field is seven stroke widths
+	# across. See `docs/node-glyph-grammar.md`.
+	"seam:Input/note": Icons.Kind.ORIGINATE,
+	# The same edge by its other keys. A terminal reached through a seam and the same
+	# terminal reached by its own registry key are one node, so they are one mark.
+	"NoteInput": Icons.Kind.ORIGINATE,
+	"seam:Input/audio": Icons.Kind.ORIGINATE,
+	"StereoOutput": Icons.Kind.TERMINATE,
+	"seam:Output/stereo": Icons.Kind.TERMINATE,
+	# The generator family again, keyed by the waveform each one makes. Noise is the
+	# waveform with no period, and both noise sources wear it: they are the same
+	# operation and the word beside the mark is what says which.
+	"NoiseOscillator": Icons.Kind.NOISE_WAVE,
+	"Noise": Icons.Kind.NOISE_WAVE,
+	"SineOscillator": Icons.Kind.SINE_WAVE,
+	"SquareOscillator": Icons.Kind.SQUARE_WAVE,
+	# The temporal family: value over time, told apart by density and regularity rather
+	# than by decoration. See `GlyphGrammar` for the table.
+	"Clock": Icons.Kind.PULSE_TRAIN,
+	"SampleHold": Icons.Kind.HELD,
+	"StepSequencer": Icons.Kind.STEPS_ORDERED,
+	# Drawn, and waiting for its type: see the width note in MIGRATED above.
+	"Slide": Icons.Kind.SLIDE,
+	"Constant": Icons.Kind.FLAT,
+	# Where signals meet. The mixer is many cords arriving at one, which is step 10's
+	# merge finally standing on a type; the sum and the product are the two signal-flow
+	# conventions, one ring with two different marks in it.
+	"Mixer": Icons.Kind.ROUTE_MERGE,
+	"Add": Icons.Kind.SUM_JUNCTION,
+	"Multiply": Icons.Kind.PRODUCT,
+	# Level and its stereo twin are gain stages, so they wear the gain stage's mark. Two
+	# types sharing one mark is right when they are the same operation and the word beside
+	# it says which — the same reasoning that gives both noise sources one mark.
+	"Level": Icons.Kind.GAIN_TRIANGLE,
+	# 14E. Family follows what the mark means, not what the registry filed it under: the
+	# delay is temporal repetition, the comb and the formant are response shapes, and the
+	# allpass is nothing at all yet.
+	# 14F. Compare is the only one of the four maths types that got a mark, and the other
+	# three are the most interesting result of the batch: their drawings are transfer
+	# functions and waveforms, and the response and generator families already own that
+	# territory. A clipped wave against the square is a matter of how sharp the corners
+	# are; rectified humps against a formant is how narrow the peaks are; a min/max
+	# envelope against the bandpass and the notch is whether the top is a point or a
+	# plateau. Every one of those is a detail rather than a silhouette, which is rule 9,
+	# so three cells are reserved and the marks stay drawn and unassigned as evidence.
+	#
+	# The ring does not rescue them either. It carries a plus and a cross at header size
+	# and nothing larger — its interior is under three pixels there.
+	"Compare": Icons.Kind.THRESHOLD,
+	# 14G. The sampler is the first mark in the set whose identity is an enclosure rather
+	# than a curve, which is where rule 9b sends new concepts now that the open field is
+	# full: two bounds with a piece of signal between them.
+	"Sampler": Icons.Kind.SAMPLE,
+	# 14H.1, the dynamics family: spatial rather than curved, which is the other place
+	# rule 9b sends a new concept. A compressor is a wide range arriving and a narrow one
+	# leaving — two bounds closing without meeting, because a pair of lines that comes to
+	# a point is the disclosure chevron and the first proof sheet said exactly that.
+	"Compressor": Icons.Kind.NARROWING,
+	# 14H.2. Verified against what each node actually does before anything was drawn, and
+	# three of the seven turned out to belong to marks that already existed.
+	#
+	# An arpeggio here is not an arpeggiator: it "steps the frequency once, part-way
+	# through". Two levels and one riser, which is a different shape from the square's
+	# alternation and the sample-and-hold's down-and-up.
+	"Arpeggio": Icons.Kind.ONE_STEP,
+	# Euclid spreads hits as evenly as they will go across a cycle, so the mark is those
+	# hits at those positions — three in eight, which its own documentation names. Equal
+	# heights unevenly placed, against the clock's even placement and the delay's decay.
+	"Euclid": Icons.Kind.SPREAD,
+	# Retrigger "fires a pulse on a timer". That is a clock, and it wears the clock's
+	# mark. Inventing an initiating-event-plus-repeats distinction would have drawn a
+	# behaviour this node does not have.
+	"Retrigger": Icons.Kind.PULSE_TRAIN,
+	# A MIDI CC is a hardware knob arriving from outside the patch, which is what the
+	# input seam already means. Not a five-pin plug: the connector is equipment, and what
+	# matters is that control enters here.
+	"MidiCC": Icons.Kind.ORIGINATE,
+	# And the split finally has a production owner. Trigger Bus "splits a trigger bus back
+	# into its eight lanes: one wire in, eight pads out" — one to many, drawn since step 10
+	# and attached to nothing until now.
+	"TriggerBus": Icons.Kind.ROUTE_SPLIT,
+	# Note Triggers is reserved, and deliberately not given the split. It is also one in
+	# and eight out, but what it does is turn eight chromatic notes into eight triggers —
+	# a transformation that happens to have that port shape. The split would say
+	# distribution, which is the other node.
+	#
+	# Scale Quantizer is reserved too. Snapping a pitch to the nearest note of a scale is
+	# quantisation, and Crush already owns the coarse-levels staircase; the only thing
+	# that would separate them is a small badge saying "pitch", which is a detail.
+	# And a crusher puts the signal on coarse, equal levels. Regular against irregular is
+	# what separates it from the sample-and-hold, the same device that separates a clock
+	# from noise and a sequencer from a held signal.
+	"Crush": Icons.Kind.QUANTISED,
+	# An AHD envelope is an envelope. One family, one mark, and the name says which
+	# implementation — the same reasoning that gives both noise sources one mark.
+	"AhdEnvelope": Icons.Kind.ENVELOPE,
+	# Drive is reserved. It is saturation, and the honest drawing of saturation is a wave
+	# with its peaks flattened — which is the square oscillator with rounder corners, and
+	# corner radius is a detail rather than a silhouette. It is the same drawing that
+	# failed for Clip in 14F, tried again for the type it actually suits, and it fails for
+	# the same reason.
+	# And an audio input is the patch's edge with signal entering, which is what the note
+	# seam already is. One mark, two types, the word beside it saying which.
+	"AudioInput": Icons.Kind.ORIGINATE,
+	# Reserved, and each for its own reason. Speech: the Noun Project's whole corpus for
+	# it is loudspeakers, microphones and documents — equipment and paperwork, not a
+	# signal operation, and this node's own name does the work. The plugin hosts: their
+	# meaning is that the processing comes from outside SoundGraph's vocabulary, and the
+	# one corpus lead is a corner-bracket frame with an arrow entering it, which is four
+	# marks plus content in a cell that fits about two. Cable Test is a diagnostic and has
+	# no signal operation to draw at all.
+	"Delay": Icons.Kind.ECHO_TRAIN,
+	"Comb": Icons.Kind.RESPONSE_COMB,
+	"Formant": Icons.Kind.RESPONSE_FORMANT,
+	# Allpass has no mark. Its magnitude response is flat, which Constant already owns;
+	# its phase response falls monotonically, which is the lowpass; and the Noun Project
+	# has no signal-domain metaphor for phase at all — "phase shift" returns project
+	# milestones and "Phaser" returns a ray gun. An arbitrary swirl would be a decoration
+	# pretending to be an identity. The cell is reserved, as the Phaser's is, and the two
+	# of them are consistent because they are the same unsolved problem.
+	"StereoLevel": Icons.Kind.GAIN_TRIANGLE,
+	# And the Phaser has none. Its family — things that happen over time — has not been
+	# drawn, and the identity cell is reserved whether or not a type has a mark, so a
+	# node with no glyph costs nothing and claims nothing. No glyph beats a misleading
+	# one, and this is the first type to ship on that rule.
+}
+
+
+## A type may declare **one** parameter whose discrete values change what operation the
+## node represents, and choose a mark for each of them.
+##
+## Narrow on purpose. The general rule "a glyph may depend on a parameter" would let any
+## changing value drive identity, and identity would stop being identity — the whole point
+## of the mark is that it says what this thing *is* while its knobs move. This says
+## something smaller and true: a state-variable filter set to notch is not doing the
+## operation a lowpass does, and drawing a falling curve on it is a lie the reader has no
+## way to catch. It was one, until this: First Synth's filter happens to be in lowpass
+## mode, which is why nobody saw it.
+##
+## The parameter has to be an enumeration and its options are indexes into the list. Every
+## other type stays keyed by type alone unless it declares one of these.
+##
+## The **name** is not variant. A node stays what its author called it and what its type
+## is called — `Filter` in the registry — while the glyph says which response is running
+## and the dropdown says it in words. A node that renamed itself when you turned one
+## control would look like it had become a different type, which it has not.
+const VARIANT := {
+	"StateVariableFilter": {
+		"parameter": "mode",
+		"glyphs": [Icons.Kind.RESPONSE_LOW, Icons.Kind.RESPONSE_HIGH,
+			Icons.Kind.RESPONSE_BAND, Icons.Kind.RESPONSE_NOTCH],
+	},
+	"OnePoleFilter": {
+		"parameter": "mode",
+		"glyphs": [Icons.Kind.RESPONSE_LOW, Icons.Kind.RESPONSE_HIGH],
+	},
+}
+
+
+## The parameter that drives this type's identity, or "" for the types that have none —
+## which is nearly all of them.
+static func variant_parameter(type_name: String) -> String:
+	return str((VARIANT.get(type_name, {}) as Dictionary).get("parameter", ""))
+
+
+## The glyph for a type, or -1 for one that has none yet. The cell is reserved either
+## way: a header whose title starts in a different place depending on whether its type
+## has been drawn yet is a graph that jitters as it is rolled out.
+##
+## `variant` is the value of the type's identity parameter, where it declares one, and is
+## ignored otherwise.
+static func glyph_of(type_name: String, variant: int = -1) -> int:
+	if VARIANT.has(type_name) and variant >= 0:
+		var marks: Array = VARIANT[type_name]["glyphs"]
+		if variant < marks.size():
+			return int(marks[variant])
+	return int(GLYPH.get(type_name, -1))
+
+
+## Whether this type speaks the new language yet.
+static func migrated(type_name: String) -> bool:
+	return MIGRATED.has(type_name)
+
+
+## Whether a type has said what it is called when there is no room.
+##
+## Part of a migrated type's contract, not a repair. The rule the whole thing rests on is
+## that an ellipsis in the graph means exactly one thing — a type that has not been
+## through the pass — and that only holds if every type that *has* been through it can
+## fall back to a written-down name instead of a cut.
+static func has_compact(type_name: String) -> bool:
+	return COMPACT.has(type_name)
+
+
+## The compact name for a type, or "" when it has none yet.
+##
+## Empty rather than a guess: a type with no compact name written down has not been
+## through the pass, and the honest thing is to say so and let the caller fall back to
+## what it did before.
+static func compact_of(type_name: String) -> String:
+	return str(COMPACT.get(type_name, ""))

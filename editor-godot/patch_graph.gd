@@ -1,4 +1,8 @@
 extends GraphEdit
+## The rack's plug renderer, so a plug in the graph and a plug in the rack are one
+## object drawn twice.
+const CableArt := preload("res://cable_art.gd")
+const CableCrossings := preload("res://cable_crossings.gd")
 ## The graph canvas: PCB-style cable routing and draggable wires.
 ##
 ## A curved cable that passes straight through a node is unreadable — you cannot tell
@@ -36,6 +40,13 @@ const STUB := 30.0
 const CHAMFER := 14.0
 ## How close a click must be to a cable to grab it.
 const GRAB_DISTANCE := 12.0
+
+## How close two cables have to be to the pointer before draw order decides between them.
+##
+## Goal 2.1. Only meant to catch an actual crossing, where both strands pass through the
+## same point and their distances differ by rounding. Three units is well inside one cord
+## width, so two cables merely running alongside each other are still separated by distance.
+const PICK_TIE := 3.0
 ## Ceiling on how many detours are scored when none of them is clear. Routing runs per
 ## cable per frame, so an unbounded search in a dense patch would cost frame rate to
 ## improve a cable that is going to look crowded regardless.
@@ -233,6 +244,24 @@ var waypoints: Dictionary = {}
 
 var _obstacles: Array[Rect2] = []
 var _obstacles_frame := -1
+## Which obstacles each routed pair was permitted to consider. See `consulted_for`.
+var _route_consulted := {}
+
+## How blocked each routed pair came out. See `route_blocked_count`.
+var _route_clear := {}
+
+## Routes kept from earlier frames because they are still legal. See `_route`.
+##
+## **Session-only, and never written to a document.** Cleared by `forget_routes()` on every
+## load, so opening a patch derives its routes from nothing and two people opening the same
+## file see the same cables. What this holds is the answer to "what is on screen right now",
+## which is a fact about an editing session and not about a patch.
+var _route_kept := {}
+
+## How often retention fired, and how often the kept route had become illegal. Session
+## counters for the harness; nothing in the product reads them.
+var routes_retained := 0
+var routes_refused := 0
 var _route_cache := {}
 var _dragging_key := ""
 var _drag_connection: Dictionary = {}
@@ -269,6 +298,60 @@ func _endpoints(connection: Dictionary) -> Array:
 
 
 # ---------------------------------------------------------------------------------
+# The two geometries, named
+# ---------------------------------------------------------------------------------
+#
+# Routing goal 2.1. There are two different cable shapes in this file and for a long time
+# only one of them had a name. `_routes()` said "routes" and meant the obstacle-avoiding
+# polyline whatever the cable style, while the editor opens in CATENARY and draws hanging
+# curves — so hit testing, which reasonably asked for "the routes", ended up picking against
+# a cable nobody could see. On babble that is zero of twenty-six cables clickable at the
+# point they are drawn.
+#
+# The contract that replaces it:
+#
+# > **A cable's interactive locus is the centreline actually displayed by the active cable
+# > style.**
+#
+# Two functions, deliberately awkward to confuse:
+#
+#   display_path   what is on screen. CATENARY hangs, ROUTED routes. Drawing, crossing
+#                  analysis and picking all take this one, so they cannot disagree.
+#   routing_path   the obstacle-avoiding path, whatever is on screen. Trespass and cable
+#                  cost still want it; it is a hypothesis about where a cable could go.
+#
+# No second approximation for picking. A hit test with its own idea of the curve is how
+# this happened in the first place.
+
+## The centreline this cable is drawn with, in graph space, in the active cable style.
+func display_path(connection: Dictionary) -> PackedVector2Array:
+	var ends := _endpoints(connection)
+	if ends.is_empty():
+		return PackedVector2Array()
+	# Through `_get_connection_line`, which is the function Godot calls to draw with, so
+	# this is the drawn curve by construction rather than by agreement. It works in
+	# zoom-scaled space at both ends; the scaling is undone here so every caller can stay
+	# in graph space.
+	var scale := zoom if zoom > 0.0 else 1.0
+	var drawn := _get_connection_line(ends[0] * scale, ends[1] * scale)
+	var out := PackedVector2Array()
+	for point: Vector2 in drawn:
+		out.append(point / scale)
+	return out
+
+
+## The obstacle-avoiding path for this cable, in graph space, whatever style is on screen.
+func routing_path(connection: Dictionary) -> PackedVector2Array:
+	var ends := _endpoints(connection)
+	if ends.is_empty():
+		return PackedVector2Array()
+	var fields := _connection_fields(connection)
+	var stored = waypoints.get(connection_key(fields[0], fields[1], fields[2], fields[3]))
+	return _route_through(ends[0], ends[1], stored) if stored != null \
+		else _route(ends[0], ends[1])
+
+
+# ---------------------------------------------------------------------------------
 # Obstacles
 # ---------------------------------------------------------------------------------
 
@@ -281,6 +364,7 @@ func _current_obstacles() -> Array[Rect2]:
 	_obstacles_frame = frame
 	_obstacles.clear()
 	_route_cache.clear()
+	_route_consulted.clear()
 	for child in get_children():
 		if child is GraphNode and child.visible:
 			_obstacles.append(Rect2(child.position_offset, child.size).grow(CLEARANCE))
@@ -375,9 +459,10 @@ func _chamfer(points: PackedVector2Array) -> PackedVector2Array:
 ## always leaves these between its columns, and they are where a trace should make its
 ## vertical moves — turning at a fixed distance from the port instead lands inside
 ## whatever node happens to occupy the next column.
-func _vertical_channels(reference: float, low: float, high: float) -> Array:
+func _vertical_channels(reference: float, low: float, high: float,
+		nearby: Array[Rect2]) -> Array:
 	var candidates := [reference]
-	for rect in _current_obstacles():
+	for rect in nearby:
 		candidates.append(rect.position.x - CLEARANCE * 0.5)
 		candidates.append(rect.end.x + CLEARANCE * 0.5)
 
@@ -389,8 +474,78 @@ func _vertical_channels(reference: float, low: float, high: float) -> Array:
 	return usable
 
 
+## The obstacles allowed to offer this connection a channel, and why it is not all of them.
+##
+## Routing goal 3. `_orthogonal_candidates` took its channel coordinates from every obstacle
+## in the graph — two vertical channels per node filtered only to the span between the two
+## stubs, and two horizontal ones filtered by nothing at all. Goal 3A measured what that
+## costs: on the hostile fixtures **eighty per cent of every cable's candidate channels are
+## offered by obstacles that cannot possibly be in its way**, and thirteen of babble's
+## fifty-one sympathetic reroutes came from a node the rerouted cable never goes near — one
+## of them three thousand units away.
+##
+## The contract:
+##
+## > **An obstacle may influence a cable's routing candidates only if that obstacle is
+## > geometrically relevant to reaching that cable's endpoints.**
+##
+## Relevance is derived from the connection, never from a radius somebody picked. The
+## envelope is the box spanning the two ports grown by `CLEARANCE`; anything meeting it is
+## in. Then it widens, and only for cause: an obstacle that is actually *in the way* pulls
+## its own box into the envelope, because getting around it is now part of the problem and
+## whatever is beside it has become relevant. That repeats to a fixed point, so the search
+## is local by construction and reaches further exactly as far as it has to —
+##
+##   local corridor -> wider corridor -> escape
+##
+## which is the legalizer's shape, for the same reason it worked there.
+##
+## **This restricts what is offered, never what is checked.** `_blocked_count` still tests
+## every candidate against every obstacle in the graph. A route can therefore never be
+## called clear because this function looked away from something; the worst a mistake here
+## can do is offer a poorer set of corners, which the guards would show as more cable rather
+## than as a cable through a node.
+func _relevant_obstacles(a: Vector2, b: Vector2) -> Array[Rect2]:
+	var all := _current_obstacles()
+	var envelope := Rect2(a, Vector2.ZERO).expand(b).grow(CLEARANCE)
+	var chosen: Array[Rect2] = []
+	var taken := {}
+	# Bounded because each round either takes an obstacle or stops, and there are finitely
+	# many; the cap is a backstop against a pathological patch rather than a tuning knob.
+	for _round in 8:
+		var grew := false
+		for i in all.size():
+			if taken.has(i):
+				continue
+			var rect: Rect2 = all[i]
+			if not envelope.intersects(rect):
+				continue
+			taken[i] = true
+			chosen.append(rect)
+			# Only something genuinely in the way widens the search. Merely standing
+			# beside the corridor does not make its neighbours relevant too, which is
+			# what would let this creep back out to the whole graph.
+			if _blocks_directly(a, b, rect):
+				envelope = envelope.merge(rect.grow(CLEARANCE))
+				grew = true
+		if not grew:
+			break
+	return chosen
+
+
+## Whether this obstacle sits across one of the shapes the router tries before it searches.
+func _blocks_directly(a: Vector2, b: Vector2, rect: Rect2) -> bool:
+	var corner_one := Vector2(b.x, a.y)
+	var corner_two := Vector2(a.x, b.y)
+	return _segment_hits_rect(a, b, rect) \
+		or _segment_hits_rect(a, corner_one, rect) \
+		or _segment_hits_rect(corner_one, b, rect) \
+		or _segment_hits_rect(a, corner_two, rect) \
+		or _segment_hits_rect(corner_two, b, rect)
+
+
 ## Candidate orthogonal routes from a to b, cheapest first.
-func _orthogonal_candidates(a: Vector2, b: Vector2) -> Array:
+func _orthogonal_candidates(a: Vector2, b: Vector2, nearby: Array[Rect2]) -> Array:
 	var start := a + Vector2(STUB, 0.0)
 	var finish := b - Vector2(STUB, 0.0)
 	var candidates := []
@@ -399,7 +554,7 @@ func _orthogonal_candidates(a: Vector2, b: Vector2) -> Array:
 	# natural shape for a cable running left to right.
 	var middle_x := (start.x + finish.x) * 0.5
 	var channel_xs := [middle_x]
-	for rect in _current_obstacles():
+	for rect in nearby:
 		channel_xs.append(rect.position.x - CLEARANCE * 0.5)
 		channel_xs.append(rect.end.x + CLEARANCE * 0.5)
 	# Nearest to the midpoint first: the least surprising detour is the smallest one.
@@ -417,9 +572,11 @@ func _orthogonal_candidates(a: Vector2, b: Vector2) -> Array:
 	# The vertical moves happen in clear gaps between obstacles rather than at a fixed
 	# distance from the port: in a columnar layout a fixed stub lands inside the next
 	# column, which is exactly the case of two same-row nodes with a third between them.
+	# The horizontal family, which had no filter of any kind before this — every node's top
+	# and bottom edge was a candidate channel for every cable in the graph, however far away.
 	var middle_y := (a.y + b.y) * 0.5
 	var channel_ys := []
-	for rect in _current_obstacles():
+	for rect in nearby:
 		channel_ys.append(rect.position.y - CLEARANCE * 0.5)
 		channel_ys.append(rect.end.y + CLEARANCE * 0.5)
 	channel_ys.sort_custom(func(p, q): return absf(p - middle_y) < absf(q - middle_y))
@@ -430,8 +587,8 @@ func _orthogonal_candidates(a: Vector2, b: Vector2) -> Array:
 	# candidates must be examined before the next horizontal channel is even tried — and
 	# the channel matters far more than the exact turn, so spending the budget on rows
 	# rather than on columns finds a clear route much sooner.
-	var leaving := _vertical_channels(start.x, low, high).slice(0, 2)
-	var arriving := _vertical_channels(finish.x, low, high).slice(0, 2)
+	var leaving := _vertical_channels(start.x, low, high, nearby).slice(0, 2)
+	var arriving := _vertical_channels(finish.x, low, high, nearby).slice(0, 2)
 	if leaving.is_empty():
 		leaving = [start.x]
 	if arriving.is_empty():
@@ -449,7 +606,8 @@ func _orthogonal_candidates(a: Vector2, b: Vector2) -> Array:
 
 ## How many obstacles a path crosses. Zero means clear; the count is used to pick the
 ## least bad route when a dense patch leaves no clear one at all.
-func _blocked_count(points: PackedVector2Array, ignore: Array[Rect2]) -> int:
+func _blocked_count(points: PackedVector2Array, ignore: Array[Rect2],
+		seen: Array[Rect2] = []) -> int:
 	var obstacles := _current_obstacles()
 	var blocked := 0
 	for i in range(points.size() - 1):
@@ -458,6 +616,12 @@ func _blocked_count(points: PackedVector2Array, ignore: Array[Rect2]) -> int:
 				continue
 			if _segment_hits_rect(points[i], points[i + 1], rect):
 				blocked += 1
+				# Goal 3: an obstacle that turned a candidate down had a say in the
+				# outcome, so it counts as consulted even though it never offered a
+				# corner. Recorded rather than inferred, because "it cannot have
+				# mattered" is precisely the claim this pass has been wrong about twice.
+				if not seen.has(rect):
+					seen.append(rect)
 	return blocked
 
 
@@ -478,40 +642,179 @@ func _route(a: Vector2, b: Vector2) -> PackedVector2Array:
 		return _route_cache[key]
 
 	var own := _own_rects(a, b)
-	var result: PackedVector2Array
 
+	# Routing goal 3D: a legal route is not re-decided.
+	#
+	# > **If a cable's endpoints did not move and its existing path is still legal against
+	# > the obstacles as they now stand, that path is kept exactly.**
+	#
+	# The key is built from the two endpoints, so "endpoints did not move" is not a test
+	# this has to perform — a cable whose ports moved asks a different question and gets a
+	# fresh answer.
+	#
+	# Goal 3C measured why this is worth doing. Twenty-six of babble's forty-two reroutes
+	# and thirteen of the dense fixture's forty-four left the old route completely valid;
+	# the router simply preferred another one. The loudest case in the whole programme was
+	# one of them: a cable rewritten end to end, keeping three per cent of its old path, to
+	# come out forty units shorter. There is no optimisation worth having in that, and the
+	# cheapest way to stop doing it is not to rank at all when nothing is wrong.
+	#
+	# Legality is judged against **every** obstacle, not the relevant set — the same rule
+	# `_blocked_count` has always followed, and the reason a kept route cannot be stale in
+	# any way that matters. A route that has become blocked falls straight through to the
+	# router below and is computed exactly as it would have been today.
+	if _route_kept.has(key):
+		var kept: PackedVector2Array = _route_kept[key]
+		if kept.size() > 1 and _blocked_count(kept, own) == 0:
+			routes_retained += 1
+			_route_cache[key] = kept
+			_route_clear[key] = 0
+			return kept
+		elif kept.size() > 1:
+			routes_refused += 1
+
+	var nearby := _relevant_obstacles(a, b)
+	var rejected: Array[Rect2] = []
+	var result := _route_among(a, b, own, nearby, rejected)
+
+	# Goal 3, the closing step: an obstacle the finished route runs alongside was relevant
+	# after all, whatever the envelope thought before the route existed.
+	#
+	# The envelope is drawn between the two ports, and a route is not obliged to stay in it
+	# — the horizontal family takes its channel from an obstacle's edge and can leave the
+	# box entirely. So locality by envelope alone left a residue: two cables on the dense
+	# fixture still moved when a node they pass within twenty-two and a hundred and eleven
+	# units of was nudged, which is close rather than remote, and the contract does not
+	# have a "close enough to ignore" clause.
+	#
+	# One extra pass, and only when the first result actually ran beside something
+	# unconsulted, so the common case still routes once.
+	var missed := _beside_unconsulted(result, nearby)
+	if not missed.is_empty():
+		for rect: Rect2 in missed:
+			nearby.append(rect)
+		result = _route_among(a, b, own, nearby, rejected)
+
+	# What this route was actually allowed to see, published beside the route itself.
+	#
+	# The invariant goal 3 exists to establish — an obstacle the router did not consult
+	# cannot change what it produces — is only checkable against the set the router really
+	# used, and that is not `_relevant_obstacles` alone once the validation pass above can
+	# add to it. A harness that asked the opening set instead would report violations that
+	# were nothing of the kind, which is exactly what the first version of it did.
+	# Both halves of "had a say": the obstacles that offered a corner, and the ones that
+	# turned a candidate down. The second half is why `_blocked_count` still sees the whole
+	# graph — a route may not be called clear because nobody looked — and it means an
+	# obstacle can legitimately influence a cable it stands well clear of, by blocking a
+	# corridor that cable would otherwise have taken. That is obstruction, not spookiness,
+	# and the invariant has to admit it or it would be asserting something untrue.
+	var say: Array[Rect2] = []
+	for rect: Rect2 in nearby:
+		say.append(rect)
+	for rect: Rect2 in rejected:
+		if not say.has(rect):
+			say.append(rect)
+	_route_consulted[key] = say
+	_route_cache[key] = result
+	_route_kept[key] = result
+	# Routing goal 4A, the semantic seam:
+	#
+	# > **A route has a validity result separate from its geometry. A least-blocked
+	# > fallback must never be reported as legal merely because it is the best candidate
+	# > found.**
+	#
+	# `_route_among` keeps its least-blocked candidate when nothing is clear, and hands it
+	# back looking exactly like a success. During a drag that happens for 7.5% of cables on
+	# the hostile fixture, and no resting measurement can see it — trespass reads zero on
+	# every fixture at rest. Nothing changes about what is returned yet; what changes is
+	# that the answer now carries whether it is one.
+	_route_clear[key] = _blocked_count(result, own)
+	return result
+
+
+## The obstacles the last route between these two points was built from.
+##
+## Empty when the pair has not been routed this frame; both this and `_route_cache` are
+## cleared whenever the obstacle list is rebuilt, so neither can outlive its geometry.
+func consulted_for(a: Vector2, b: Vector2) -> Array[Rect2]:
+	_current_obstacles()
+	var key := "%.1f,%.1f>%.1f,%.1f" % [a.x, a.y, b.x, b.y]
+	if not _route_consulted.has(key):
+		_route(a, b)
+	var out: Array[Rect2] = []
+	for rect: Rect2 in _route_consulted.get(key, []):
+		out.append(rect)
+	return out
+
+
+## The route among a given set of obstacles, which is the whole of the old `_route`.
+##
+## Split out so the relevance decision above can be made twice without the body being
+## written twice — the near-copy this repository keeps catching itself making.
+func _route_among(a: Vector2, b: Vector2, own: Array[Rect2],
+		nearby: Array[Rect2], seen: Array[Rect2] = []) -> PackedVector2Array:
 	var smooth := _smooth_curve(a, b)
 	if _path_is_clear(smooth, own):
-		result = smooth
-	else:
-		var best: PackedVector2Array
-		var best_blocked := 1 << 30
-		var best_length := INF
-		var examined := 0
+		return smooth
 
-		# Candidates arrive best-first, so the first clear one wins and the search stops
-		# there. Scoring the rest only matters when a dense patch leaves nothing clear at
-		# all, where the least-blocked route still reads better than a line through three
-		# nodes — and even then the search is capped, because this runs per cable per frame.
-		for candidate in _orthogonal_candidates(a, b):
-			var simplified := _simplify(candidate)
-			var blocked := _blocked_count(simplified, own)
-			if blocked == 0:
-				best = simplified
-				best_blocked = 0
-				break
-			var length := _path_length(simplified)
-			if blocked < best_blocked or (blocked == best_blocked and length < best_length):
-				best_blocked = blocked
-				best_length = length
-				best = simplified
-			examined += 1
-			if examined >= MAX_CANDIDATES:
-				break
-		result = _chamfer(best) if not best.is_empty() else smooth
+	var best: PackedVector2Array
+	var best_blocked := 1 << 30
+	var best_length := INF
+	var examined := 0
 
-	_route_cache[key] = result
-	return result
+	# Candidates arrive best-first, so the first clear one wins and the search stops
+	# there. Scoring the rest only matters when a dense patch leaves nothing clear at
+	# all, where the least-blocked route still reads better than a line through three
+	# nodes — and even then the search is capped, because this runs per cable per frame.
+	#
+	# `_blocked_count` is deliberately still asked about **every** obstacle in the graph.
+	# Goal 3 narrowed which obstacles may *suggest* a corner; narrowing which ones a
+	# candidate is *tested* against would let a route be called clear because nobody
+	# looked, which is a far worse defect than the one being fixed.
+	for candidate in _orthogonal_candidates(a, b, nearby):
+		var simplified := _simplify(candidate)
+		var blocked := _blocked_count(simplified, own, seen)
+		if blocked == 0:
+			return _chamfer(simplified)
+		var length := _path_length(simplified)
+		if blocked < best_blocked or (blocked == best_blocked and length < best_length):
+			best_blocked = blocked
+			best_length = length
+			best = simplified
+		examined += 1
+		if examined >= MAX_CANDIDATES:
+			break
+	return _chamfer(best) if not best.is_empty() else smooth
+
+
+## Obstacles this route passes close to that were not in the set it was built from.
+##
+## "Close" is the router's own `CLEARANCE`, the distance at which it already considers an
+## obstacle to be interfering. Nothing new is chosen.
+func _beside_unconsulted(points: PackedVector2Array,
+		nearby: Array[Rect2]) -> Array[Rect2]:
+	var missed: Array[Rect2] = []
+	if points.size() < 2:
+		return missed
+	var box := Rect2(points[0], Vector2.ZERO)
+	for point: Vector2 in points:
+		box = box.expand(point)
+	for rect: Rect2 in _current_obstacles():
+		if not box.grow(CLEARANCE).intersects(rect):
+			continue
+		var known := false
+		for seen: Rect2 in nearby:
+			if seen.position.is_equal_approx(rect.position) \
+					and seen.size.is_equal_approx(rect.size):
+				known = true
+				break
+		if known:
+			continue
+		for i in range(points.size() - 1):
+			if _segment_hits_rect(points[i], points[i + 1], rect.grow(CLEARANCE)):
+				missed.append(rect)
+				break
+	return missed
 
 
 func _route_through(a: Vector2, b: Vector2, waypoint: Vector2) -> PackedVector2Array:
@@ -522,7 +825,17 @@ func _route_through(a: Vector2, b: Vector2, waypoint: Vector2) -> PackedVector2A
 	var joined := PackedVector2Array(first)
 	for i in range(1, second.size()):
 		joined.append(second[i])
-	return _simplify(joined)
+	var whole := _simplify(joined)
+	# Goal 4A's seam, closed for the waypoint path.
+	#
+	# Without this, `route_blocked_count(a, b)` would find nothing published for the pair
+	# and route it directly to answer — ignoring the waypoint, and describing the validity
+	# of a route the user is not looking at. Two halves that are each clear can also be
+	# blocked once joined and simplified, so the answer is measured on the finished shape
+	# rather than inferred from the pieces.
+	_route_clear["%.1f,%.1f>%.1f,%.1f" % [a.x, a.y, b.x, b.y]] = _blocked_count(
+		whole, _own_rects(a, b))
+	return whole
 
 
 # ---------------------------------------------------------------------------------
@@ -541,9 +854,63 @@ func _get_connection_line(from_position: Vector2, to_position: Vector2) -> Packe
 	if cable_style == Rack.CableStyle.CATENARY:
 		var span := absf(b.x - a.x)
 		var sag := clampf(span * Rack.SAG_FRACTION, Rack.SAG_MIN, Rack.SAG_MAX)
+		# Goal 6: each cable hangs its own way, deterministically.
+		#
+		# Sag was a pure function of span, so eight equal spans hung eight identical
+		# curves — the bundle read as one cable duplicated, which no real loom does.
+		# The variation is seeded from the endpoints, so a cable keeps its exact hang
+		# across every redraw and every relaunch, and re-rolls only when its ends
+		# actually move. Amplitudes are the approved conservative set: ±5% depth, ±3%
+		# midpoint bias, ±3° of endpoint tangent — cousins, not siblings.
+		var weave := RandomNumberGenerator.new()
+		# Seeded from the endpoints quantised to a 4px grid, not from raw floats: port
+		# positions carry sub-pixel layout jitter between runs, and a seed built from
+		# the raw values re-rolled one cable's hang from launch to launch — caught by
+		# rendering the candidate twice and diffing, which is what "deterministic" has
+		# to mean to be worth claiming. A cable re-rolls only when its ends actually
+		# move somewhere.
+		weave.seed = hash("%d:%d:%d:%d" % [roundi(a.x / 4.0), roundi(a.y / 4.0),
+			roundi(b.x / 4.0), roundi(b.y / 4.0)])
+		sag *= 1.0 + (weave.randf() * 2.0 - 1.0) * 0.05
+		var bias := (weave.randf() * 2.0 - 1.0) * 0.03
+		var lean_a := tan(deg_to_rad((weave.randf() * 2.0 - 1.0) * 3.0))
+		var lean_b := tan(deg_to_rad((weave.randf() * 2.0 - 1.0) * 3.0))
+		# Goal 7: adjacent occupied sockets release in alternating directions, so two
+		# cables leaving neighbouring jacks are pushed apart for their first stretch
+		# instead of fusing into one two-tone rail.
+		#
+		# Structured, not random. Goal 6's jitter is blind to neighbours and can hand
+		# two adjacent cables the same lean, which is exactly how the chartreuse came
+		# to ride under the amber. This alternates down each column of occupied
+		# anchors, so vertical neighbours are guaranteed to diverge rather than likely
+		# to.
+		#
+		# Its own term with its own falloff rather than an addition to Goal 6's lean,
+		# for two reasons found by reading the first attempt back. Added, it could be
+		# cancelled: ±4 structured on top of ±3 random leaves a worst case where two
+		# neighbours differ by two degrees instead of eight, which is a guarantee in
+		# name only. And it would have inherited the quarter-span falloff, reaching a
+		# quarter of the way down a cable — Goal 7 is the departure region and nothing
+		# else, so this fades over an eighth and the approved curve owns the rest.
+		var splay_a := _departure_sign(a) * tan(deg_to_rad(5.0))
+		var splay_b := _departure_sign(b) * tan(deg_to_rad(5.0))
 		var hung := Rack.catenary(a, b, sag)
 		var hung_scaled := PackedVector2Array()
-		for point in hung:
+		var last := maxi(hung.size() - 1, 1)
+		for index in hung.size():
+			var point: Vector2 = hung[index]
+			var t := float(index) / float(last)
+			# The apex drifts sideways by the bias; the ends stay planted.
+			point.x += bias * span * sin(PI * t)
+			# The tangent lean: a small vertical shear near each end, fading out a
+			# quarter of the way along, so the cable leaves its socket at its own
+			# angle and rejoins the family curve by mid-drape.
+			point.y += lean_a * (point.x - a.x) * maxf(0.0, 1.0 - t / 0.25)
+			point.y += lean_b * (point.x - b.x) * maxf(0.0, 1.0 - (1.0 - t) / 0.25) * -1.0
+			# The departure splay, over an eighth of the span: separation exactly where
+			# two cables would otherwise leave as one, and gone before the drape.
+			point.y += splay_a * (point.x - a.x) * maxf(0.0, 1.0 - t / 0.125)
+			point.y += splay_b * (point.x - b.x) 				* maxf(0.0, 1.0 - (1.0 - t) / 0.125) * -1.0
 			hung_scaled.append(point * scale)
 		return hung_scaled
 
@@ -584,8 +951,11 @@ func _connection_at(point: Vector2) -> Dictionary:
 	var scale := zoom if zoom > 0.0 else 1.0
 	var reach := GRAB_DISTANCE / scale
 	var best := {}
-	var best_distance := reach
+	var best_distance := INF
 
+	# In draw order, because draw order is the crossing priority: where a cord crosses one
+	# already down, this one is over and the knockout is cut in the lower. Iterating the
+	# same way lets the tie below mean "the upper strand".
 	for connection in connections:
 		var ends := _endpoints(connection)
 		if ends.is_empty():
@@ -594,45 +964,28 @@ func _connection_at(point: Vector2) -> Dictionary:
 		# the click there would make disconnecting impossible.
 		if point.distance_to(ends[0]) < STUB or point.distance_to(ends[1]) < STUB:
 			continue
-		var fields := _connection_fields(connection)
-		var key := connection_key(fields[0], fields[1], fields[2], fields[3])
-		var stored = waypoints.get(key)
-		var route := _route_through(ends[0], ends[1], stored) if stored != null \
-			else _route(ends[0], ends[1])
+		var route := display_path(connection)
+		var nearest := INF
 		for i in range(route.size() - 1):
 			var closest := Geometry2D.get_closest_point_to_segment(point, route[i], route[i + 1])
-			var distance := point.distance_to(closest)
-			if distance < best_distance:
-				best_distance = distance
-				best = connection
+			nearest = minf(nearest, point.distance_to(closest))
+		if nearest > reach:
+			continue
+		# Clearly nearer wins outright. Within a hair of the incumbent the two cables are
+		# passing through the same place — a crossing — and there the pointer has to agree
+		# with the picture, which says the later-drawn strand is on top.
+		if best.is_empty() or nearest < best_distance - PICK_TIE:
+			best_distance = nearest
+			best = connection
+		elif nearest < best_distance + PICK_TIE:
+			best_distance = minf(nearest, best_distance)
+			best = connection
 	return best
 
 
 func _gui_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	if button != null and button.button_index == MOUSE_BUTTON_LEFT:
-		if button.pressed:
-			var chips := _case_chip_rects()
-			# Turn the device over. The graph is its insides and the face is what a
-			# player holds, and they are the same container — so the flip lives on the
-			# container, in the same place on both sides. The other two are modes, and
-			# they sit beside it because they answer the same question.
-			if (chips.get("face_view", Rect2()) as Rect2).has_point(button.position):
-				case_flipped.emit()
-				accept_event()
-				return
-			if (chips.get("face_edit", Rect2()) as Rect2).has_point(button.position):
-				case_face_edit_toggled.emit()
-				accept_event()
-				return
-			if (chips.get("schematic", Rect2()) as Rect2).has_point(button.position):
-				case_schematic_toggled.emit()
-				accept_event()
-				return
-			if (chips.get("graph", Rect2()) as Rect2).has_point(button.position):
-				case_graph_requested.emit()
-				accept_event()
-				return
 		# The band is a handle only when there is something under it to move. While a
 		# mount is up the nodes are hidden, and dragging the band would shift nodes
 		# nobody can see - an edit, with an undo step, from a gesture that looks like
@@ -660,12 +1013,20 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 			return
 		if button.pressed:
+			# Where a press on a socket began. GraphEdit owns port presses — it starts a
+			# connection drag from them — so the only thing left to notice here is a press
+			# that went nowhere, which is a click.
+			_port_press_at = button.position if focus_port != "" else Vector2.INF
 			var point := _to_graph(button.position)
 			var connection := _connection_at(point)
 			if not connection.is_empty():
 				var fields := _connection_fields(connection)
 				_dragging_key = connection_key(fields[0], fields[1], fields[2], fields[3])
 				_drag_connection = connection
+				# Goal 4: a press that never travels is a click, and a click on a cable
+				# locks the focus on it. The same distinction the case band already makes
+				# between being dragged and being chosen.
+				_cable_press_at = button.position
 				cable_drag_started.emit()
 				accept_event()
 				return
@@ -680,12 +1041,28 @@ func _gui_input(event: InputEvent) -> void:
 				_canvas_press_at = button.position
 		elif _dragging_key != "":
 			var fields := _connection_fields(_drag_connection)
-			waypoint_changed.emit(fields[0], fields[1], fields[2], fields[3],
-				waypoints.get(_dragging_key))
+			if _cable_press_at.x != INF 					and button.position.distance_to(_cable_press_at) < 4.0:
+				# A click. Locking is a toggle, so the same gesture that pinned a route
+				# lets it go — a lock you can only clear by finding empty canvas is a
+				# mode, and this is not meant to be one.
+				var already: Array = _connection_fields(locked_cable) 					if not locked_cable.is_empty() else []
+				locked_port = ""
+				locked_cable = {} if already == fields else _drag_connection.duplicate()
+				queue_redraw()
+			else:
+				waypoint_changed.emit(fields[0], fields[1], fields[2], fields[3],
+					waypoints.get(_dragging_key))
+			_cable_press_at = Vector2.INF
 			_dragging_key = ""
 			_drag_connection = {}
 			accept_event()
 			return
+		elif _port_press_at.x != INF and focus_port != "" 				and button.position.distance_to(_port_press_at) < 4.0:
+			# A click on a socket pins the family plugged into it, which for an output is
+			# the fan-out. GraphEdit will have started and cancelled its own connection
+			# drag on the way past, which is harmless.
+			lock_focus_on_port(focus_port)
+			_port_press_at = Vector2.INF
 		elif _canvas_press_at.x != INF:
 			# A click on the room you are standing in chooses the room: the canvas is
 			# the inside of the container, so clicking its empty floor lands where
@@ -694,6 +1071,9 @@ func _gui_input(event: InputEvent) -> void:
 			# rubber band still ends however it ends.
 			if button.position.distance_to(_canvas_press_at) < 4.0:
 				case_selected.emit()
+				# The floor is where a focus is let go, which is the gesture everybody
+				# already has for "never mind".
+				clear_focus_lock()
 			_canvas_press_at = Vector2.INF
 
 	# Right-clicking a cable straightens it again — an escape hatch from a bad drag that
@@ -832,13 +1212,71 @@ class CrossingOverlay extends Control:
 			graph._draw_crossings(self)
 
 
+## Bumped whenever a node is repainted, so overlays that draw from the panel styles
+## know to look again. The view fingerprint cannot see paint: a repaint moves no node
+## and changes no count.
+var paint_stamp := 0
+
+
+## Which way a cable leans as it leaves its socket: +1, -1, alternating down each
+## column of occupied anchors, or 0 for an anchor the map has not seen. Rebuilt by the
+## cord layer before it draws, keyed by the same 4px quantisation the hang seed uses —
+## deterministic by construction, since the anchors are sorted before signs are dealt.
+var _departure_signs: Dictionary = {}
+
+
+func _departure_sign(at: Vector2) -> float:
+	return float(_departure_signs.get("%d:%d" % [roundi(at.x / 4.0),
+		roundi(at.y / 4.0)], 0))
+
+
+## Deals the alternating signs. Anchors are grouped by their column (the node edge they
+## sit on) and sorted top to bottom, so vertical neighbours always draw opposite leans
+## — which is the entire point: divergence between adjacent departures is guaranteed,
+## not probable.
+func _rebuild_departure_signs() -> void:
+	_departure_signs.clear()
+	var columns: Dictionary = {}
+	for connection in get_connection_list():
+		for side in 2:
+			var widget := get_node_or_null(NodePath(str(
+				connection["from_node" if side == 0 else "to_node"]))) as GraphNode
+			if widget == null:
+				continue
+			var port := int(connection["from_port" if side == 0 else "to_port"])
+			var local: Vector2 = widget.get_output_port_position(port) if side == 0 				else widget.get_input_port_position(port)
+			var anchor: Vector2 = widget.position_offset + local
+			var column := "%d" % roundi(anchor.x / 4.0)
+			if not columns.has(column):
+				columns[column] = []
+			(columns[column] as Array).append(anchor)
+	for column in columns:
+		var anchors: Array = columns[column]
+		anchors.sort_custom(func(p1: Vector2, p2: Vector2) -> bool: return p1.y < p2.y)
+		for index in anchors.size():
+			var anchor: Vector2 = anchors[index]
+			_departure_signs["%d:%d" % [roundi(anchor.x / 4.0),
+				roundi(anchor.y / 4.0)]] = 1 if index % 2 == 0 else -1
+
+
 ## Cheap summary of everything the crossing marks depend on.
 func _view_fingerprint() -> String:
 	var parts := PackedStringArray()
 	parts.append("%.2f,%.1f,%.1f,%d" % [zoom, scroll_offset.x, scroll_offset.y,
 		detail_mode])
 	parts.append(str(connections.size()))
-	parts.append(str(waypoints.size()))
+	parts.append(str(paint_stamp))
+	# The hash, not the size: dragging a waypoint changes a value without changing the
+	# count, and a cord that lags its own route during the drag looks broken in the
+	# hand.
+	parts.append(str(waypoints.hash()))
+	# What the pointer is asking about. The cord layer redraws off this fingerprint, so a
+	# focus the fingerprint does not mention is a focus that arrives one unrelated edit
+	# later — which is the whole of the treatment failing to appear.
+	parts.append(focus_port)
+	parts.append(str(hovered_cable.hash()))
+	parts.append(locked_port)
+	parts.append(str(locked_cable.hash()))
 	for child in get_children():
 		if child is GraphNode:
 			parts.append("%s:%.0f,%.0f,%.0f,%.0f" % [child.name,
@@ -869,6 +1307,53 @@ var hovered_port: Dictionary = {}
 ## that is the only thing anybody wanted to know, which is why following one by eye is
 ## the gesture this view asks for most and supports least.
 var hovered_cable: Dictionary = {}
+
+## Where a cable press began, so a release can tell a click from a waypoint drag.
+var _cable_press_at := Vector2.INF
+
+## And where a socket press began, for the same distinction.
+##
+## **Not verified by mouse simulation.** Headless Godot has no input routing, so this
+## gesture is checked by hand in a window rather than by the suite: what the suite holds is
+## that `lock_focus_on_port` focuses exactly the set a port hover focuses. See
+## docs/cables.md.
+var _port_press_at := Vector2.INF
+
+## The focus the reader has committed to, which outlives the pointer.
+##
+## Cable pass, goal 4, and it is a **behavioural** state and not a visual one. There is no
+## locked appearance: a locked route is drawn exactly as a hovered one, because the
+## invariant the whole pass rests on is
+##
+## > **Transient and persistent focus render identically. Persistence changes lifetime,
+## > never appearance.**
+##
+## A sixth cable channel for "this focus is pinned" would undo the discipline the last three
+## goals established. If a reader needs to know the focus is locked, that belongs somewhere
+## outside the wire.
+##
+## Model B, deliberately: **the lock is the home state and hovering previews.** Hover another
+## cable and the field re-quiets around it; take the pointer away and the locked route comes
+## back. The alternative — a lock that ignores hover — is more predictable and makes
+## comparing two routes a matter of unlocking and relocking, which is the gesture you were
+## trying to avoid.
+##
+## Cleared by Escape, by a click on empty canvas, and by the route ceasing to exist. Held
+## across zoom and pan, because it is an identity and not a position.
+var locked_cable: Dictionary = {}
+var locked_port := ""
+
+## The port the pointer is asking about, as "widget:side:index", or empty.
+##
+## Cable pass, goal 2. Separate from `hovered_cable` because the two ask different
+## questions of the field. Hovering a cable means *this connection*; hovering a port means
+## *everything plugged into this port*, which for an output is a fan-out and really is one
+## source feeding several destinations — a family, and it should read as one.
+##
+## Deliberately one connection deep. A cable graph is not a semantic signal chain: the
+## nodes in between transform things, and "light the whole downstream network" is a
+## different feature with a different meaning.
+var focus_port := ""
 
 signal port_hovered(widget_name: String, side: String, index: int)
 
@@ -1005,12 +1490,20 @@ func _nodes_within(band: Rect2) -> Array:
 	return found
 
 var _overlay: CrossingOverlay
+var _cords: CordLayer
 var _glow: GlowOverlay
 var _titles: ScreenText
+var _plugs: PlugOverlay
 var _wand_overlay: WandOverlay
 
 
 func _ready() -> void:
+	_cords = CordLayer.new()
+	_cords.graph = self
+	add_child(_cords)
+	# First among the children, so the cords go under the nodes the way the native
+	# lines do. The rest of the overlays keep their places above.
+	move_child(_cords, 0)
 	_overlay = CrossingOverlay.new()
 	_overlay.graph = self
 	add_child(_overlay)
@@ -1024,6 +1517,9 @@ func _ready() -> void:
 	_titles = ScreenText.new()
 	_titles.graph = self
 	add_child(_titles)
+	_plugs = PlugOverlay.new()
+	_plugs.graph = self
+	add_child(_plugs)
 	_wand_overlay = WandOverlay.new()
 	_wand_overlay.graph = self
 	add_child(_wand_overlay)
@@ -1092,12 +1588,37 @@ func case_box() -> Rect2:
 			return mount_box.grow_individual(0.0,
 				float(Design.scale(CASE_BAND)), 0.0, 0.0)
 		return Rect2()
-	return box.grow(float(Design.scale(Design.SPACE_L))) \
-		.grow_individual(0.0, float(Design.scale(CASE_BAND)), 0.0, 0.0)
+	# The air is part of the boundary. A module up against the perimeter makes the
+	# perimeter interact with its title bar, and two lines a few pixels apart read as one
+	# muddle rather than as a thing inside another thing — so the sides and the floor get
+	# a wider margin, and the band gets clear space under it before the first module.
+	return box.grow(float(Design.scale(Design.SPACE_XL))) \
+		.grow_individual(0.0,
+			float(Design.scale(CASE_BAND)) + float(Design.scale(Design.SPACE_M)),
+			0.0, 0.0)
 
 
 ## The band along the top of the case, where its name sits. Before UI scaling.
 const CASE_BAND := 30.0
+
+## How much of the grid survives inside the case, per tier.
+##
+## The case used to be drawn under a grid at full strength, which is the whole reason it
+## did not read as a surface: the canvas ran straight through it, so the perimeter was a
+## line somebody had drawn on the world rather than the edge of a thing standing on it.
+## The geometry still crosses the floor — a case is a sheet on the canvas, not a hole cut
+## out of it — at enough less that the eye reads three planes: world, case, module.
+const GRID_INSIDE := [0.4, 0.5, 0.6]
+
+
+## The colour the case floor is painted, an opaque step off the canvas.
+##
+## Opaque and measured, where it used to be a dark tint at 55%: a translucent floor lets
+## the canvas through, so the case and the world it sits in were the same surface with a
+## line around part of it. The step is small on purpose — five or six percent, enough to
+## be consistently different and not enough to become a card behind the modules.
+static func case_ground() -> Color:
+	return Design.SURFACES[Design.Surface.CANVAS].lightened(0.035)
 
 ## What the case is called: the instrument's name, set by main from the document. Empty
 ## draws nothing at all, which is right for a patch with no nodes in it yet — a case
@@ -1110,15 +1631,6 @@ var case_title := "":
 ## The band was clicked rather than dragged: the container itself was chosen, the way
 ## clicking a node chooses the node.
 signal case_selected
-## Somebody asked to turn the container over — wiring to face, or back.
-signal case_flipped
-## The two modes on the band. The editor owns what they mean; the graph only draws them
-## lit and says when one was pressed.
-signal case_face_edit_toggled
-signal case_schematic_toggled
-## Back to the wiring, from wherever. Not a toggle: the graph is the view everything
-## else is a departure from, so asking for it twice should mean the same as asking once.
-signal case_graph_requested
 ## The face is up: the wiring is hidden and the mounted face stands in its place. The
 ## overlays stand down while it is — cables, glows and frames describe the wiring, and
 ## the wiring is what the flip put away.
@@ -1193,91 +1705,6 @@ signal case_move_started
 signal case_moved
 
 ## The control that turns the container over, at the right-hand end of the band.
-## The controls on the case band, right-aligned, in the order they are read: what you
-## are doing to the face, then the other view, then the face itself.
-##
-## Three views and one mode, all on the band. They are the answers to "how am I looking
-## at this patch", and they were spread across a toolbar and a case until they were not.
-##
-## GRAPH is named rather than implied. It used to be reachable only by turning off
-## whichever view you were in — press SCHEMATIC again, or press a door labelled GRAPH
-## that was really FACE VIEW wearing another name — so the wiring was the one view with
-## no button of its own. Now each view has a chip, the chip says where it goes, and the
-## lit one is where you are.
-const CASE_CHIPS := ["face_edit", "graph", "schematic", "face_view"]
-const CASE_CHIP_LABELS := {
-	"face_edit": "FACE EDIT", "graph": "GRAPH",
-	"schematic": "SCHEMATIC", "face_view": "FACE VIEW",
-}
-
-
-## Fixed labels now. The door used to say GRAPH from the face and FACE VIEW from the
-## graph, which is one control with two names — readable enough until a third view
-## arrived and "the other side" stopped meaning anything.
-func _chip_label(key: String) -> String:
-	return str(CASE_CHIP_LABELS[key])
-
-
-func _chip_lit(key: String) -> bool:
-	match key:
-		"face_edit":
-			return face_edit_on
-		"schematic":
-			return schematic_on
-		"face_view":
-			return face_up
-		"graph":
-			return not face_up and not schematic_on
-	return false
-
-
-func _case_chip_rects() -> Dictionary:
-	var out: Dictionary = {}
-	var band := _case_band_rect()
-	if band.size.x <= 0.0:
-		return out
-	var font := Design.font(Design.WEIGHT_MEDIUM)
-	if font == null:
-		font = get_theme_default_font()
-	if font == null:
-		return out
-	var scale := zoom if zoom > 0.0 else 1.0
-	var text_size := int(maxf(float(Design.type(Design.SIZE_CONTROL)) * scale, 8.0))
-	var inset := band.size.y * 0.18
-	var pad := float(Design.scale(8)) * scale
-	var gap := float(Design.scale(6)) * scale
-
-	# Laid out right to left so the rightmost chip keeps its place on the band however
-	# many there are, and the band's own title keeps the left.
-	var edge := band.end.x - inset
-	for index in range(CASE_CHIPS.size() - 1, -1, -1):
-		var key: String = CASE_CHIPS[index]
-		var measured := font.get_string_size(_chip_label(key),
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, text_size)
-		var width := measured.x + pad * 2.0
-		# The strip may take the band up to whatever the title needs, and the title is
-		# only drawn on this side — the face draws its own name, centred, on itself.
-		#
-		# This was a flat quarter of the band, which cost the leftmost chip on any narrow
-		# case: the face hugs its panels now, and at 50% on first-synth that is a 256px
-		# band where three chips want 214 and the guard demanded 364. FACE EDIT was
-		# dropped by about a pixel, and the control that goes first is the one furthest
-		# from the door, which is the worst of the three to lose.
-		var reserved := inset if face_up else band.size.x * 0.25
-		if edge - width < band.position.x + reserved:
-			break
-		out[key] = Rect2(Vector2(edge - width, band.position.y + inset),
-			Vector2(width, band.size.y - inset * 2.0))
-		edge -= width + gap
-	return out
-
-
-## Kept under its old name because the flip is still the rightmost chip, and the press
-## handling and the tests both reach for it that way.
-func _case_flip_rect() -> Rect2:
-	return _case_chip_rects().get("face_view", Rect2())
-
-
 var _case_dragging := false
 var _case_drag_from := Vector2.ZERO
 var _case_drag_travel := 0.0
@@ -1319,35 +1746,38 @@ func _draw_case() -> void:
 	# so the aluminium and the title are skipped while it is up. The chips are not: they
 	# are how you leave, and the way out of a view cannot live only in the view you left.
 	if not face_up:
-		# The rack's own case colours, so the graph's boundary and the panel's are the
-		# same aluminium rather than two greys that happen to be close.
-		draw_rect(box, Color(Rack.PANEL_LOW.darkened(0.35), 0.55))
-		draw_rect(box, Rack.PANEL_EDGE, false, 1.0)
-		Rack.draw_rail(self, Rect2(box.position, Vector2(box.size.x, band)))
+		draw_rect(box, case_ground())
+
+		# The band. A shade up from the floor and a hairline under it, and nothing more:
+		# it holds the case's name, and a case is one level quieter than the modules
+		# standing in it. It used to be a rack rail, threaded strip and all, which is
+		# module-grade hardware on the thing modules sit on.
+		draw_rect(Rect2(box.position, Vector2(box.size.x, band)),
+			case_ground().lightened(0.035))
+		draw_line(box.position + Vector2(0.0, band),
+			box.position + Vector2(box.size.x, band), Color(1, 1, 1, 0.07), 1.0)
+
+		# Two values on the perimeter rather than one. A single hairline at 7% white was
+		# a rectangle you could find if you went looking; lit along the top and left,
+		# shaded down the bottom and right, it is a shallow sheet lying on the canvas.
+		# Small differences on purpose — the alternative is a group box from 1995.
+		draw_rect(box, Color(1, 1, 1, 0.14), false, 1.0)
+		draw_line(box.position + Vector2(1.0, 1.0),
+			box.position + Vector2(box.size.x - 1.0, 1.0), Color(1, 1, 1, 0.05), 1.0)
+		draw_line(box.position + Vector2(1.0, 1.0),
+			box.position + Vector2(1.0, box.size.y - 1.0), Color(1, 1, 1, 0.05), 1.0)
+		draw_line(box.position + Vector2(1.0, box.size.y - 1.0),
+			box.end - Vector2(1.0, 1.0), Color(0, 0, 0, 0.22), 1.0)
+		draw_line(box.position + Vector2(box.size.x - 1.0, 1.0),
+			box.end - Vector2(1.0, 1.0), Color(0, 0, 0, 0.22), 1.0)
+
 		draw_string(font, box.position + Vector2(float(Design.scale(Design.SPACE_M)),
 			band * 0.72), case_title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 			text_size, Design.INK_SECOND)
 
-	# The chips. Face view is a door — press it and you are somewhere else — while the
-	# other two are modes you are either in or not, so those two light up when they are
-	# on and the door never does.
-	var chips := _case_chip_rects()
-	for key in chips:
-		var chip: Rect2 = chips[key]
-		if chip.size.x <= 4.0:
-			continue
-		# Lit is where you are, or which mode is on. Three of these are views and exactly
-		# one of them is always true, so there is always something lit to read.
-		var lit: bool = _chip_lit(str(key))
-		draw_rect(chip, Color(Design.ACCENT, 0.55 if lit else 0.16))
-		draw_rect(chip, Color(Design.ACCENT, 0.9 if lit else 0.55), false, 1.0)
-		var label := _chip_label(key)
-		var measured := font.get_string_size(label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, text_size)
-		draw_string(font, chip.position + Vector2((chip.size.x - measured.x) * 0.5,
-			chip.size.y * 0.5 + measured.y * 0.34), label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, text_size,
-			Design.ON_ACCENT if lit else Design.ACCENT)
+	# No chips. The band is the case's own edge and its title; how you look at the
+	# patch is chosen in one stationary switch above the canvas, the same place from
+	# every lens, which is the difference between changing rooms and changing glasses.
 
 
 func _draw() -> void:
@@ -1360,27 +1790,55 @@ func _draw() -> void:
 	var right := (scroll_offset.x + size.x) / scale
 	var bottom := (scroll_offset.y + size.y) / scale
 
+	# Where the case floor is, in screen coordinates, so the grid can cross it quietly.
+	# Zero-size when there is no case, and every line is then drawn in one piece.
+	var floor_box := Rect2()
+	if case_title != "" and not face_up:
+		var case_frame := case_box()
+		if case_frame.size.x > 0.0:
+			floor_box = Rect2(case_frame.position * scale - scroll_offset,
+				case_frame.size * scale)
+
 	# Heaviest last, so a column line is drawn over the row and snap lines that share it.
 	for tier in [
-		[grid_minor, grid_minor_colour, 1.0],
-		[grid_half_major, grid_half_major_colour, 1.0],
-		[grid_major, grid_major_colour, 2.0],
+		[grid_minor, grid_minor_colour, 1.0, GRID_INSIDE[0]],
+		[grid_half_major, grid_half_major_colour, 1.0, GRID_INSIDE[1]],
+		[grid_major, grid_major_colour, 2.0, GRID_INSIDE[2]],
 	]:
 		var step: float = tier[0]
 		if step <= 0.0 or step * scale < 5.0:
 			continue   # too dense to read at this zoom, and expensive to draw
 		var colour: Color = tier[1]
 		var width: float = tier[2]
+		var inside := Color(colour, colour.a * float(tier[3]))
 
 		var x := floorf(left / step) * step
 		while x <= right:
 			var screen := x * scale - scroll_offset.x
-			draw_line(Vector2(screen, 0.0), Vector2(screen, size.y), colour, width)
+			if floor_box.size.x > 0.0 and screen >= floor_box.position.x \
+					and screen <= floor_box.end.x:
+				draw_line(Vector2(screen, 0.0),
+					Vector2(screen, floor_box.position.y), colour, width)
+				draw_line(Vector2(screen, floor_box.position.y),
+					Vector2(screen, floor_box.end.y), inside, width)
+				draw_line(Vector2(screen, floor_box.end.y),
+					Vector2(screen, size.y), colour, width)
+			else:
+				draw_line(Vector2(screen, 0.0), Vector2(screen, size.y), colour, width)
 			x += step
 		var y := floorf(top / step) * step
 		while y <= bottom:
 			var screen := y * scale - scroll_offset.y
-			draw_line(Vector2(0.0, screen), Vector2(size.x, screen), colour, width)
+			if floor_box.size.y > 0.0 and screen >= floor_box.position.y \
+					and screen <= floor_box.end.y:
+				draw_line(Vector2(0.0, screen),
+					Vector2(floor_box.position.x, screen), colour, width)
+				draw_line(Vector2(floor_box.position.x, screen),
+					Vector2(floor_box.end.x, screen), inside, width)
+				draw_line(Vector2(floor_box.end.x, screen),
+					Vector2(size.x, screen), colour, width)
+			else:
+				draw_line(Vector2(0.0, screen), Vector2(size.x, screen), colour, width)
 			y += step
 
 
@@ -1392,19 +1850,24 @@ func _routes() -> Array:
 		if ends.is_empty():
 			continue
 		var fields := _connection_fields(connection)
-		var stored = waypoints.get(connection_key(fields[0], fields[1], fields[2], fields[3]))
-		var points := _route_through(ends[0], ends[1], stored) if stored != null \
-			else _route(ends[0], ends[1])
+		var points := routing_path(connection)
 
 		var colour := Color.WHITE
 		var from_node := get_node_or_null(NodePath(fields[0])) as GraphNode
 		if from_node != null and fields[1] < from_node.get_output_port_count():
 			colour = from_node.get_output_port_color(fields[1])
-		routes.append({"points": points, "colour": colour, "fields": fields})
+		routes.append({"points": points, "colour": colour, "fields": fields,
+			"blocked": route_blocked_count(ends[0], ends[1])})
 	return routes
 
 
 func _draw_crossings(canvas: CanvasItem) -> void:
+	# Stood down: the CordLayer draws the cables as cords and carries their crossing
+	# occlusion itself, rack-style. This pass cut the lower cable and re-laid the upper
+	# at the native line width, which against an 8px cord is a thin flat stripe laid
+	# across a fat one — the bridge itself became the artefact it existed to prevent.
+	if _cords != null:
+		return
 	var scale := zoom if zoom > 0.0 else 1.0
 	var to_local := func(point: Vector2) -> Vector2:
 		return point * scale - scroll_offset
@@ -1497,6 +1960,53 @@ func refresh_cables() -> void:
 
 func clear_waypoints() -> void:
 	waypoints.clear()
+
+
+## Whether a route is being held for this pair of endpoints, and if so how it compares.
+##
+## For the harness only. "absent" means nothing was retained under this key at all, which is
+## the interesting answer when a route changed that the router agrees was still legal.
+func retained_state(a: Vector2, b: Vector2, points: PackedVector2Array) -> String:
+	var key := "%.1f,%.1f>%.1f,%.1f" % [a.x, a.y, b.x, b.y]
+	if not _route_kept.has(key):
+		return "absent"
+	var held: PackedVector2Array = _route_kept[key]
+	if held.size() != points.size():
+		return "different"
+	for i in held.size():
+		if held[i].distance_to(points[i]) > 0.5:
+			return "different"
+	return "same"
+
+
+## How many obstacles the route between these two points runs through.
+##
+## Zero is a clear route. Anything else is the router reporting the best failure it found,
+## which is a different thing from a route and is now sayable as such.
+func route_blocked_count(a: Vector2, b: Vector2) -> int:
+	_current_obstacles()
+	var key := "%.1f,%.1f>%.1f,%.1f" % [a.x, a.y, b.x, b.y]
+	if not _route_clear.has(key):
+		_route(a, b)
+	return int(_route_clear.get(key, 0))
+
+
+## Whether the route between these two points is actually clear.
+func route_is_clear(a: Vector2, b: Vector2) -> bool:
+	return route_blocked_count(a, b) == 0
+
+
+## Drops every route kept from an earlier frame.
+##
+## Called whenever a document is loaded or rebuilt, which is what keeps goal 3D's retention
+## honest: it makes an editing session's cables stable, and it must never make two openings
+## of the same file disagree. Retention is a fact about a session; a patch file has no
+## opinion about corridors and is not going to acquire one.
+func forget_routes() -> void:
+	_route_kept.clear()
+	_route_cache.clear()
+	_route_consulted.clear()
+	_route_clear.clear()
 
 
 ## Polled rather than driven by a signal, because GraphEdit does not emit one for
@@ -2434,6 +2944,38 @@ func fit_to(bounds: Rect2) -> void:
 	centre_on(bounds)
 
 
+## Lets go of a pinned focus. One place, so Escape, the empty canvas and a rebuild cannot
+## disagree about what letting go means.
+func clear_focus_lock() -> void:
+	if locked_cable.is_empty() and locked_port == "":
+		return
+	locked_cable = {}
+	locked_port = ""
+	queue_redraw()
+
+
+## Pins the family plugged into one port. Called on a click that landed on a socket and
+## went nowhere, which GraphEdit has meanwhile treated as a connection drag it cancelled.
+func lock_focus_on_port(port: String) -> void:
+	locked_cable = {}
+	locked_port = "" if port == locked_port else port
+	queue_redraw()
+
+
+## Whether a locked route still exists. A lock is an identity rather than a position, so it
+## survives zoom and pan by construction — what it does not survive is the cable being
+## disconnected underneath it, and a stale reference would leave the field quieted around
+## nothing at all.
+func prune_focus_lock() -> void:
+	if locked_cable.is_empty():
+		return
+	var fields := _connection_fields(locked_cable)
+	for wire in get_connection_list():
+		if str(wire["from_node"]) == str(fields[0]) 				and int(wire["from_port"]) == int(fields[1]) 				and str(wire["to_node"]) == str(fields[2]) 				and int(wire["to_port"]) == int(fields[3]):
+			return
+	clear_focus_lock()
+
+
 ## Tracks which cable the pointer is over, using the same reach as picking one up, so
 ## that hovering and dragging agree about which cable is meant.
 func _update_cable_hover(local_point: Vector2) -> void:
@@ -2463,6 +3005,406 @@ func _update_cable_hover(local_point: Vector2) -> void:
 ##
 ## Any Label carrying a `screen_min` meta joins in, so marking a new piece of node text
 ## as operational is one line at the place it is built rather than a case in here.
+## The graph's cables, drawn as cords.
+##
+## GraphEdit draws its own connections as thin flat lines, which was the right grammar
+## when the rack's cables were thin flat lines too. They are cords now — a material
+## stack of shadow, dark same-hue edge, saturated body and same-hue highlight — and a
+## patch that changes weight when you change lenses reads as two patches. This layer
+## draws the same stack along the exact geometry GraphEdit routes: the same
+## _get_connection_line, so catenary, PCB lanes and dragged waypoints all keep working,
+## and the native thin line is simply painted over by the cord that follows it.
+##
+## Under the nodes, like the native lines: a cable on this canvas passes behind the
+## panels, and the sockets and landing marks sit on top of it.
+class CordLayer extends Control:
+	var graph: GraphEdit
+	var _fingerprint := ""
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		# Above GraphEdit's internal connection layer, below the nodes. Child order
+		# cannot say this — internal layers draw after every regular child, so the
+		# native line rode on top of the cord as a dark core stripe however the
+		# children were arranged. z-order can: native 0, cords 1, and every GraphNode
+		# lifted to 2 where it is built.
+		z_index = 1
+
+	func _process(_delta: float) -> void:
+		if graph == null:
+			return
+		var current: String = graph._view_fingerprint()
+		if current != _fingerprint:
+			_fingerprint = current
+			queue_redraw()
+
+	## The style this frame is drawn in. One per frame, scaled to the view: the stack's
+	## offsets and widths scale with the zoom the same way the body does, or the cord
+	## flattens back into a line the moment you step back — the exact failure this layer
+	## ends. Split out so `crossing_sites` and `_draw` cannot disagree about it.
+	func _style() -> CableArt.Style:
+		var z: float = graph.zoom if graph.zoom > 0.0 else 1.0
+		var style := CableArt.Style.new()
+		style.thickness = maxf(8.0 * z, 2.4)
+		style.edge_offset = Vector2(1.3, 1.5) * z
+		# Goal 2, same figures as the rack: one shell, two views.
+		style.body_core = 0.84
+		style.edge_darken = 0.42
+		# Goal 3, same figures as the rack: narrower, further into the light.
+		style.highlight_width = maxf(1.5 * z, 0.9)
+		style.highlight_offset = Vector2(-2.0, -2.3) * z
+		style.highlight_alpha = 0.6
+		# Goal 4, same figures as the rack — and the offset finally scales with the
+		# zoom, which it never had: the Style default (1, 2) was used unscaled, so at
+		# 50% the shadow sat proportionally twice as far from its cable.
+		style.shadow_width = 9.5 * z
+		style.shadow_alpha = 0.32
+		style.shadow_offset = Vector2(2.0, 2.8) * z
+		return style
+
+
+	## Every cord in this frame as [points in this layer's space, ink].
+	func _lay() -> Array:
+		var z: float = graph.zoom if graph.zoom > 0.0 else 1.0
+		var cords: Array = []
+		for connection in graph.get_connection_list():
+			var from_widget := graph.get_node_or_null(
+				NodePath(str(connection["from_node"]))) as GraphNode
+			var to_widget := graph.get_node_or_null(
+				NodePath(str(connection["to_node"]))) as GraphNode
+			if from_widget == null or to_widget == null \
+					or not from_widget.visible or not to_widget.visible:
+				continue
+			# Goal 2.1: through the named provider, the same one the pointer asks. The
+			# endpoints were spelt out here as well as in `_endpoints`, which is two places
+			# for one fact and exactly the seam picking fell through.
+			var local := PackedVector2Array()
+			for point: Vector2 in graph.display_path(connection):
+				local.append(point * z - graph.scroll_offset)
+			var cord_ink: Color = from_widget.get_output_port_color(
+				int(connection["from_port"]))
+			var cord_override := Rack.cable_override(
+				str(from_widget.get_meta("type", "")), int(connection["from_port"]))
+			if cord_override.a > 0.0:
+				cord_ink = cord_override
+			# The port at each end travels with the cord. Two cables leaving one output
+			# or arriving at one input meet **by design**, and a separation mark on that
+			# meeting says the opposite of what is true — which is the one thing a
+			# crossing treatment may never say. GraphEdit's own thin-line crossing pass
+			# had this exclusion; the cord layer that replaced it never did, so the
+			# clock's three-way fan-out was being marked as three crossings.
+			# What it carries, for the goal 3 type cue. Taken from the output slot, which
+			# is where the socket takes its own shape from, so the cue in the middle of a
+			# cable and the shapes at its ends cannot disagree.
+			# Two classes, because goal 3.0 found the program has two: no runtime type
+			# declares an event or note port. A slot that ever reports one is mapped to
+			# control here and the cue would be wrong — which is the point at which goal 3
+			# reopens, deliberately, rather than the cable quietly inventing a third
+			# grammar off a socket shape.
+			var carried := CableArt.SignalClass.AUDIO
+			if from_widget.get_output_port_type(int(connection["from_port"])) != 0:
+				carried = CableArt.SignalClass.CONTROL
+			cords.append([local, cord_ink,
+				"%s:%d" % [str(connection["from_node"]), int(connection["from_port"])],
+				"%s:%d" % [str(connection["to_node"]), int(connection["to_port"])],
+				"%s:%d>%s:%d" % [str(connection["from_node"]),
+					int(connection["from_port"]), str(connection["to_node"]),
+					int(connection["to_port"])], carried])
+		return cords
+
+
+	## Whether two cords meet because they share a port rather than because they cross.
+	##
+	## Routing goal 1.1: the rule itself now lives in `CableCrossings`, which is what the
+	## harness asks too. Kept as a name here because it reads at the call sites, but it is
+	## no longer a second copy of the decision.
+	func _joined(a: Array, b: Array) -> bool:
+		return CableCrossings._shares_port(a, b)
+
+
+	## Every meeting in this frame, classified once.
+	##
+	## The single place the renderer and the harness now agree, and the reason goal 1.1
+	## exists: `_draw`, `crossing_sites` and `route_baseline.gd` were three enumerations of
+	## the same idea, and enumerations drift. This one is handed the geometry rather than
+	## fetching it, so a caller cannot quietly classify a different drawing than the one it
+	## is about to paint.
+	func _classified(cords: Array) -> Array:
+		return CableCrossings.classify(cords)
+
+
+	func _draw() -> void:
+		if graph == null or graph.face_up:
+			return
+		graph._rebuild_departure_signs()
+		var style := _style()
+		var cords := _lay()
+
+		# Drawn in connection order, and that order is the whole of the crossing priority:
+		# where a cord crosses one already down, this one is over. Deterministic — the
+		# file's order and nothing else — so crossings never reshuffle underfoot, and
+		# nothing semantic is invented about which cable deserves to be on top.
+		#
+		# The ground a knockout is cut in, taken from the theme so it keeps matching the
+		# canvas rather than being a constant that drifts out of step with it.
+		var ground: Color = graph.get_theme_color("bg", "GraphEdit") \
+			if graph.has_theme_color("bg", "GraphEdit") else Color(0.13, 0.14, 0.17)
+		# Goal 2: what the pointer is asking about, and therefore which cords get quieter.
+		# Nothing focused is the ordinary case and costs nothing — every cord stays at 1.0
+		# and the graph is exactly what it was.
+		var focused := _focus_of(cords)
+
+		# The canvas a suppressed cord is mixed toward. The same colour a knockout is cut
+		# in, because they are the same fact: this is what is behind a cable.
+		style.ground = ground
+		# Every crossing on every cord, before any of them is drawn. A type cue has to keep
+		# clear of a knockout, and a cord meets cables both above and below it — gathering
+		# these inside the drawing loop would only ever find half of them, so the last
+		# cable in the file would dodge nothing.
+		#
+		# One classification for the frame, and it is the same call the harness makes.
+		# What the two lists below want out of it differs, and that difference used to be
+		# spelt out twice in slightly different code: the type cue dodges every meeting the
+		# port rule does not excuse, while the crossing treatment also honours the
+		# same-colour rule, and only one of those two facts was visible at the call site.
+		var classified := _classified(cords)
+		var near_crossings := {}
+		for meeting: Dictionary in classified:
+			if str(meeting["reason"]) == "shared_port" \
+					or not bool(meeting["seen_by_cable_art"]):
+				continue
+			for who: int in [int(meeting["over_index"]), int(meeting["under_index"])]:
+				if not near_crossings.has(who):
+					near_crossings[who] = PackedVector2Array()
+				near_crossings[who].append(meeting["at"])
+
+		# The meetings that get a mark, gathered by the cord that is over. Same colour only,
+		# when that is the rule: the measured defect is two identical strands, and a
+		# treatment on a mint-over-blue crossing is ink spent on a case the colours already
+		# answer. That rule lives in the classifier now; what arrives here has had it applied.
+		var marked := {}
+		for meeting: Dictionary in classified:
+			if not bool(meeting["rendered"]) or not bool(meeting["seen_by_cable_art"]):
+				continue
+			var who := int(meeting["over_index"])
+			if not marked.has(who):
+				marked[who] = []
+			(marked[who] as Array).append(meeting)
+
+		for index in cords.size():
+			var entry: Array = cords[index]
+			var meetings: Array = []
+			for meeting: Dictionary in marked.get(index, []):
+				var at: Vector2 = meeting["at"]
+				meetings.append(at)
+				match CableArt.crossing_style:
+					CableArt.Crossing.HALO:
+						CableArt.draw_crossing_shadow(self, entry[0], at, style)
+					CableArt.Crossing.KNOCKOUT:
+						CableArt.draw_crossing_knockout(self,
+							cords[int(meeting["under_index"])][0], at, style, ground)
+			var drawn: PackedVector2Array = entry[0]
+			if CableArt.crossing_style == CableArt.Crossing.BUMP:
+				drawn = CableArt.bumped(drawn, meetings, style)
+			# The focused cable is drawn at its ordinary resting appearance. Focus works
+			# because the noise leaves, not because the chosen route shouts.
+			var lit: bool = focused.is_empty() or focused.has(entry[4])
+			style.prominence = 1.0 if lit else CableArt.suppression
+			# Goal 3. The class decides the cadence; the exclusions decide where it may
+			# fall. Both ends go in the avoid list along with the crossings: the ends
+			# belong to the sockets and the plugs, which say the same thing better.
+			style.signal_class = int(entry[5])
+			var avoid: PackedVector2Array = near_crossings.get(index,
+				PackedVector2Array()).duplicate()
+			var route: PackedVector2Array = entry[0]
+			avoid.append(route[0])
+			avoid.append(route[route.size() - 1])
+			style.cue_avoid = avoid
+			CableArt.draw_cable(self, drawn, entry[1], style)
+			style.prominence = 1.0
+			style.cue_avoid = PackedVector2Array()
+
+
+	## Which cords the pointer is asking about, by their own keys. Empty means nothing is
+	## focused, which is not the same as nothing matching — a port hover that lands on an
+	## unconnected socket suppresses nothing rather than suppressing everything.
+	func _focus_of(cords: Array) -> Dictionary:
+		var wanted := {}
+		# Transient first, locked underneath: hovering previews and the lock is home.
+		var port: String = graph.focus_port if graph.focus_port != "" else graph.locked_port
+		var cable: Dictionary = graph.hovered_cable
+		if cable.is_empty():
+			cable = graph.locked_cable
+		if graph.focus_port == "" and not graph.hovered_cable.is_empty():
+			port = ""
+		if port != "":
+			var parts: PackedStringArray = port.split(":")
+			if parts.size() == 3:
+				# An output is index 2 of a cord's key pair, an input is index 3.
+				var at := "%s:%s" % [parts[0], parts[2]]
+				var slot: int = 2 if parts[1] == "right" else 3
+				for entry in cords:
+					if entry[slot] == at:
+						wanted[entry[4]] = true
+		elif not cable.is_empty():
+			var fields: Array = graph._connection_fields(cable)
+			var key := "%s:%d>%s:%d" % [str(fields[0]), int(fields[1]),
+				str(fields[2]), int(fields[3])]
+			for entry in cords:
+				if entry[4] == key:
+					wanted[key] = true
+		return wanted
+
+	## Whether two cords are drawn in the same ink, which is what makes a crossing
+	## ambiguous in the first place.
+	func _same_ink(a: Color, b: Color) -> bool:
+		return CableCrossings._same_ink(a, b)
+
+
+	## Every crossing in this frame, in this layer's own coordinates.
+	##
+	## Public and pure so the proof sheet can find the crossings without rendering and
+	## then photograph them — the same arrangement `plug_sites` has, and for the same
+	## reason: a harness that works out where the crossings are for itself is a second
+	## implementation of `CableArt.crossings`, and it can agree with the geometry while
+	## disagreeing with what was drawn.
+	##
+	## Order is draw order, so `over` and `under` are the priority as painted.
+	##
+	## Routing goal 1.1: this reports what the layer *marks*, which is the same filter
+	## `_draw` applies with one deliberate exception. The same-colour rule is not applied
+	## here, because `crossing_sheet.gd` turns that rule on precisely to photograph the
+	## crossings it suppresses, and a sheet that could not see them would have nothing to
+	## compare. The exception is stated rather than inherited: it was previously the
+	## accidental result of two loops being written months apart.
+	func crossing_sites() -> Array:
+		var sites: Array = []
+		if graph == null or graph.face_up:
+			return sites
+		var cords := _lay()
+		for meeting: Dictionary in _classified(cords):
+			if str(meeting["reason"]) == "shared_port" \
+					or not bool(meeting["seen_by_cable_art"]):
+				continue
+			var over: Array = cords[int(meeting["over_index"])]
+			var under: Array = cords[int(meeting["under_index"])]
+			sites.append({"at": meeting["at"],
+				"same_colour": _same_ink(over[1], under[1]),
+				"over": over[1], "under": under[1],
+				# Goal 1.1. Carried through so a harness never has to work any of it out
+				# a second time, which is the whole failure this file is repairing.
+				"angle": meeting["angle"],
+				"from_over_end": meeting["from_over_end"],
+				"from_under_end": meeting["from_under_end"],
+				"traits": meeting["traits"],
+				"coincident_with_earlier": meeting["coincident_with_earlier"]})
+		return sites
+
+
+## Plugs, seated in the sockets of painted modules.
+##
+## The graph's cables are GraphEdit's own and are drawn underneath the nodes, which is
+## why a cable here could never visibly enter a jack: whatever the endpoint looked like,
+## the line stopped at the node edge and the socket icon sat on top of it. This layer
+## rides above the nodes and puts the missing hardware at every connected port — barrel,
+## collar band, strain relief — using the same CableArt the rack draws its plugs with,
+## so a plug is one object however you are looking at the patch.
+##
+## Painted modules only. An unpainted node draws its ports as flat type-shapes — the
+## graph editor's own grammar — and a moulded barrel pushed into a flat diamond mixes
+## two languages in one picture. The physical grammar arrives with the faceplate.
+class PlugOverlay extends Control:
+	var graph: GraphEdit
+	var _fingerprint := ""
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		# Above the nodes, with the titles.
+		z_index = 98
+
+	func _process(_delta: float) -> void:
+		if graph == null:
+			return
+		var current: String = graph._view_fingerprint()
+		if current != _fingerprint:
+			_fingerprint = current
+			queue_redraw()
+
+	## Everywhere a plug belongs: one entry per connected end whose module is painted.
+	## [screen position, direction away from the panel, port colour, ring colour,
+	## plate is light]. Public and pure so the suite can count them without rendering.
+	func plug_sites() -> Array:
+		var sites: Array = []
+		if graph == null or graph.face_up:
+			return sites
+		for connection in graph.get_connection_list():
+			# One ink per cable, taken at the source and worn at both ends: the collar
+			# says which cable is seated in the socket, and a diagnostic override at
+			# the output would otherwise land in a differently-coloured collar at the
+			# input, which is two claims about one cable.
+			var cable_ink := Color(0, 0, 0, 0)
+			var source := graph.get_node_or_null(
+				NodePath(str(connection["from_node"]))) as GraphNode
+			if source != null:
+				cable_ink = source.get_output_port_color(int(connection["from_port"]))
+				var override := Rack.cable_override(
+					str(source.get_meta("type", "")), int(connection["from_port"]))
+				if override.a > 0.0:
+					cable_ink = override
+			for side in 2:
+				var widget := graph.get_node_or_null(NodePath(str(
+					connection["from_node" if side == 0 else "to_node"]))) as GraphNode
+				# Every node, painted or not: the socket grammar is universal now, so
+				# its occupancy cue is too — except on a node whose ports are drawn as
+				# sockets already. There the node's own icon is the termination, drawn
+				# over the cord because a node sits above the cord layer, and a plug
+				# barrel on top of it would be the second mark saying the same thing.
+				if widget == null or not widget.visible:
+					continue
+				if bool(widget.get_meta("diagram_ports", false)):
+					continue
+				var port := int(connection["from_port" if side == 0 else "to_port"])
+				var local: Vector2 = widget.get_output_port_position(port) if side == 0 \
+					else widget.get_input_port_position(port)
+				var at: Vector2 = widget.position_offset * graph.zoom \
+					- graph.scroll_offset + local * graph.zoom
+				var colour := cable_ink
+				var skin: Dictionary = widget.get_meta("skin") \
+					if widget.has_meta("skin") else {}
+				# Away from the panel: an output projects right, an input left.
+				sites.append([at, Vector2.RIGHT if side == 0 else Vector2.LEFT, colour,
+					skin.get("ring", Rack.JACK_RING),
+					Color(skin.get("panel", Color.BLACK)).get_luminance() > 0.5])
+		return sites
+
+	func _draw() -> void:
+		if graph == null:
+			return
+		# The simplified endpoint, in place of the plug this overlay used to render.
+		# The plug earned its keep for one release and lost it: a barrel, a relief and
+		# an occlusion lip at every connected port was a miniature hardware exercise
+		# fighting the panels' flat language, and it never survived 50% as anything but
+		# a bead. The message needs two marks — the mouth filled with the cable's
+		# colour, a collar of the same colour seated in the socket ring — plus a short
+		# neck toward the cable so the emergence reads as clean rather than abrupt.
+		for site in plug_sites():
+			var at: Vector2 = site[0]
+			var ink: Color = site[2]
+			# Goal 5: two marks, and no more. The neck line and its contact dot are
+			# gone — the neck was a bridge for the old thin native line, and the cord
+			# now reaches the anchor carrying its own width and its own shadow, so the
+			# neck had become a second cable drawn over the first. What remains is the
+			# approved grammar exactly: the mouth as the cable's cut end — dark rim,
+			# lighter tube face — and the collar of the cable's colour seated in the
+			# socket ring. An occupied jack is lit; an empty one is a hole.
+			draw_circle(at, maxf(3.6 * graph.zoom, 1.8), CableArt.darken(ink, 0.35))
+			draw_circle(at, maxf(2.2 * graph.zoom, 1.1), ink.lightened(0.12))
+			draw_arc(at, maxf(5.8 * graph.zoom, 2.8), 0.0, TAU, 20, ink,
+				maxf(2.0 * graph.zoom, 1.3), true)
+
+
 class ScreenText extends Control:
 	var graph: GraphEdit
 	var _fingerprint := ""
@@ -2497,6 +3439,10 @@ class ScreenText extends Control:
 					if node.has_meta("title_label") else null
 				if title != null:
 					title.self_modulate.a = 1.0
+				var mark: Control = node.get_meta("glyph") \
+					if node.has_meta("glyph") else null
+				if mark != null:
+					mark.self_modulate.a = 1.0
 				for marked in _marked(node):
 					marked.self_modulate.a = 1.0
 			return
@@ -2506,6 +3452,20 @@ class ScreenText extends Control:
 				continue
 			_draw_title(node)
 			_draw_labels(node)
+
+	## The colour a node's title is drawn in, wherever it is drawn.
+	##
+	## Asked of the Label rather than of the styles, because the Label is what the reader
+	## sees at every other zoom: this overlay drew INK_BRIGHT regardless, so a painted
+	## module changed the colour of its own name halfway through a zoom, and on the pale
+	## faceplates the compensated title came out near-white on cream. Two drawings of one
+	## title now get their colour from one place.
+	static func title_ink(node: GraphNode) -> Color:
+		var label: Label = node.get_meta("title_label") 			if node.has_meta("title_label") else null
+		if label != null and label.has_theme_color_override("font_color"):
+			return label.get_theme_color("font_color")
+		return Design.INK_BRIGHT
+
 
 	## The title is drawn from the node rather than from its Label because the titlebar
 	## is GraphNode's own furniture: its height is what the port rows are measured from,
@@ -2517,6 +3477,15 @@ class ScreenText extends Control:
 		var label: Label = node.get_meta("title_label") if node.has_meta("title_label") else null
 		if label != null:
 			label.self_modulate.a = 0.0 if active else 1.0
+		# The identity glyph goes with it. Once the title is being drawn up here at the
+		# legibility floor, the header is a strip the width of a name and the mark has two
+		# ways to go, both wrong: over the letters, or in front of them — taking room the
+		# name needs and pushing it into its compact form earlier than it should, which is
+		# a threshold moved by a decoration. The mark belongs to the full-size header;
+		# below that, the name is the identity.
+		var mark: Control = node.get_meta("glyph") if node.has_meta("glyph") else null
+		if mark != null:
+			mark.self_modulate.a = 0.0 if active else 1.0
 		if not active:
 			return
 
@@ -2530,8 +3499,38 @@ class ScreenText extends Control:
 		var drawn := Design.screen_minimum(Design.MIN_SCREEN_NODE_TITLE)
 		var baseline := top_left + Vector2(6.0,
 			(bar_height + font.get_ascent(drawn) - font.get_descent(drawn)) * 0.5)
-		draw_string(font, baseline, _elided(font, node.title, drawn, room),
-			HORIZONTAL_ALIGNMENT_LEFT, room, drawn, Design.INK_BRIGHT)
+		draw_string(font, baseline, _name_for(node, font, drawn, room),
+			HORIZONTAL_ALIGNMENT_LEFT, room, drawn, title_ink(node))
+
+
+	## The name to draw in the room there is.
+	##
+	## The canonical name whenever it fits, at every size — a compact name is not an
+	## improvement on a name, it is what you fall back to. When it does not fit, the
+	## node's written-down compact name, if it has one.
+	##
+	## And if that does not fit either, nothing at all — for a type that has one. That is
+	## the whole pass's governing rule applied to its own last case: remove information
+	## before reducing its legibility. "Amp E…" is not an identity, it is five letters
+	## and a fault, and at the zoom where it appears the node is a symbol in a diagram
+	## whose position and cables already say which one it is. A reader who needs the name
+	## can come closer; a reader who does not should not be reading a fragment.
+	##
+	## A type with no compact name still gets cut, because for it a cut is the only thing
+	## on offer and half a name beats none. So an ellipsis in the graph now means exactly
+	## one thing: that type has not been through the pass. `optical_sheet.gd` counts them
+	## and `editor_test.gd` holds the migrated three at zero.
+	static func _name_for(node: GraphNode, font: Font, size: int, room: float) -> String:
+		if font.get_string_size(node.title, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+				size).x <= room:
+			return node.title
+		var compact := str(node.get_meta("compact_name", ""))
+		if compact == "":
+			return _elided(font, node.title, size, room)
+		if font.get_string_size(compact, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+				size).x <= room:
+			return compact
+		return ""
 
 	## Text cut to fit, with an ellipsis saying so.
 	##
@@ -2549,6 +3548,32 @@ class ScreenText extends Control:
 					size).x <= room:
 				return cut.strip_edges(false, true) + "…"
 		return "…"
+
+	## Whether both halves of a parameter cell reach the reader at this zoom.
+	##
+	## The 15B.1 rule in one function, split out for the same reason `fit_for` is: a check
+	## that works the answer out for itself is a second implementation of the rule, and it
+	## can agree with the stylesheet while the screen disagrees with both.
+	##
+	## > **A parameter cell is the unit of level-of-detail removal. Its name and its value
+	## > appear together or not at all.**
+	##
+	## Note what it does *not* do: it does not rank the halves. Both universal priorities
+	## were tried — keep the value, keep the name — and both were wrong for the same
+	## reason, which is that half a statement is not a smaller statement.
+	static func cell_reaches(row: Control, zoom: float) -> bool:
+		var name_label: Label = row.get_meta("name_label") \
+			if row.has_meta("name_label") else null
+		if name_label == null or not name_label.is_visible_in_tree():
+			return false
+		if fit_for(name_label, zoom) == Fit.NO_ROOM:
+			return false
+		for label in _marked(row):
+			if str(label.get_meta("screen_kind", "")) == "value" \
+					and label.is_visible_in_tree() \
+					and fit_for(label, zoom) == Fit.NO_ROOM:
+				return false
+		return true
 
 	## How a marked label is reaching the reader.
 	##
@@ -2658,15 +3683,34 @@ class ScreenText extends Control:
 	## too narrow to hold its text at the minimum says nothing rather than saying it over
 	## the top of its neighbour: overlapping words are worse than a band that has run out
 	## of room, and running out is what the next band down is for.
-	## A parameter row is one thing, so it is allocated as one thing.
+	## A parameter cell is one thing, so it is allocated as one thing **and removed as one
+	## thing**.
 	##
 	## Drawn independently, the name and the value competed for the same row: the value's
 	## box expands to fill what the hidden slider left, so the name was pushed back to its
 	## own 96px and "resonance" at its minimum no longer fitted — the label vanished and
-	## its number stayed, which is the orphan this whole exercise is against. Here the row
-	## is split once: name against the left edge, value against the right, both at their
-	## own minimum. If the two genuinely cannot both fit, the *value* goes, because a name
-	## with no number still says what the node has and a number with no name says nothing.
+	## its number stayed. So the row is split once: name against the left edge, value
+	## against the right, both at their own minimum.
+	##
+	## That fixed the allocation and left the removal, which step 15B measured and found
+	## still broken. When the pair genuinely would not fit, this drew whichever half it
+	## could and let the other fall through to the generic pass, which then decided it on
+	## its own — and the reader got `cutoff` with no number, or a bare `4` with no word.
+	## Twenty-eight of ninety-seven cells at Compact and thirteen at Comfortable, in both
+	## directions, across nine node types.
+	##
+	## The old comment here defended a priority — "the value goes, because a name with no
+	## number still says what the node has and a number with no name says nothing" — and
+	## that priority is the mistake. Both universal orders had already been tried and
+	## rejected elsewhere for the same reason. The unit was wrong, not the ranking:
+	##
+	## > **A parameter cell is the unit of level-of-detail removal. Its name and its value
+	## > appear together or not at all.**
+	##
+	## So both halves are marked handled and hidden up front, and nothing is drawn until
+	## the pair is known to fit. `handled` is what keeps the generic pass from resurrecting
+	## a half that this one decided against — a label left unhandled is a label the generic
+	## pass gets an independent opinion about, which is precisely how the orphans arrived.
 	func _draw_pairs(node: GraphNode, handled: Dictionary) -> void:
 		# A line, then the cells on it. This drew one pair per row because a row *was*
 		# one parameter; a row holds two now, and reading the row's own metas would
@@ -2689,19 +3733,58 @@ class ScreenText extends Control:
 		for row in cells:
 			var name_label: Label = row.get_meta("name_label") \
 				if row.has_meta("name_label") else null
-			if name_label == null or not name_label.is_visible_in_tree():
-				continue
 			var value: Label = null
 			for label in _marked(row):
 				if str(label.get_meta("screen_kind", "")) == "value" \
 						and label.is_visible_in_tree():
 					value = label
-			# Only when the row is being compensated at all; at full detail the real
+			# The verdict, recorded on the cell for anything that needs to know what the
+			# reader actually got, and stamped with the zoom it was reached at so a stale
+			# answer cannot be read as a fresh one. Split out for the same reason
+			# `fit_for` was: a test that works out the answer for itself is a second
+			# implementation of this rule, and it can agree with the stylesheet while the
+			# screen disagrees with both.
+			row.set_meta("cell_shown", true)
+			row.set_meta("cell_shown_at", graph.zoom)
+
+			# A cell whose name has already gone has no pair left to keep, and a number on
+			# its own is the worse half. It goes with it.
+			if name_label == null or not name_label.is_visible_in_tree():
+				if value != null:
+					handled[value] = true
+					value.self_modulate.a = 0.0
+				row.set_meta("cell_shown", false)
+				continue
+			# Only when the cell is being compensated at all; at full detail the real
 			# controls are on screen and must not be drawn over.
 			if fit_for(name_label, graph.zoom) == Fit.IN_PLACE \
 					and (value == null or fit_for(value, graph.zoom) == Fit.IN_PLACE):
 				continue
 
+			# The atomicity decision, and it is made **before** any layout is attempted:
+			# can each half be delivered at all, by whichever pass ends up drawing it?
+			# If not, the cell is not delivered — and that is the whole of 15B.1.
+			#
+			# Made here rather than at the exits below, because most compensated cells are
+			# not drawn by this pass at all. The generic pass in `_draw_labels` gives each
+			# label the slot between its neighbours, which is wider than the half-row this
+			# pass allocates, so it succeeds where the row split does not. Claiming every
+			# cell here and refusing the ones this pass could not lay out took ninety-one
+			# of ninety-seven parameters off the screen at 66% — an atomicity correction
+			# that had quietly become a density change, which is exactly what the brief
+			# said not to do.
+			if not cell_reaches(row, graph.zoom):
+				handled[name_label] = true
+				name_label.self_modulate.a = 0.0
+				if value != null:
+					handled[value] = true
+					value.self_modulate.a = 0.0
+				row.set_meta("cell_shown", false)
+				continue
+
+			# Both halves will reach the reader. This pass prefers to lay them out as one
+			# row — name left, value right, both at their own minimum — and hands the cell
+			# back to the generic pass, whole, when that allocation will not hold them.
 			var rect := row.get_global_rect()
 			var pad: float = 6.0 * graph.zoom
 			var span := rect.size.x - pad * 2.0
@@ -2713,7 +3796,44 @@ class ScreenText extends Control:
 			var name_width := name_font.get_string_size(name_label.text,
 				HORIZONTAL_ALIGNMENT_LEFT, -1.0, name_size).x
 			if name_width > span:
-				continue    # nothing fits; the generic pass will hide it honestly
+				continue    # the row split will not hold it; the generic pass gets both
+
+			# Everything the pair needs is settled before a single glyph is drawn. The
+			# old order drew the name and then discovered the value would not fit, which
+			# is how a name ended up standing on its own.
+			var shown := ""
+			if value != null:
+				var value_size: int = Design.screen_minimum(int(value.get_meta("screen_min", Design.TYPE_FLOOR)))
+				var value_font := value.get_theme_font("font")
+				var value_width := value_font.get_string_size(value.text,
+					HORIZONTAL_ALIGNMENT_RIGHT, -1.0, value_size).x
+				shown = value.text
+				# A gap the eye can see, so the pair reads as label-then-value rather
+				# than as one run-together word: "frequency110.0 Hz" was the first
+				# attempt.
+				if name_width + value_width + 12.0 > span:
+					# The unit goes before the number does — a redundant unit outranks
+					# nothing and a value outranks it. This is the one ranking that
+					# survives, because it is inside the value rather than across the
+					# pair: "transpose 0" still says both things.
+					var cut := shown.rfind(" ")
+					if cut <= 0:
+						continue
+					shown = shown.substr(0, cut)
+					value_width = value_font.get_string_size(shown,
+						HORIZONTAL_ALIGNMENT_RIGHT, -1.0, value_size).x
+					if name_width + value_width + 12.0 > span:
+						continue
+				# The pair holds. Claimed and hidden now, at the point where drawing it
+				# here is certain — claiming it any earlier is what took ninety-one
+				# parameters off the screen.
+				handled[value] = true
+				value.self_modulate.a = 0.0
+				draw_string(value_font, Vector2(left,
+					top + (rect.size.y + value_font.get_ascent(value_size)
+						- value_font.get_descent(value_size)) * 0.5),
+					shown, HORIZONTAL_ALIGNMENT_RIGHT, span, value_size,
+					value.get_theme_color("font_color"))
 			handled[name_label] = true
 			name_label.self_modulate.a = 0.0
 			draw_string(name_font, Vector2(left,
@@ -2721,36 +3841,6 @@ class ScreenText extends Control:
 					- name_font.get_descent(name_size)) * 0.5),
 				name_label.text, HORIZONTAL_ALIGNMENT_LEFT, span, name_size,
 				name_label.get_theme_color("font_color"))
-
-			if value == null:
-				continue
-			handled[value] = true
-			value.self_modulate.a = 0.0
-			var value_size: int = Design.screen_minimum(int(value.get_meta("screen_min", Design.TYPE_FLOOR)))
-			var value_font := value.get_theme_font("font")
-			var value_width := value_font.get_string_size(value.text,
-				HORIZONTAL_ALIGNMENT_RIGHT, -1.0, value_size).x
-			# A gap the eye can see, so the pair reads as label-then-value rather than
-			# as one run-together word: "frequency110.0 Hz" was the first attempt.
-			var shown := value.text
-			if name_width + value_width + 12.0 > span:
-				# The unit goes before the number does. That is the decluttering order —
-				# a redundant unit outranks nothing, a value outranks it — and it is the
-				# difference between "transpose 0.000" and a label sitting on its own
-				# with its number thrown away, which is the orphan this is against.
-				var cut := shown.rfind(" ")
-				if cut <= 0:
-					continue
-				shown = shown.substr(0, cut)
-				value_width = value_font.get_string_size(shown,
-					HORIZONTAL_ALIGNMENT_RIGHT, -1.0, value_size).x
-				if name_width + value_width + 12.0 > span:
-					continue
-			draw_string(value_font, Vector2(left,
-				top + (rect.size.y + value_font.get_ascent(value_size)
-					- value_font.get_descent(value_size)) * 0.5),
-				shown, HORIZONTAL_ALIGNMENT_RIGHT, span, value_size,
-				value.get_theme_color("font_color"))
 
 	func _draw_labels(node: GraphNode) -> void:
 		var handled := {}

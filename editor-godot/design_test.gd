@@ -3,6 +3,9 @@ extends SceneTree
 ## The faceplate themes. Their lettering has to be readable for the same reason the
 ## palettes' does — a panel is not decoration, it is a label you operate.
 const ModuleThemes := preload("res://module_themes.gd")
+## The graph, for the one piece of it that is a pure function on a name and a width.
+const PatchGraph := preload("res://patch_graph.gd")
+const HarnessExit := preload("res://harness_exit.gd")
 ## Checks the design system against the rules it claims to follow.
 ##
 ## A palette is a set of assertions about legibility, and assertions that nobody measures
@@ -433,8 +436,215 @@ func _initialize() -> void:
 		check(ratio >= 3.0, "%s: its jack rings read on the socket field (%.1f:1)"
 			% [ModuleThemes.display_name(str(key)), ratio])
 
+	# Every migrated type says what it is called when there is no room. Part of the
+	# contract rather than a repair applied when today's geometry happens to need one:
+	# an ellipsis in the graph means exactly one thing, a type that has not been through
+	# the pass, and that only holds if every type that has been through it can fall back
+	# to a written-down name instead of a cut. A type whose two names are the same says
+	# so explicitly.
+	for type: String in NodeIdentity.MIGRATED:
+		check(NodeIdentity.has_compact(type),
+			"%s has declared a compact name" % type)
+
+	# Identity variants stay narrow. A type may declare one discrete parameter that
+	# changes what operation it performs; every other type is keyed by type alone. This
+	# is the check that the exception has not quietly become the rule — the general
+	# version, where any moving value can drive a glyph, is how identity stops meaning
+	# identity.
+	for type: String in NodeIdentity.VARIANT:
+		var declared: Dictionary = NodeIdentity.VARIANT[type]
+		check(str(declared.get("parameter", "")) != "",
+			"%s names the parameter that drives its identity" % type)
+		check((declared.get("glyphs", []) as Array).size() >= 2,
+			"%s has a mark for more than one of its modes" % type)
+		# And the variants are all different, or the mechanism is drawing one glyph
+		# under several names and saying nothing.
+		var distinct := {}
+		for mark: int in declared["glyphs"]:
+			distinct[mark] = true
+		check(distinct.size() == (declared["glyphs"] as Array).size(),
+			"%s draws a different mark for each of them" % type)
+		# Asking for a mode the type does not have falls back rather than failing.
+		check(NodeIdentity.glyph_of(type, 99) == NodeIdentity.glyph_of(type),
+			"%s falls back to its type mark for a mode it has not got" % type)
+	check(NodeIdentity.variant_parameter("Gain") == "",
+		"and a type that declares none has none")
+
+	# Values are written the way somebody would say them. A table rather than a rule
+	# restated in a second place: these are the readings the three proving-ground nodes
+	# actually show, plus the boundaries a formatter goes wrong at — a value that is not
+	# zero and nearly is, an exact integer, a negative, a unit that changes under the
+	# value's feet, and an enumeration.
+	var readings: Array = [
+		[{"unit": "", "min": 0.0, "max": 4.0}, 0.7, "0.7"],
+		[{"unit": "", "min": 0.0, "max": 4.0}, 1.0, "1"],
+		[{"unit": "", "min": 0.0, "max": 4.0}, 0.755, "0.755"],
+		[{"unit": "", "min": 0.0, "max": 4.0}, 4.0, "4"],
+		[{"unit": "", "min": 0.0, "max": 1.0}, 0.55, "0.55"],
+		[{"unit": "", "min": 0.0, "max": 1.0}, 0.0, "0"],
+		[{"unit": "Hz", "min": 20.0, "max": 20000.0}, 900.0, "900 Hz"],
+		[{"unit": "Hz", "min": 20.0, "max": 20000.0}, 20.0, "20 Hz"],
+		[{"unit": "Hz", "min": 20.0, "max": 20000.0}, 999.0, "999 Hz"],
+		[{"unit": "Hz", "min": 20.0, "max": 20000.0}, 1000.0, "1 kHz"],
+		[{"unit": "Hz", "min": 20.0, "max": 20000.0}, 12345.0, "12.35 kHz"],
+		[{"unit": "octaves/s", "min": -20.0, "max": 20.0}, 0.0, "0 octaves/s"],
+		[{"unit": "octaves/s", "min": -20.0, "max": 20.0}, -3.5, "-3.5 octaves/s"],
+		[{"unit": "s", "min": 0.0, "max": 10.0}, 0.010, "10 ms"],
+		[{"unit": "s", "min": 0.0, "max": 10.0}, 0.250, "250 ms"],
+		[{"unit": "s", "min": 0.0, "max": 10.0}, 0.300, "300 ms"],
+		[{"unit": "s", "min": 0.0, "max": 10.0}, 0.0, "0 ms"],
+		[{"unit": "s", "min": 0.0, "max": 10.0}, 2.5, "2.5 s"],
+		# Not zero, and must not be written as though it were.
+		[{"unit": "s", "min": 0.0, "max": 10.0}, 0.0005, "0.5 ms"],
+		[{"unit": "", "min": 0.0, "max": 3.0,
+			"enum": ["lowpass", "highpass", "bandpass", "notch"]}, 2.0, "bandpass"],
+	]
+	for reading: Array in readings:
+		var got := ValueText.of(reading[0] as Dictionary, float(reading[1]))
+		check(got == str(reading[2]), "%s reads as %s%s" % [
+			JSON.stringify(reading[1]), reading[2],
+			"" if got == str(reading[2]) else " (got %s)" % got])
+
+	# What the field puts on screen has to come back as the value it came from. The
+	# gesture that has to be a no-op — open the editor, press return, change nothing —
+	# used to store ten seconds for an attack of ten milliseconds, because the display
+	# converted units and the parse did not.
+	# The property is a fixed point, not equality. A display is a rounding — "12.35 kHz"
+	# is 12345 hertz shown to the resolution the parameter earns — so re-typing it commits
+	# that rounding, and it always did. What must be true is that the reading does not
+	# *drift*: what the field shows, parsed and shown again, is the same string. That
+	# holds the unit conversion honest (ten milliseconds read back as ten seconds fails it
+	# by a factor of a thousand) without pretending a rounded display carries every bit.
+	for reading: Array in readings:
+		var descriptor: Dictionary = reading[0]
+		if descriptor.has("enum"):
+			continue
+		var shown := ValueText.of(descriptor, float(reading[1]))
+		var again := ValueText.of(descriptor,
+			ValueText.parse(descriptor, shown, shown))
+		check(again == shown, "%s reads back as itself%s"
+			% [shown, "" if again == shown else " (got %s)" % again])
+		# And with the unit rubbed out, which is what a typist does when they mean to
+		# replace the number: the unit that was on screen is the one they meant.
+		var bare := ValueText._numeric_prefix(shown)
+		var without := ValueText.of(descriptor,
+			ValueText.parse(descriptor, bare, shown))
+		check(without == shown, "%s without its unit still means %s%s"
+			% [bare, shown, "" if without == shown else " (got %s)" % without])
+
+	# The two cases the inference has to get right, and they want opposite answers. A
+	# field showing "1 kHz" handed a bare 440 means hertz; a field showing "10 ms" handed
+	# a bare 20 means milliseconds. The parameter's own range is what separates them.
+	var cutoff := {"unit": "Hz", "min": 20.0, "max": 20000.0}
+	var attack := {"unit": "s", "min": 0.0, "max": 10.0}
+	check(is_equal_approx(ValueText.parse(cutoff, "440", "1 kHz"), 440.0),
+		"440 typed over a kilohertz reading means hertz (%s)"
+			% ValueText.parse(cutoff, "440", "1 kHz"))
+	check(is_equal_approx(ValueText.parse(cutoff, "5", "1 kHz"), 5000.0),
+		"but 5 over the same reading means kilohertz (%s)"
+			% ValueText.parse(cutoff, "5", "1 kHz"))
+	check(is_equal_approx(ValueText.parse(attack, "20", "10 ms"), 0.02),
+		"20 typed over a millisecond reading means milliseconds (%s)"
+			% ValueText.parse(attack, "20", "10 ms"))
+	check(is_equal_approx(ValueText.parse(attack, "20 s", "10 ms"), 20.0),
+		"and a unit that was typed on purpose is believed (%s)"
+			% ValueText.parse(attack, "20 s", "10 ms"))
+
+	# And the cell a value lives in is sized for the longest reading the parameter can
+	# produce, not for its two ends. Stripped of trailing zeros the ends are often the
+	# *shortest* strings a parameter has, and a cell measured on them is too narrow for
+	# nearly every value it then holds — a knob that resizes its own cell while it is
+	# being turned.
+	for reading: Array in readings:
+		var descriptor: Dictionary = reading[0]
+		if descriptor.has("enum"):
+			continue
+		var room := ValueText.widest(descriptor).length()
+		check(str(reading[2]).length() <= room,
+			"%s fits the space reserved for it (%d <= %d)" % [reading[2],
+				str(reading[2]).length(), room])
+
+	# A type that has been through the pass never has its name cut. Canonical while it
+	# fits, then the written-down compact name, then nothing — the governing rule of the
+	# whole pass applied to its own last case, because five letters and an ellipsis is
+	# not an identity. An ellipsis in the graph now means exactly one thing, and this is
+	# what keeps it meaning that.
+	#
+	# Swept rather than sampled at four zooms: the cut this replaces only appeared below
+	# 0.28, which is under every zoom anybody had photographed.
+	for palette in Design.PALETTES.size():
+		Design.use_palette(palette)
+		for entry: Array in [["Amplifier", "Gain"], ["Lowpass", "StateVariableFilter"],
+				["Amp Envelope", "ADSR"]]:
+			var node := GraphNode.new()
+			node.title = str(entry[0])
+			node.set_meta("compact_name", NodeIdentity.compact_of(str(entry[1])))
+			var width := float(NodeGrid.width_for(str(entry[1])))
+			var font := Design.font(Design.WEIGHT_SEMIBOLD)
+			var pinned := Design.screen_minimum(Design.MIN_SCREEN_NODE_TITLE)
+			var cut := ""
+			for step in 36:
+				var zoom := 1.0 - float(step) * 0.025
+				var drawn := PatchGraph.ScreenText._name_for(node, font, pinned,
+					width * zoom - 12.0)
+				if drawn.ends_with("…"):
+					cut = "%s at %.3f -> %s" % [node.title, zoom, drawn]
+			check(cut == "", "%s: %s is never cut%s" % [
+				Design.PALETTE_NAMES[palette], entry[0],
+				"" if cut == "" else " (" + cut + ")"])
+			node.free()
+	Design.use_palette(Design.Palette.LAB)
+
+	# A node's title has to stay readable on every ground the state vocabulary can put
+	# under it. This is the check that caught the first warning tint: it made a handsome
+	# olive header and dropped the name to 5.3:1, under the program's own floor, on the
+	# one node the reader most needs to read.
+	for palette in Design.PALETTES.size():
+		Design.use_palette(palette)
+		for selected: bool in [false, true]:
+			for health: int in [NodeState.Health.WELL, NodeState.Health.WARNING,
+					NodeState.Health.ERROR]:
+				for hovered: bool in [false, true]:
+					var ground := NodeState.header(selected, hovered, health)
+					var ratio := Design.contrast(Design.INK_BRIGHT, ground)
+					check(ratio >= TEXT_FLOOR,
+						"%s: a node title reads on a %s%s%s header (%.1f:1)" % [
+							Design.PALETTE_NAMES[palette],
+							["well", "warned", "failing"][health],
+							" selected" if selected else "",
+							" hovered" if hovered else "", ratio])
+	Design.use_palette(Design.Palette.LAB)
+
+	# Every icon marks pixels. An icon that silently draws nothing is the tofu box in a
+	# new hat: not an error, just a rectangle of nothing where a mark should be, and
+	# nothing in the build says so. Checked at the two sizes the set is actually used
+	# at — a menu door and a node header.
+	for name: String in Icons.Kind.keys():
+		for size: int in [20, 24]:
+			var image: Image = Icons.get_icon(int(Icons.Kind[name]), size,
+				Design.INK_SECOND).get_image()
+			var inked := 0
+			for y in image.get_height():
+				for x in image.get_width():
+					if image.get_pixel(x, y).a > 0.0:
+						inked += 1
+			check(inked > 0, "%s draws something at %d (%d px)" % [name, size, inked])
+
+	# And stays inside its cell. The field is what keeps a mark from crowding the word
+	# beside it, and a glyph that reaches the edge of its box is a glyph that will touch
+	# the title on somebody else's interface scale.
+	for name: String in Icons.Kind.keys():
+		var image: Image = Icons.get_icon(int(Icons.Kind[name]), 96,
+			Design.INK_SECOND).get_image()
+		var edge := 0
+		for i in 96:
+			for pair: Array in [[i, 0], [i, 95], [0, i], [95, i]]:
+				if image.get_pixel(pair[0], pair[1]).a > 0.0:
+					edge += 1
+		check(edge == 0, "%s stays off the edge of its cell" % name)
+
 	if failures == 0:
 		print("all design checks passed")
 	else:
 		print("%d design check(s) failed" % failures)
-	quit(1 if failures > 0 else 0)
+	await HarnessExit.finish(self, null, 1 if failures > 0 else 0)
