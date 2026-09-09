@@ -52,6 +52,14 @@ if [ ! -f "$dll" ] && [ -f "runtime-godot/build/soundgraph_godot.dll" ]; then
     cp "runtime-godot/build/soundgraph_godot.dll" "$dll"
 fi
 rm -f "$dll.old" 2>/dev/null || true
+# A relink that produces the same bytes is skipped by copy_if_different, which leaves the
+# copy in editor-godot/bin wearing its old timestamp. The gate judges staleness by
+# timestamp, so a checkout that touched a source without changing the binary was being
+# refused for a DLL that was byte-identical to a fresh link. When the two are the same,
+# the copy is current and its clock should say so.
+if [ -f "runtime-godot/build/soundgraph_godot.dll" ] && cmp -s "runtime-godot/build/soundgraph_godot.dll" "$dll"; then
+    touch "$dll"
+fi
 
 if [ -n "$desktop_only" ]; then
     echo "desktop extension rebuilt (wasm skipped)"
