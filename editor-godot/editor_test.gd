@@ -9945,6 +9945,41 @@ func _initialize() -> void:
 	await process_frame
 	check(main.engine.is_loaded(), "a game sound opens as an ordinary patch")
 
+	# The sfxr shelf: one patch per generator, its six corpus rolls as presets, and a
+	# knob for exactly what the generator rolls. Turning to a page writes that roll's
+	# values through the knob path, so the coin sfxr rolled fifth is the coin the
+	# document now holds — the ctest side proves it is that coin sample for sample.
+	await main._load_example("sfxr: pickup-coin")
+	for i in 6:
+		await process_frame
+	var shelf_bank: Array = main.patch.get("presets", [])
+	var shelf_knobs: Array = main.patch.get("controls", [])
+	check(shelf_bank.size() == 6 and shelf_knobs.size() >= 6,
+		"the coin shelf carries six rolls and a knob for what the button rolls "
+			+ "(%d pages, %d knobs)" % [shelf_bank.size(), shelf_knobs.size()])
+	var shelf_names: Array = []
+	for page in shelf_bank:
+		shelf_names.append(str((page as Dictionary).get("name", "")))
+	var fourth := shelf_names.find("pickup-coin-4")
+	check(fourth >= 0, "the pages are the corpus rolls, by name (%s)" % str(shelf_names))
+	main.patch_face._turn_to(fourth)
+	for i in 8:
+		await process_frame
+	var wanted_decay := float((shelf_bank[maxi(fourth, 0)] as Dictionary)
+		.get("values", {}).get("decay", -1.0))
+	var decay_now := -1.0
+	for shelf_node in main.patch["nodes"]:
+		if str(shelf_node["id"]) == "envelope":
+			decay_now = float(shelf_node.get("parameters", {}).get("decay", -1.0))
+	check(wanted_decay > 0.0 and is_equal_approx(decay_now, wanted_decay),
+		"turning to roll four sets the envelope's decay to that roll's (%.4f vs %.4f)"
+			% [decay_now, wanted_decay])
+	var shelf_count := 0
+	for example_name in main._examples:
+		if str(example_name).begins_with("sfxr: "):
+			shelf_count += 1
+	check(shelf_count == 7, "and the sfxr chip lists all seven generators (%d)" % shelf_count)
+
 	# The generated patches carry no positions, so without a layout on load every node
 	# lands on the origin and the graph is one unreadable stack.
 	var seen_positions := {}

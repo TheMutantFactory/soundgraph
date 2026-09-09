@@ -21,6 +21,7 @@
 
 #include "sfxr_reference.h"
 #include "to_patch.h"
+#include "to_shelf.h"
 #include "wav.h"
 
 namespace {
@@ -126,8 +127,47 @@ int usage() {
                  "usage: sfxr-ref corpus <dir> [--per-preset N]\n"
                  "       sfxr-ref render --preset <name> --seed <n> [--noise-seed <n>] "
                  "--out <file.wav>\n"
-                 "       sfxr-ref patch  --preset <name> --seed <n> --out <file.json>\n");
+                 "       sfxr-ref patch  --preset <name> --seed <n> --out <file.json>\n"
+                 "       sfxr-ref shelf  <dir> [--per-preset N]\n");
     return 2;
+}
+
+// One patch per generator, its first N acceptable rolls as presets, into <dir>. The
+// rolls are the corpus's own: the same seeds in the same order, accepted or skipped by
+// the same rule, so a preset named pickup-coin-3 is the corpus case of that name — and
+// where the corpus came up one short (blip-select, whose first roll renders a NaN), the
+// shelf keeps rolling until it has N.
+int command_shelf(const std::string& directory, int per_preset) {
+    for (int preset_index = 0; preset_index < 7; ++preset_index) {
+        const sfxr_reference::Preset preset = kPresets[preset_index];
+        const std::string preset_name = sfxr_reference::preset_name(preset);
+        std::vector<sfxr_map::ShelfSeed> seeds;
+        for (int repeat = 0; static_cast<int>(seeds.size()) < per_preset && repeat < 64;
+             ++repeat) {
+            const unsigned int seed = seed_for(preset_index, repeat);
+            const sfxr_reference::Params params = sfxr_reference::generate(preset, seed);
+            const Rendered rendered = render_case(params, seed);
+            if (rendered.samples.size() < 512 || rendered.peak < 1e-4f ||
+                rendered.non_finite > 0) {
+                continue;
+            }
+            seeds.push_back({preset_name + "-" + std::to_string(repeat), seed, params});
+        }
+        if (static_cast<int>(seeds.size()) < per_preset) {
+            std::fprintf(stderr, "%s: only %zu acceptable rolls in 64\n", preset_name.c_str(),
+                         seeds.size());
+            return 1;
+        }
+        const std::string path = directory + "/" + preset_name + ".json";
+        if (!write_text(path, sfxr_map::to_shelf(preset_name, seeds))) {
+            std::fprintf(stderr, "could not write %s\n", path.c_str());
+            return 1;
+        }
+        std::printf("  %-14s", preset_name.c_str());
+        for (const sfxr_map::ShelfSeed& seed : seeds) std::printf(" %s", seed.name.c_str());
+        std::printf("\n");
+    }
+    return 0;
 }
 
 int command_corpus(const std::string& directory, int per_preset) {
@@ -284,6 +324,19 @@ int main(int argc, char** argv) {
                 return usage();
         }
         return command_corpus(directory, per_preset);
+    }
+
+    if (command == "shelf") {
+        if (argc < 3) return usage();
+        const std::string directory = argv[2];
+        int per_preset = 6;
+        for (int i = 3; i < argc; i++) {
+            if (std::strcmp(argv[i], "--per-preset") == 0 && i + 1 < argc)
+                per_preset = std::atoi(argv[++i]);
+            else
+                return usage();
+        }
+        return command_shelf(directory, per_preset);
     }
 
     if (command == "patch") {

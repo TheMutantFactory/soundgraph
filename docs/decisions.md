@@ -1172,3 +1172,38 @@ written. Compound meters (6/8, 9/8, 12/8) draw their beat lines in threes. The
 Bars menu's ids are now half-bars rather than row counts; the suite was
 updated with it. The division is still the reader's fixed sixteenths; a finer
 grid for ornaments stays in known-issues.
+
+## 2026-09-09 — The sfxr shelf: seven union patches, six rolls each as presets
+
+Decision:
+`sfxr-ref shelf` writes one patch per sfxr generator into
+`examples/patches/sfxr/`: the union of six corpus rolls' graphs, a control for
+every parameter the generator rolls, and the six rolls as presets. Parts a roll
+may leave out are present with switches that remove them exactly — a Mixer at
+1 and 0 for the wave and for each optional filter (a Dry and a Wet knob), an
+arpeggio at 0 semitones, a vibrato at 0 depth, the repeat's gate multiplied by
+0 or 1 and added to the key's trigger. The suite requires every preset to
+render bit for bit as the corpus patch of the same name.
+
+Reason:
+sfxr has no preset list; each button rolls a handful of parameters within
+ranges of its own, and the eight game sounds were eight such points. Nobody
+could see the region a button covers, or move through it. The `presets`
+section of the schema is exactly that: values by control id, structure
+untouched. What stood in the way was that the mapper emits a different graph
+per roll, so the shelf is the union and the presets choose within it.
+
+Alternatives:
+A JS generator — would duplicate the unit conversions to_patch.cpp owns. An
+sfxr node with the 24 parameters — rejected on 2026-08-08, for the reasons
+there. Approximate bypasses (a filter opened wide instead of mixed out) —
+would have made the presets sound like their rolls rather than be them, and
+the check would have had to be a tolerance.
+
+Consequences:
+The conversions in to_patch.cpp are now declared in its header. Two knobs per
+optional filter, Dry and Wet, are the price of an exact switch with one Mixer;
+morphing between presets crossfades them, which is a feature. blip-select's
+sixth preset is roll 6, past the rejected roll 0. `sfxr-ref shelf` and
+`tools/mirror-examples.mjs` must both run when the generator changes, and
+`sfxr_shelf_is_reproducible` says so when they have not.

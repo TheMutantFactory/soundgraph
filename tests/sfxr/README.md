@@ -190,6 +190,18 @@ is the better oscillator and that is why it does not match.
 - sfxr's highpass is one-pole; `StateVariableFilter` is two-pole. Twice the slope.
 - sfxr's zero-length envelope stage emits NaN; `AhdEnvelope` does not.
 
+## The shelf
+
+`examples/patches/sfxr/` is the corpus turned into something a person can walk: one
+patch per generator, a knob for exactly the parameters that generator rolls, and its
+six corpus rolls as presets, so stepping the preset strip is pressing sfxr's button
+again. `sfxr-ref shelf <dir>` writes them; the union of six graphs with switches that
+take parts out exactly is explained at the top of `tools/sfxr-ref/to_shelf.cpp`.
+Two tests hold it: `sfxr_shelf_is_reproducible` (the files match the generator) and
+`sfxr_shelf_presets_are_their_rolls` (every preset renders bit for bit as the corpus
+patch of the same name — 42 of 42). blip-select's sixth preset is roll 6, because roll
+0 is the rejected case above.
+
 ## The mapping
 
 `tools/sfxr-ref/to_patch.cpp` turns a parameter set into a patch, and `sfxr-ref corpus`

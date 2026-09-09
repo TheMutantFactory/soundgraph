@@ -9,6 +9,7 @@ target_link_libraries(sg-render PRIVATE soundgraph::patch_io soundgraph::wav)
 add_executable(sfxr-ref
     sfxr-ref/main.cpp
     sfxr-ref/to_patch.cpp
+    sfxr-ref/to_shelf.cpp
     ${CMAKE_SOURCE_DIR}/tests/sfxr/reference/sfxr_reference.cpp
 )
 target_include_directories(sfxr-ref PRIVATE ${CMAKE_SOURCE_DIR}/tests/sfxr/reference)
