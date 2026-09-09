@@ -4,13 +4,9 @@ Open problems, ordered by how much they threaten the Knobcon demo.
 
 ## Open
 
-- **The roll's bar lines assume 4/4.** Import MIDI keeps a tune's timing exactly — the
-  whole file now, pickups in place, quantised to sixteenths — but the roll draws a bar
-  line every sixteen steps and the schema has no beats-per-bar, so five of the seven
-  vendored tunes (3/8, 3/4, 9/8, 2/4, 6/8) play right and look shifted against the grid.
-  Ornaments finer than a sixteenth land on one step; the `division` field could carry a
-  finer grid when the file asks for it. Both are schema questions, recorded in
-  docs/decisions.md under the one-ceiling entry.
+- **Import MIDI quantises to sixteenths whatever the file holds.** Ornaments finer than
+  a sixteenth land on one step. The `division` field could carry a finer grid when the
+  file asks for it; nothing does yet.
 - **The Web Serial deploy button has never been clicked.** The web editor can push a patch
   straight into the board's NVS, and everything around it is verified, but the serial port
   chooser is gesture-gated by design so a human has to try it. This is step 7–9 of the

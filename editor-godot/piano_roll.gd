@@ -64,6 +64,32 @@ func step_count() -> int:
 	return maxi(1, int(sequence.get("steps", 16)))
 
 
+## Steps to a bar, read off the document: the time signature's top is how many beats,
+## its bottom which note is the beat, and the division how many steps a quarter has.
+## 4/4 at sixteenths is 16, 3/4 is 12, 6/8 is 12, 3/8 is 6. Nothing said means 4/4, so
+## every roll written before the meter existed keeps its bar lines where they were.
+static func bar_steps_of(sequence_now: Dictionary) -> int:
+	var beats := clampi(int(sequence_now.get("beats_per_bar", 4)), 1, 32)
+	return maxi(1, beats * _unit_steps_of(sequence_now))
+
+
+## Steps to a beat, for the lighter lines between the bar lines. Compound meters — six,
+## nine or twelve eighths — are felt in threes, and the lines say so.
+static func beat_steps_of(sequence_now: Dictionary) -> int:
+	var beats := clampi(int(sequence_now.get("beats_per_bar", 4)), 1, 32)
+	var unit := clampi(int(sequence_now.get("beat_unit", 4)), 1, 16)
+	var steps := _unit_steps_of(sequence_now)
+	if unit >= 8 and beats > 3 and beats % 3 == 0:
+		steps *= 3
+	return maxi(1, steps)
+
+
+static func _unit_steps_of(sequence_now: Dictionary) -> int:
+	var division := clampi(int(sequence_now.get("division", 4)), 1, 16)
+	var unit := clampi(int(sequence_now.get("beat_unit", 4)), 1, 16)
+	return maxi(1, int(round(float(division) * 4.0 / float(unit))))
+
+
 ## The two axes' lengths in pixels, before either is bolted to x or y.
 func _pitch_extent() -> float:
 	return size.x if orientation == "vertical" else size.y
@@ -283,14 +309,18 @@ func _draw() -> void:
 		draw_rect(_box(full, maxf(0.0, _time_of(step_count())), _time_extent()),
 			Color(0.0, 0.0, 0.0, 0.25))
 
-	# Row lines: the beat every four steps a shade firmer, the bar every sixteen
-	# firmer still — a long piece needs the eye to land on bars, not count rows.
+	# Row lines: the beat a shade firmer, the bar firmer still — a long piece needs the
+	# eye to land on bars, not count rows. Both are the meter's, not sixteen and four:
+	# a waltz has its bar line every twelve steps, and drawing it every sixteen made an
+	# exactly timed import look shifted from the second bar on.
+	var bar_steps := bar_steps_of(sequence)
+	var beat_steps := beat_steps_of(sequence)
 	for row in view_rows + 1:
 		var absolute := scroll_step + row
 		var alpha := 0.05
-		if absolute % 16 == 0:
+		if absolute % bar_steps == 0:
 			alpha = 0.24
-		elif absolute % 4 == 0:
+		elif absolute % beat_steps == 0:
 			alpha = 0.12
 		_time_line(row * row_height, Color(1.0, 1.0, 1.0, alpha), 1.0)
 	# Octave seams, so the eye can count columns without counting keys.

@@ -1,8 +1,9 @@
 extends RefCounted
 ## Reads a Standard MIDI File into the shape the piano roll plays.
 ##
-## A deliberately small reading, not a MIDI stack: note-ons, note-offs, and the
-## first tempo, quantised to sixteenth-note steps. Formats 0 and 1 both land here —
+## A deliberately small reading, not a MIDI stack: note-ons, note-offs, the first
+## tempo and the first time signature, quantised to sixteenth-note steps. Formats 0
+## and 1 both land here —
 ## the tracks of a format 1 file are merged on their absolute tick times, which is
 ## what a format 0 file already is. Percussion (channel ten) is skipped: the roll
 ## drives one pitched instrument, and a drum map played as pitches is noise wearing
@@ -39,6 +40,9 @@ static func parse(bytes: PackedByteArray) -> Dictionary:
 	var placed: Array = []
 	var tempo_us := 500000.0
 	var tempo_seen := false
+	var beats_per_bar := 4
+	var beat_unit := 4
+	var meter_seen := false
 	var at := 14
 	var tracks_read := 0
 	while tracks_read < track_count and at + 8 <= bytes.size():
@@ -109,6 +113,11 @@ static func parse(bytes: PackedByteArray) -> Dictionary:
 							tempo_us = float((bytes[cursor] << 16)
 								| (bytes[cursor + 1] << 8) | bytes[cursor + 2])
 							tempo_seen = true
+						elif kind == 0x58 and meta_length >= 2 and not meter_seen:
+							# Numerator, then the denominator as a power of two.
+							beats_per_bar = clampi(int(bytes[cursor]), 1, 32)
+							beat_unit = clampi(1 << int(bytes[cursor + 1]), 1, 16)
+							meter_seen = true
 						cursor += meta_length
 					else:
 						# Sysex: a length-prefixed blob to step over.
@@ -142,11 +151,16 @@ static func parse(bytes: PackedByteArray) -> Dictionary:
 		furthest = maxi(furthest, step + mini(held, MAX_STEPS - step))
 	if notes.is_empty():
 		return {}
-	var steps := clampi(ceili(float(furthest) / 16.0) * 16, 16, MAX_STEPS)
+	# Whole bars of the file's own meter, so the piece ends on a bar line.
+	var bar := PianoRoll.bar_steps_of({"beats_per_bar": beats_per_bar,
+		"beat_unit": beat_unit, "division": 4})
+	var steps := clampi(ceili(float(furthest) / float(bar)) * bar, bar, MAX_STEPS)
 	return {
 		# To the hundredth: a file says 666667 µs a beat and means 90, not 90.00009.
 		"tempo": snappedf(clampf(60000000.0 / tempo_us, 40.0, 240.0), 0.01),
 		"steps": steps,
+		"beats_per_bar": beats_per_bar,
+		"beat_unit": beat_unit,
 		"notes": notes,
 		"dropped": dropped,
 	}

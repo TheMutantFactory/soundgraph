@@ -1813,6 +1813,8 @@ TEST(the_piano_roll_survives_being_saved) {
             "tempo": 128,
             "steps": 32,
             "division": 8,
+            "beats_per_bar": 6,
+            "beat_unit": 8,
             "notes": [
                 {"step": 0, "note": 48, "length": 1},
                 {"step": 7, "note": 55, "length": 3}
@@ -1829,6 +1831,8 @@ TEST(the_piano_roll_survives_being_saved) {
     CHECK(std::fabs(graph.sequence.tempo - 128.0) < 1e-9);
     CHECK(graph.sequence.steps == 32);
     CHECK(graph.sequence.division == 8);
+    CHECK(graph.sequence.beats_per_bar == 6);
+    CHECK(graph.sequence.beat_unit == 8);
     CHECK(graph.sequence.notes.size() == 2);
     CHECK(graph.sequence.notes[1].step == 7);
     CHECK(graph.sequence.notes[1].note == 55);
@@ -1840,6 +1844,8 @@ TEST(the_piano_roll_survives_being_saved) {
     CHECK(again.has_sequence);
     CHECK(again.sequence.steps == graph.sequence.steps);
     CHECK(again.sequence.division == graph.sequence.division);
+    CHECK(again.sequence.beats_per_bar == 6);
+    CHECK(again.sequence.beat_unit == 8);
     CHECK(again.sequence.notes.size() == graph.sequence.notes.size());
     CHECK(again.sequence.notes[1].note == 55);
 }
@@ -1876,6 +1882,11 @@ TEST(a_division_the_document_does_not_mention_is_sixteenths) {
     std::vector<Diagnostic> diagnostics;
     CHECK(parse_patch(text, graph, diagnostics));
     CHECK(graph.sequence.division == 4);
+    // The meter too: absent is 4/4, and a 4/4 roll saves without mentioning it, so a
+    // document from before the field existed comes back byte for byte.
+    CHECK(graph.sequence.beats_per_bar == 4);
+    CHECK(graph.sequence.beat_unit == 4);
+    CHECK(write_patch(graph, true).find("beats_per_bar") == std::string::npos);
 }
 
 TEST(plugin_state_is_bytes_and_survives_being_written_down) {

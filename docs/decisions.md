@@ -1141,3 +1141,34 @@ should read the schema. `tempo` is now written to the hundredth so a file's
 666667 µs a beat lands as 90, not 90.00009. Bar lines still assume sixteen
 steps to the bar, so tunes in 3/4, 3/8, 6/8 or 9/8 keep exact timing but their
 bars do not fall on the roll's lines.
+
+## 2026-09-08 — The roll has a meter: beats_per_bar and beat_unit in the sequence
+
+Decision:
+The sequence carries its time signature as `beats_per_bar` over `beat_unit`,
+both defaulting to 4 and written only when not 4/4. A bar is
+`beats_per_bar * division * 4 / beat_unit` steps; the roll draws its bar and
+beat lines from that, the Bars menu counts bars of the meter, a piece grows by
+whole bars of it, and Import MIDI reads the file's first time-signature event
+and rounds the piece to whole bars of the file's own meter.
+
+Reason:
+Once Import MIDI took whole files, five of the seven vendored tunes — in 3/8,
+3/4, 9/8, 2/4 and 6/8 — played exactly and looked shifted, because the roll
+drew a bar line every sixteen steps whatever the music did. A grid that
+disagrees with the music is worse than no grid. The meter is a property of the
+piece and belongs in the document, as the division already does.
+
+Alternatives:
+A `steps_per_bar` integer — simpler, but it changes meaning when the division
+changes, and it cannot say 6/8 versus 3/4 (both twelve). A time-signature
+string — a schema that stores "6/8" makes every reader parse it. Leaving it to
+the editor's settings — a meter that is not saved is lost the moment the file
+is opened elsewhere.
+
+Consequences:
+Documents saved before today are byte-identical on their next save: 4/4 is not
+written. Compound meters (6/8, 9/8, 12/8) draw their beat lines in threes. The
+Bars menu's ids are now half-bars rather than row counts; the suite was
+updated with it. The division is still the reader's fixed sixteenths; a finer
+grid for ornaments stays in known-issues.

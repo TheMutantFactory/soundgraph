@@ -253,10 +253,17 @@ struct SequenceNote {
 // `division` is how many steps go to a beat: 4 is sixteenths, 8 thirty-seconds, 16
 // sixty-fourths. It defaults to 4 because that is what the editor did before it could be
 // asked, and a file that does not mention it must keep sounding the way it did.
+//
+// `beats_per_bar` over `beat_unit` is the time signature. It decides where the bar lines
+// fall and nothing about how the notes sound: a bar is beats_per_bar * division * 4 /
+// beat_unit steps, so 3/4 at sixteenths is twelve. Both default to 4, and a 4/4 roll is
+// written without them, so every document saved before the meter existed is unchanged.
 struct SequenceDescription {
     double tempo = 120.0;
     int steps = 16;
     int division = 4;
+    int beats_per_bar = 4;
+    int beat_unit = 4;
     std::vector<SequenceNote> notes;
 };
 

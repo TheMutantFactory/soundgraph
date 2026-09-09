@@ -3261,7 +3261,7 @@ func _initialize() -> void:
 	# pulled it to zero and nothing pushed it later.
 	var rag: Dictionary = main.MidiImport.read(midi_folder.path_join("entertainer.mid"))
 	check(int(rag.get("steps", 0)) == 1216 and int(rag.get("dropped", -1)) == 0,
-		"The Entertainer arrives whole, 76 bars (%d steps, %d dropped)"
+		"The Entertainer arrives whole, 152 bars of 2/4 (%d steps, %d dropped)"
 			% [int(rag.get("steps", 0)), int(rag.get("dropped", -1))])
 	var invention: Dictionary = main.MidiImport.read(
 		midi_folder.path_join("bach-invention-08.mid"))
@@ -3271,6 +3271,29 @@ func _initialize() -> void:
 	check(earliest == 2 and absf(float(invention.get("tempo", 0.0)) - 90.0) < 0.001,
 		"a pickup keeps its place and the tempo is read to the hundredth "
 			+ "(step %d, %.5f bpm)" % [earliest, float(invention.get("tempo", 0.0))])
+
+	# The time signature comes with the file and the bar lines follow it. Invention 4
+	# is in 3/8 — six steps to the bar — and the piece is whole bars of that: 312
+	# steps, 52 bars, where a sixteen-step bar called it 320 and drew every bar line
+	# from the second one on in the wrong place. The arithmetic behind it is the
+	# roll's own, and it is checked at the corners: a compound meter at a finer
+	# division, and a document that says nothing, which is 4/4.
+	var waltz: Dictionary = main.MidiImport.read(
+		midi_folder.path_join("bach-invention-04.mid"))
+	check(int(waltz.get("beats_per_bar", 0)) == 3 and int(waltz.get("beat_unit", 0)) == 8
+			and int(waltz.get("steps", 0)) == 312,
+		"Invention 4 arrives in 3/8, whole bars of six steps (%d/%d, %d steps)"
+			% [int(waltz.get("beats_per_bar", 0)), int(waltz.get("beat_unit", 0)),
+			int(waltz.get("steps", 0))])
+	check(PianoRoll.bar_steps_of({"beats_per_bar": 3, "beat_unit": 8}) == 6
+			and PianoRoll.bar_steps_of({"beats_per_bar": 3, "beat_unit": 4}) == 12
+			and PianoRoll.bar_steps_of({"beats_per_bar": 6, "beat_unit": 8, "division": 8})
+				== 24
+			and PianoRoll.beat_steps_of({"beats_per_bar": 6, "beat_unit": 8}) == 6
+			and PianoRoll.beat_steps_of({"beats_per_bar": 3, "beat_unit": 4}) == 4
+			and PianoRoll.bar_steps_of({}) == 16 and PianoRoll.beat_steps_of({}) == 4,
+		"a bar is what the meter and the division make it: 3/8 is 6, 3/4 is 12, 6/8 "
+			+ "at thirty-seconds is 24 felt in threes, and nothing said is 4/4")
 	var tune: Dictionary = main.MidiImport.read(tune_path)
 	check(not tune.is_empty(), "the demo MIDI parses")
 	check((tune.get("notes", []) as Array).size() == 30,
@@ -3300,28 +3323,60 @@ func _initialize() -> void:
 	check(not main.patch.has("sequence") \
 			or (main.patch.get("sequence", {}).get("notes", []) as Array).is_empty(),
 		"undo takes the tune back out")
+
+	# The meter lands in the document with the tune, the button beside the tempo says
+	# it, and a bar of the Bars menu is a bar of the piece: two bars of 3/8 are twelve
+	# rows, not thirty-two. The button changes it as one undoable edit, and undo
+	# brings the file's meter back.
+	main._import_midi_file(midi_folder.path_join("bach-invention-04.mid"))
+	for i in 6:
+		await process_frame
+	check(int(main.patch.get("sequence", {}).get("beats_per_bar", 0)) == 3
+			and int(main.patch.get("sequence", {}).get("beat_unit", 0)) == 8
+			and main.roll_meter.text == "3/8",
+		"importing the waltz writes its 3/8 into the document and onto the button (%s)"
+			% main.roll_meter.text)
+	main.roll_bars_menu.id_pressed.emit(4)
+	check(main.piano_roll.view_rows == 12,
+		"two bars of 3/8 are twelve rows (%d)" % main.piano_roll.view_rows)
+	main.roll_meter.get_popup().id_pressed.emit(404)
+	for i in 3:
+		await process_frame
+	check(int(main.patch.get("sequence", {}).get("beats_per_bar", 0)) == 4
+			and main.roll_meter.text == "4/4",
+		"the meter button rewrites the document's meter (%s)" % main.roll_meter.text)
+	main.roll_bars_menu.id_pressed.emit(2)
+	check(main.piano_roll.view_rows == 16, "and one bar of 4/4 is sixteen rows again")
+	await main._undo()
+	for i in 6:
+		await process_frame
+	check(int(main.patch.get("sequence", {}).get("beats_per_bar", 0)) == 3
+			and main.roll_meter.text == "3/8",
+		"undo brings the file's 3/8 back (%s)" % main.roll_meter.text)
+
 	main._import_midi_file(tune_path)
 	for i in 6:
 		await process_frame
 
 	# The window: zoom cycles bars, the wheel walks the piece, the playhead turns
-	# the page, and a click past the end grows the piece a bar at a time.
+	# the page, and a click past the end grows the piece a bar at a time. The Bars
+	# menu speaks in half-bars: id 2 is one bar, and a bar is the meter's.
 	check(main.piano_roll.view_rows == 16, "the roll opens one bar tall")
-	main.roll_bars_menu.id_pressed.emit(32)
+	main.roll_bars_menu.id_pressed.emit(4)
 	check(main.piano_roll.view_rows == 32, "the Bars submenu steps to two bars")
-	main.roll_bars_menu.id_pressed.emit(64)
+	main.roll_bars_menu.id_pressed.emit(8)
 	check(main.piano_roll.view_rows == 64, "then four")
-	main.roll_bars_menu.id_pressed.emit(16)
+	main.roll_bars_menu.id_pressed.emit(2)
 	check(main.piano_roll.view_rows == 16, "and back to one")
 
-	main.roll_bars_menu.id_pressed.emit(8)
+	main.roll_bars_menu.id_pressed.emit(1)
 	check(main.piano_roll.view_rows == 8, "half a bar for a close look")
-	main.roll_bars_menu.id_pressed.emit(128)
+	main.roll_bars_menu.id_pressed.emit(16)
 	check(main.piano_roll.view_rows == 128, "eight bars for a long stretch")
-	main.roll_bars_menu.id_pressed.emit(2048)
+	main.roll_bars_menu.id_pressed.emit(256)
 	check(main.piano_roll.view_rows == 2048,
 		"and all hundred twenty-eight for the whole shape")
-	main.roll_bars_menu.id_pressed.emit(16)
+	main.roll_bars_menu.id_pressed.emit(2)
 
 	# The same grid lying the other way: time runs rightward, the low notes hang at
 	# the bottom, and the pointer's two axes swap to match.
@@ -7312,8 +7367,8 @@ func _initialize() -> void:
 	await process_frame
 	check(not main.muted, "and unmuting puts it back")
 
-	check(buttons == 9,
-		"with nine buttons on it: collapse, mute, roll, play, capture, two octave, "
+	check(buttons == 10,
+		"with ten buttons on it: collapse, mute, roll, meter, play, capture, two octave, "
 		+ "two width — the bar-zoom button folded into the Roll menu (%d)" % buttons)
 
 	# The dock. The keyboard was the brightest, heaviest thing on screen and the eye
