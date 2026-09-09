@@ -177,7 +177,7 @@ static func _prefix_in_use(target: Dictionary, prefix: String) -> bool:
 	return false
 
 
-## A sensible module name from a file name: "delay-echo.json" becomes "delay-echo".
+## A sensible module name from a file name: "plucked-string.json" becomes "plucked-string".
 static func name_from_path(path: String) -> String:
 	var base := path.get_file().get_basename()
 	return base if base != "" else "module"

@@ -11,23 +11,15 @@ extends RefCounted
 ##
 ## Curated where the instrument has a story, derived where a family shares one, and
 ## searchable either way: the palette matches queries against these words too, so
-## "jungle" finds the Break Chopper without anybody knowing its name.
+## "pick" finds the Plucked String without anybody knowing its name.
 
 
 ## The instruments with stories of their own.
 const BY_LABEL := {
 	"First Synth": "Saw, filter, envelope, LFO: the first patch, and still the "
 		+ "fastest route to a real sound.",
-	"Delay Echo": "Live input through a filter into a feedback delay: say something "
-		+ "and the room says it back.",
 	"Envelope Amp": "An ADSR and a Gain wearing one face: the four shape knobs that "
 		+ "end every synth chain, as a module you can drop anywhere.",
-	"Filter Envelope": "A filter and its envelope as one module: cutoff and "
-		+ "resonance up top, the sweep that plays them underneath.",
-	"Break Chopper": "A Sampler slicing a drum break while a sequencer lane deals "
-		+ "the order. Jungle, from four nodes.",
-	"Kit Chopper": "Draw drums on the roll, press Capture, and the Sampler starts "
-		+ "re-cutting what you played: the kit and the chopper in one patch.",
 	"Plucked String": "Karplus-Strong in the open: a burst of noise rings a tuned "
 		+ "Comb the way a pick rings a string.",
 	"Warehouse": "A stab in a big room: the reverb is a module of Combs and "
