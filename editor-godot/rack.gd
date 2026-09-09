@@ -752,7 +752,9 @@ func _relayout() -> void:
 	if host != null and host.get_parent() is Control:
 		window = (host.get_parent() as Control).size
 	pan_slack = window * 0.5 / maxf(view_zoom, 0.01)
-	position = pan_slack
+	# The slack is in rack units; the position is in the holder's pixels, which is the
+	# rack scaled. Mixing the two put the map's window off by exactly the zoom.
+	position = pan_slack * view_zoom
 	if host != null:
 		host.custom_minimum_size = Vector2(
 			(_content_size.x if case_hp > 0 else size.x) + pan_slack.x * 2.0,

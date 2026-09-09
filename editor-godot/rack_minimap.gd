@@ -20,7 +20,8 @@ var _dragging := false
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	focus_mode = Control.FOCUS_NONE
-	custom_minimum_size = MAP_SIZE * float(Design.SCALE_FACTORS[Design.ui_scale])
+	custom_minimum_size = Vector2(Design.furniture_scale(MAP_SIZE.x),
+		Design.furniture_scale(MAP_SIZE.y))
 
 
 func _process(_delta: float) -> void:
@@ -56,7 +57,9 @@ func window_in_rack() -> Rect2:
 	if scroll == null or rack == null:
 		return Rect2()
 	var zoom: float = maxf(rack.view_zoom, 0.01)
-	var at := Vector2(scroll.scroll_horizontal, scroll.scroll_vertical) / zoom - rack.position
+	# The scroll and the rack's position are both in the holder's pixels; the window's
+	# top-left in rack units is their difference, unscaled.
+	var at := (Vector2(scroll.scroll_horizontal, scroll.scroll_vertical) - rack.position) / zoom
 	return Rect2(at, scroll.size / zoom)
 
 
@@ -69,7 +72,7 @@ func look_at_map_point(point: Vector2) -> void:
 		return
 	var zoom: float = maxf(rack.view_zoom, 0.01)
 	var in_rack := (point - _origin()) / s
-	var centre := (in_rack + rack.position) * zoom
+	var centre := in_rack * zoom + rack.position
 	scroll.scroll_horizontal = int(centre.x - scroll.size.x * 0.5)
 	scroll.scroll_vertical = int(centre.y - scroll.size.y * 0.5)
 
@@ -112,6 +115,10 @@ func _draw() -> void:
 			Color(Design.INK_SECOND, 0.5), false, 1.0)
 	# The window, over everything: what the rack lens is showing right now.
 	var window := window_in_rack()
-	var shown := Rect2(origin + window.position * s, window.size * s)
-	draw_rect(shown, Color(Design.ACCENT, 0.12))
-	draw_rect(shown, Design.ACCENT, false, 1.5)
+	# Clipped to the map: a window wider than the case, panned into the slack, would
+	# otherwise draw its frame out over the rack.
+	var shown := Rect2(origin + window.position * s, window.size * s).intersection(
+		Rect2(Vector2.ONE, size - Vector2.ONE * 2.0))
+	if shown.size.x > 0.0 and shown.size.y > 0.0:
+		draw_rect(shown, Color(Design.ACCENT, 0.12))
+		draw_rect(shown, Design.ACCENT, false, 1.5)

@@ -3253,7 +3253,8 @@ func _initialize() -> void:
 		await process_frame
 	var rack_slack: Vector2 = main.rack.pan_slack
 	var rackmap_holder: Control = main.rack.get_parent()
-	check(rack_slack.x > 0.0 and rack_slack.y > 0.0 and main.rack.position == rack_slack
+	check(rack_slack.x > 0.0 and rack_slack.y > 0.0
+			and main.rack.position.is_equal_approx(rack_slack * main.rack.view_zoom)
 			and rackmap_holder.custom_minimum_size.x
 				> main.rack.content_size().x * main.rack.view_zoom + 1.0,
 		"the rack sits in a rackmap_holder with rack_slack to pan into on every side (%s)" % str(rack_slack))

@@ -1331,7 +1331,8 @@ func _build_ui() -> void:
 	rack_minimap.anchor_right = 1.0
 	rack_minimap.anchor_top = 1.0
 	rack_minimap.anchor_bottom = 1.0
-	var map_size: Vector2 = RackMinimap.MAP_SIZE * float(Design.SCALE_FACTORS[Design.ui_scale])
+	var map_size := Vector2(Design.furniture_scale(RackMinimap.MAP_SIZE.x),
+		Design.furniture_scale(RackMinimap.MAP_SIZE.y))
 	rack_minimap.offset_left = -map_size.x - float(Design.scale(Design.SPACE_M))
 	rack_minimap.offset_top = -map_size.y - float(Design.scale(Design.SPACE_M))
 	rack_minimap.offset_right = -float(Design.scale(Design.SPACE_M))
