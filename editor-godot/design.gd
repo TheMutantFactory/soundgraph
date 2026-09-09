@@ -536,7 +536,19 @@ static func padded_panel(level: int, horizontal: int, vertical: int,
 ## makes the reader parse all thirteen to find the one they want; giving the main verb a
 ## filled accent treatment means it is found without reading. Used sparingly — one per
 ## region, or it stops meaning anything.
-static func make_primary(button: Button) -> Button:
+## padded_panel() for the furniture: margins through the furniture scale, and the
+## vertical ones halved, because the furniture's whole complaint was height.
+static func furniture_box(level: int, horizontal: int, vertical: int,
+		radius: int = RADIUS_BUTTON, identifying: bool = true) -> StyleBoxFlat:
+	var box := control(level, radius) if identifying else panel(level, radius)
+	box.content_margin_left = furniture_scale(horizontal)
+	box.content_margin_right = furniture_scale(horizontal)
+	box.content_margin_top = maxi(1, furniture_scale(vertical) / 2)
+	box.content_margin_bottom = maxi(1, furniture_scale(vertical) / 2)
+	return box
+
+
+static func make_primary(button: Button, compact: bool = false) -> Button:
 	# Filled with the accent itself, not a darkened version of it.
 	#
 	# It used to be ACCENT.darkened(0.55), which is a different colour from the one
@@ -544,7 +556,8 @@ static func make_primary(button: Button) -> Button:
 	# had checked it against, and came out at 3.71:1 in every palette. A filled accent
 	# button should be filled with the accent; that is the pairing the token is for,
 	# and it is 11.6:1 in Lab.
-	var normal := padded_panel(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON)
+	var normal := furniture_box(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON, false) \
+		if compact else padded_panel(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON)
 	normal.bg_color = ACCENT
 	normal.border_color = ACCENT
 	button.add_theme_stylebox_override("normal", normal)

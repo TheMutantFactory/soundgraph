@@ -1421,3 +1421,25 @@ happened to cross its corner.
 Consequences:
 Below XL nothing changes. The chrome's toolbar keeps its 44px hit floor;
 only the strip under the keys trades it.
+
+## 2026-09-09 — Half-height furniture, and a toolbar that condenses at 4K
+
+Decision:
+The furniture pass now dresses three things — the dock's strip, the probe
+scope and the lens band — with the furniture type size, half-height boxes
+(`Design.furniture_box`) and a 24-unit target; value fields carry a
+`furniture` flag for the same. The toolbar, at 4K only, condenses to half
+its height whenever the pointer is off it and comes back whole when the
+pointer arrives: the wordmark, the QR at its full size, the verb at the
+chrome's hit target.
+
+Reason:
+On the show screen the strip, the probe and the lens band each stood at
+twice the height their contents asked for, and the top row was a fifth of
+the screen for a wordmark and one verb. The QR is why the toolbar comes
+back rather than staying small: a phone is pointed at a full-size code.
+
+Consequences:
+Below 4K the toolbar never condenses, so the chrome's hit-target floor
+holds everywhere the suite measures it. The furniture stops at XL as
+before; the halving is in the boxes, not the type.

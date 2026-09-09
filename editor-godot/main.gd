@@ -1078,11 +1078,7 @@ func _build_ui() -> void:
 		segment.flat = false
 		segment.tooltip_text = "%s — %d" % [lens_names[lens], int(lens) + 1] \
 			if lens != PatchView.RACK else "Rack — 1"
-		# The four doors read from across the room: the app-title size, a step above
-		# every other button, because which lens you are looking through is the first
-		# thing a visitor asks and the band is the answer.
-		segment.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_APP_TITLE))
+		# Dressed by _dress_lens_band once the band is built, and again at every size.
 		segment.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var chosen := int(lens)
 		segment.pressed.connect(func() -> void: _set_patch_view(chosen))
@@ -1129,7 +1125,8 @@ func _build_ui() -> void:
 	lens_bar.anchor_bottom = 0.0
 	lens_bar.offset_top = float(Design.scale(Design.SPACE_S))
 	lens_bar.offset_right = -float(Design.scale(Design.SPACE_M))
-	lens_bar.offset_bottom = float(Design.scale(56))
+	lens_bar.offset_bottom = float(Design.furniture_scale(44))
+	_dress_lens_band()
 	lens_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	lens_bar.add_theme_constant_override("separation", Design.scale(Design.SPACE_S))
 	lens_bar.add_child(view_switch)
@@ -2654,12 +2651,9 @@ func _use_ui_scale(index: int) -> void:
 		_dress_furniture(keyboard_bar)
 	# The dock's heights were fitted at the old size and would stay there.
 	_fit_keyboard_dock()
-	# The doors' size was set when the band was built and would stay there.
-	for lens: int in _view_buttons:
-		(_view_buttons[lens] as Button).add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_APP_TITLE))
-	if lens_bar != null:
-		lens_bar.offset_bottom = float(Design.scale(56))
+	_dress_lens_band()
+	if scope_probe != null:
+		_dress_furniture(scope_probe)
 	if rack != null:
 		rack.rebuild()
 	if outline != null:
@@ -2866,6 +2860,7 @@ func _build_side_panel() -> Control:
 	# of the menu — so the side column is the probe scope, with the health line and
 	# the problem list underneath, appearing only when there are problems to list.
 	scope_probe = ProbeScope.new()
+	scope_probe.ready.connect(func() -> void: _dress_furniture(scope_probe))
 	scope_probe.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	side_column.add_child(scope_probe)
 
@@ -7958,9 +7953,9 @@ func _build_keyboard_bar() -> Control:
 	master_knob.rack = rack
 	master_knob.compact = true
 	master_knob.furniture = true
+	master_knob.dial = 0.5
 	# Sized to sit inside the strip with air around it, and centred in the row: a
 	# dial as tall as the row it lives in reads as jammed, not mounted.
-	master_knob.dial = 0.72
 	master_knob.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	# A stand-in descriptor before the tree sees it: Knob reads its name and its doc in
 	# _ready to build a tooltip, so it cannot be added holding nothing. _refresh_master
@@ -8032,8 +8027,22 @@ func _build_keyboard_bar() -> Control:
 	return bar
 
 
-## The strip's buttons' height: the chrome's hit target less half its padding.
-const STRIP_TARGET := 34
+## The four doors: the app-title size through the furniture scale — a step above every
+## other button, because which lens you are looking through is the first thing a
+## visitor asks — in half-height boxes, so the band is a row and not a block.
+func _dress_lens_band() -> void:
+	for lens: int in _view_buttons:
+		var segment := _view_buttons[lens] as Button
+		segment.add_theme_font_size_override("font_size",
+			Design.furniture_type(Design.SIZE_APP_TITLE))
+		segment.custom_minimum_size.y = Design.furniture_scale(STRIP_TARGET)
+	if lens_bar != null:
+		lens_bar.offset_bottom = float(Design.furniture_scale(44))
+
+
+## The furniture's buttons' height: half the chrome's hit target, through the
+## furniture scale.
+const STRIP_TARGET := 24
 
 
 ## GraphEdit's own minimap: an internal grandchild, inside the top layer that also holds
@@ -8058,16 +8067,34 @@ func _dress_furniture(strip: Control) -> void:
 		var node: Node = queue.pop_back()
 		for child in node.get_children():
 			queue.append(child)
-		if node is Button:
+		if node is ValueField:
+			(node as ValueField).furniture = true
+		elif node is Button:
+			var button := node as Button
+			button.add_theme_font_size_override("font_size",
+				Design.furniture_type(Design.SIZE_SECONDARY))
+			# Half the padding the chrome's 44px floor gave these. The furniture is rows
+			# of small verbs, not a toolbar somebody aims at from across the room.
+			button.custom_minimum_size.y = Design.furniture_scale(STRIP_TARGET)
+			button.add_theme_stylebox_override("normal",
+				Design.furniture_box(Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_XS))
+			button.add_theme_stylebox_override("hover",
+				Design.furniture_box(Design.Surface.ACTIVE, Design.SPACE_S, Design.SPACE_XS))
+			var pressed := Design.furniture_box(Design.Surface.ACTIVE, Design.SPACE_S,
+				Design.SPACE_XS)
+			pressed.border_color = Design.ACCENT
+			button.add_theme_stylebox_override("pressed", pressed)
+			button.add_theme_stylebox_override("disabled",
+				Design.furniture_box(Design.Surface.NODE, Design.SPACE_S, Design.SPACE_XS,
+					Design.RADIUS_BUTTON, false))
+		elif node is Label:
 			(node as Control).add_theme_font_size_override("font_size",
-				Design.furniture_type(Design.SIZE_CONTROL))
-			# Half the padding the chrome's 44px floor gave these. The strip is one row
-			# of small verbs under the keys, not a toolbar somebody aims at from across
-			# the room, and the row was as tall as the roll's transport made it.
-			(node as Control).custom_minimum_size.y = Design.furniture_scale(STRIP_TARGET)
-		elif node is Label or node is LineEdit:
+				Design.furniture_type(Design.SIZE_SECONDARY))
+		elif node is LineEdit:
 			(node as Control).add_theme_font_size_override("font_size",
-				Design.furniture_type(Design.SIZE_NUMERIC))
+				Design.furniture_type(Design.SIZE_SECONDARY))
+			(node as Control).add_theme_stylebox_override("normal",
+				Design.furniture_box(Design.Surface.CANVAS, Design.SPACE_S, Design.SPACE_XS))
 
 
 ## Moves the keyboard, letting go first.

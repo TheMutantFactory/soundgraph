@@ -3012,13 +3012,37 @@ func _initialize() -> void:
 			and keycap_at_4k == Design.furniture_type(Design.SIZE_KEYCAP)
 			and strip_button != null
 			and strip_button.get_theme_font_size("font_size")
-				== Design.furniture_type(Design.SIZE_CONTROL)
-			and Design.furniture_type(Design.SIZE_CONTROL) < Design.type(Design.SIZE_CONTROL),
+				== Design.furniture_type(Design.SIZE_SECONDARY)
+			and Design.furniture_type(Design.SIZE_SECONDARY) < Design.type(Design.SIZE_CONTROL),
 		"the keycaps and the strip stop at XL's size while the chrome doubles (%d vs %d)"
-			% [Design.furniture_type(Design.SIZE_CONTROL), Design.type(Design.SIZE_CONTROL)])
+			% [Design.furniture_type(Design.SIZE_SECONDARY), Design.type(Design.SIZE_CONTROL)])
 	check((main._view_buttons[main.PatchView.GRAPH] as Button).get_theme_font_size("font_size")
-			== Design.type(Design.SIZE_APP_TITLE),
-		"and the lens band's doors wear the app-title size")
+			== Design.furniture_type(Design.SIZE_APP_TITLE)
+			and (main._view_buttons[main.PatchView.GRAPH] as Button).custom_minimum_size.y
+				== float(Design.furniture_scale(main.STRIP_TARGET)),
+		"and the lens band's doors wear the app-title size at the furniture's height")
+	# The probe is furniture too: its pickers and fields stop at XL and stand at the
+	# furniture's height rather than the chrome's.
+	check(main.scope_probe.source_pick.get_theme_font_size("font_size")
+			== Design.furniture_type(Design.SIZE_SECONDARY)
+			and main.scope_probe.base_field.furniture,
+		"the probe's pickers and fields are dressed as furniture")
+	# The toolbar condenses at 4K until the pointer comes to it, and comes back whole —
+	# the QR at its full size, the verb at the chrome's hit target.
+	main.toolbar.set_condensed(true)
+	var condensed_verb: float = main.toolbar.toolbar_add_button.custom_minimum_size.y
+	var condensed_qr: float = main.toolbar.toolbar_qr.custom_minimum_size.x
+	main.toolbar.set_condensed(false)
+	check(condensed_verb < float(Design.scale(Design.HIT_TARGET)) * 0.5 + 0.5
+			and condensed_qr < float(Design.scale(Design.HIT_TARGET)) * 0.5 + 0.5
+			and main.toolbar.toolbar_add_button.custom_minimum_size.y
+				== float(Design.scale(Design.HIT_TARGET))
+			and main.toolbar.toolbar_qr.custom_minimum_size.x
+				== float(Design.scale(Design.HIT_TARGET)),
+		"the toolbar condenses to half at 4K and comes back whole under the pointer "
+			+ "(%.0f / %.0f verb, %.0f / %.0f QR)" % [condensed_verb,
+			main.toolbar.toolbar_add_button.custom_minimum_size.y, condensed_qr,
+			main.toolbar.toolbar_qr.custom_minimum_size.x])
 	# The dock's geometry stops at XL too, and the strip's buttons stand at the strip's
 	# own target rather than the chrome's: the keys at 4K are XL's height, not double.
 	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(56)

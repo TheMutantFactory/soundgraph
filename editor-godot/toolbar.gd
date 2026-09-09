@@ -68,8 +68,15 @@ func set_qr_scale(index: int) -> void:
 	if toolbar_qr == null:
 		return
 	var factor: float = QR_SCALES[clampi(index, 0, QR_SCALES.size() - 1)]
+	if condensed:
+		factor *= 0.5
 	toolbar_qr.custom_minimum_size = Vector2.ONE * float(Design.scale(Design.HIT_TARGET)) * factor
 var toolbar_add_button: Button
+## Half its height at 4K until the pointer comes to it. The top row was a fifth of the
+## screen at the show size — the wordmark, its QR and one verb — and the QR is the
+## reason it comes back: a phone is pointed at a full-size code, not a condensed one.
+var condensed := false
+var _bar: HBoxContainer
 var toolbar_rung := Rung.FULL
 var undo_button: Button
 var redo_button: Button
@@ -138,6 +145,7 @@ func _toolbar_group(bar: HBoxContainer, first: bool = false) -> HBoxContainer:
 
 func _build() -> void:
 	var bar := HBoxContainer.new()
+	_bar = bar
 	bar.custom_minimum_size.y = Design.scale(52)
 	bar.add_theme_constant_override("separation", Design.SPACE_S)
 
@@ -847,6 +855,60 @@ func _apply_toolbar_rung(rung: int) -> void:
 ## that steps by one has to be run repeatedly to settle.
 ## A width can be passed in, so a test can ask what a 1280px window would look like
 ## without owning a 1280px window. Left at -1 it measures the bar it has.
+
+
+## Whether the pointer is over the bar, asked every frame rather than through
+## mouse_entered/exited, which a bar full of buttons does not report reliably.
+func _process(_delta: float) -> void:
+	if Design.ui_scale != Design.Scale.FOUR_K:
+		if condensed:
+			set_condensed(false)
+		return
+	var inside := get_global_rect().has_point(get_global_mouse_position())
+	if inside == condensed:
+		set_condensed(not inside)
+
+
+func set_condensed(on: bool) -> void:
+	condensed = on
+	if _bar == null:
+		return
+	_bar.custom_minimum_size.y = Design.furniture_scale(26) if on else Design.scale(52)
+	if toolbar_title != null:
+		toolbar_title.add_theme_font_size_override("font_size",
+			Design.furniture_type(Design.SIZE_HEADING) if on
+			else Design.type(Design.SIZE_APP_TITLE))
+	set_qr_scale(int(Settings.fetch("qr_scale", 0)))
+	if toolbar_identity_margin != null:
+		var air := Design.furniture_scale(Design.SPACE_M) if on \
+			else Design.type(Design.SIZE_APP_TITLE)
+		toolbar_identity_margin.add_theme_constant_override("margin_left", air)
+		toolbar_identity_margin.add_theme_constant_override("margin_right", air)
+	if toolbar_menu_button != null:
+		var burger_side := Design.furniture_scale(28) if on else Design.scale(40)
+		toolbar_menu_button.custom_minimum_size = Vector2(burger_side, burger_side)
+	var queue: Array = [_bar]
+	while not queue.is_empty():
+		var node: Node = queue.pop_back()
+		for child in node.get_children():
+			queue.append(child)
+		if node is Button:
+			var button := node as Button
+			button.custom_minimum_size.y = Design.furniture_scale(28) if on \
+				else Design.scale(Design.HIT_TARGET)
+			if on:
+				button.add_theme_font_size_override("font_size",
+					Design.furniture_type(Design.SIZE_CONTROL))
+			else:
+				button.remove_theme_font_size_override("font_size")
+			if _primary_buttons.has(button):
+				Design.make_primary(button, on)
+		elif node is Label and node != toolbar_title:
+			if on:
+				(node as Control).add_theme_font_size_override("font_size",
+					Design.furniture_type(Design.SIZE_SECONDARY))
+			else:
+				(node as Control).remove_theme_font_size_override("font_size")
 
 
 func _fit_toolbar(width: float = -1.0) -> void:
