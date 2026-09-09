@@ -318,10 +318,15 @@ const SIZE_OCTAVE := 16
 const MIN_SCREEN_KEYCAP := 16
 const MIN_SCREEN_OCTAVE := 14
 
-enum Scale { COMPACT, COMFORTABLE, LARGE, XL }
+## 4K is the show preset: a 3840-wide screen at 100% is twice the pixels of the laptop
+## the other four were tuned on, and XL's 1.35 left the graph's words and the knobs'
+## values a third smaller on it than at a desk. 1.75 is XL again from twice as far away;
+## every floor, hit target and pinned text goes through the same factor, so the graph's
+## compact and summary bands move out with it as they do for XL.
+enum Scale { COMPACT, COMFORTABLE, LARGE, XL, FOUR_K }
 
-const SCALE_NAMES := ["Compact", "Comfortable", "Large", "XL"]
-const SCALE_FACTORS := [0.875, 1.0, 1.15, 1.35]
+const SCALE_NAMES := ["Compact", "Comfortable", "Large", "XL", "4K"]
+const SCALE_FACTORS := [0.875, 1.0, 1.15, 1.35, 1.75]
 
 static var ui_scale: int = Scale.COMFORTABLE
 

@@ -2696,7 +2696,7 @@ func _initialize() -> void:
 			over += 1
 			print("  over %s stands %.0f in a %s class of %d at %s" % [sized.title,
 				sized.size.x, NodeGrid.width_class_name(str(sized.get_meta("type", ""))),
-				declared, ["Compact", "Comfortable", "Large", "XL"][Design.ui_scale]])
+				declared, ["Compact", "Comfortable", "Large", "XL", "4K"][Design.ui_scale]])
 		check(sized.size.x >= float(declared) - 0.5,
 			"%s is never narrower than its %s class (%.0f of %d)" % [sized.title,
 				NodeGrid.width_class_name(str(sized.get_meta("type", ""))),
@@ -2978,6 +2978,22 @@ func _initialize() -> void:
 	check(Design.type(Design.SIZE_BODY) > body_at_comfortable,
 		"XL makes the text bigger (%d from %d)"
 			% [Design.type(Design.SIZE_BODY), body_at_comfortable])
+	# And 4K above it: the show preset. The type, the hit targets and the graph's own
+	# pinned floors all move, so the compact band starts further out than at XL — the
+	# same trade XL already makes, one step more.
+	var body_at_xl := Design.type(Design.SIZE_BODY)
+	var compact_floor_at_xl: float = main.PatchGraph.compact_floor()
+	main._use_ui_scale(Design.Scale.FOUR_K)
+	await process_frame
+	await process_frame
+	check(Design.SCALE_NAMES[Design.ui_scale] == "4K"
+			and Design.type(Design.SIZE_BODY) > body_at_xl
+			and main.PatchGraph.compact_floor() > compact_floor_at_xl
+			and int(Settings.fetch("ui_scale", 0)) == Design.Scale.FOUR_K,
+		"4K is bigger than XL again, in the type and in the graph's floors (%d from %d)"
+			% [Design.type(Design.SIZE_BODY), body_at_xl])
+	main._use_ui_scale(Design.Scale.XL)
+	await process_frame
 
 	# The whole interface, not only the type — padding, ports and hit areas move with it,
 	# which is the difference between a scale setting and a font-size setting.

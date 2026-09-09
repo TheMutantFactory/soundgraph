@@ -121,6 +121,8 @@ Everything else stays reachable through search, not the front row.
 - On the show laptop, restart the editor with `tools\run-demo.bat`: no rebuild, and it
   starts in 1:1 detail so every control stays on every node however far out the graph
   is zoomed on the big screen, whatever the last hand left behind.
+- View → Interface size → **4K** on the show laptop's screen: XL again from twice as
+  far away, in the graph's words and the knobs' values as well as the chrome.
 - View → QR code → Medium, so the wordmark's QR scans from across the table. Keyboard →
   Play is the jukebox: Keys, Arpeggiate held keys, or Play the songs folder.
 - Full dry run of all five stations, in order, on the laptop that goes to the show.

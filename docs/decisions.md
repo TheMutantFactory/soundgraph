@@ -1301,3 +1301,27 @@ Consequences:
 The suite's boot assumptions moved with the default patch. Play mode,
 QR size and theme are machine settings. The roll bypasses the arpeggiator:
 a drawn tune is already an arrangement.
+
+## 2026-09-09 — A 4K interface size above XL
+
+Decision:
+A fifth interface size, "4K", at 1.75 — above XL's 1.35. It goes through the
+same factor everything else does: type, spacing, hit targets, the graph's
+pinned screen minimums and its compact and summary floors.
+
+Reason:
+A 3840-wide screen at 100% is twice the pixels of the laptop the four
+presets were tuned on, and at XL the graph's words and the knobs' values
+were a third smaller on it than at a desk. A show is read from standing
+distance.
+
+Alternatives:
+OS-level scaling — changes every other window on the machine and blurs a
+Godot window that was not told. A graph-only zoom — makes the patch smaller
+while making the text bigger, the opposite of the ask, which the suite
+already says.
+
+Consequences:
+The graph's compact band starts further out at 4K, as it does at XL: the
+same trade, one step more. Anything that listed the four names by hand now
+lists five.

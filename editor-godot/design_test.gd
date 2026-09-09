@@ -385,8 +385,11 @@ func _initialize() -> void:
 		Design.ui_scale = preset
 		sizes.append(Design.type(Design.SIZE_BODY))
 	Design.ui_scale = Design.Scale.COMFORTABLE
-	check(sizes[0] < sizes[1] and sizes[1] < sizes[2] and sizes[2] < sizes[3],
-		"the UI scale presets step up (%s)" % str(sizes))
+	var steps_up := true
+	for preset in range(1, sizes.size()):
+		steps_up = steps_up and int(sizes[preset - 1]) < int(sizes[preset])
+	check(steps_up and sizes.size() == 5,
+		"the UI scale presets step up, 4K last (%s)" % str(sizes))
 	check(sizes[3] >= sizes[1] + 4,
 		"and XL is a genuinely bigger target than Comfortable (%d vs %d)"
 			% [sizes[3], sizes[1]])
