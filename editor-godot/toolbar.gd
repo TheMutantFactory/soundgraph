@@ -72,11 +72,14 @@ func set_qr_scale(index: int) -> void:
 		factor *= 0.5
 	toolbar_qr.custom_minimum_size = Vector2.ONE * float(Design.scale(Design.HIT_TARGET)) * factor
 var toolbar_add_button: Button
-## Half its height at 4K until the pointer comes to it. The top row was a fifth of the
-## screen at the show size — the wordmark, its QR and one verb — and the QR is the
-## reason it comes back: a phone is pointed at a full-size code, not a condensed one.
+## Half its height at 4K, always. The top row was a fifth of the screen at the show
+## size — the wordmark, its QR and one verb. A first cut brought the row back to full
+## height under the pointer; a row that changes height as the hand passes is a row
+## that moves the thing under the hand. The QR alone answers the pointer now, with a
+## large code of its own that pops up over it and goes when the pointer leaves.
 var condensed := false
 var _bar: HBoxContainer
+var _qr_hover: PopupPanel
 var toolbar_rung := Rung.FULL
 var undo_button: Button
 var redo_button: Button
@@ -209,6 +212,7 @@ func _build() -> void:
 	set_qr_scale(int(Settings.fetch("qr_scale", 0)))
 	qr.tooltip_text = "mutantfactory.net/soundgraph — click for a scannable size"
 	qr.mouse_filter = Control.MOUSE_FILTER_STOP
+	qr.mouse_entered.connect(_show_qr_hover)
 	qr.gui_input.connect(func(event: InputEvent) -> void:
 		var click := event as InputEventMouseButton
 		if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
@@ -857,16 +861,47 @@ func _apply_toolbar_rung(rung: int) -> void:
 ## without owning a 1280px window. Left at -1 it measures the bar it has.
 
 
-## Whether the pointer is over the bar, asked every frame rather than through
-## mouse_entered/exited, which a bar full of buttons does not report reliably.
+## The row's height follows the interface size, asked every frame because the size
+## changes elsewhere; and the QR's hover code goes when the pointer is on neither the
+## QR nor the code, asked the same way, because a popup does not see the pointer leave.
 func _process(_delta: float) -> void:
-	if Design.ui_scale != Design.Scale.FOUR_K:
-		if condensed:
-			set_condensed(false)
-		return
-	var inside := get_global_rect().has_point(get_global_mouse_position())
-	if inside == condensed:
-		set_condensed(not inside)
+	var half := Design.ui_scale == Design.Scale.FOUR_K
+	if half != condensed:
+		set_condensed(half)
+	if _qr_hover != null and _qr_hover.visible:
+		var at := get_global_mouse_position()
+		var over_qr := toolbar_qr != null and toolbar_qr.get_global_rect().has_point(at)
+		var over_code := Rect2(Vector2(_qr_hover.position), Vector2(_qr_hover.size)).has_point(
+			at + Vector2(get_window().position))
+		if not over_qr and not over_code:
+			_hide_qr_hover()
+
+
+## The large code, over everything, while the pointer is on the small one. Built once.
+func _show_qr_hover() -> void:
+	if _qr_hover == null:
+		_qr_hover = PopupPanel.new()
+		var big := TextureRect.new()
+		var large_texture: Texture2D = load("res://soundgraph_qr.png")
+		if large_texture != null:
+			big.texture = large_texture
+		big.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		big.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		big.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		# Giant: most of the window's height, or the code's own comfortable size,
+		# whichever is smaller — a phone across a table wants the former.
+		var side := minf(float(Design.scale(600)),
+			get_viewport().get_visible_rect().size.y * 0.8)
+		big.custom_minimum_size = Vector2(side, side)
+		_qr_hover.add_child(big)
+		add_child(_qr_hover)
+	if not _qr_hover.visible:
+		_qr_hover.popup_centered()
+
+
+func _hide_qr_hover() -> void:
+	if _qr_hover != null and _qr_hover.visible:
+		_qr_hover.hide()
 
 
 func set_condensed(on: bool) -> void:

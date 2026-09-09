@@ -3027,22 +3027,20 @@ func _initialize() -> void:
 			== Design.furniture_type(Design.SIZE_SECONDARY)
 			and main.scope_probe.base_field.furniture,
 		"the probe's pickers and fields are dressed as furniture")
-	# The toolbar condenses at 4K until the pointer comes to it, and comes back whole —
-	# the QR at its full size, the verb at the chrome's hit target.
-	main.toolbar.set_condensed(true)
+	# The toolbar stands at half its height at 4K whatever the pointer does. The QR
+	# alone answers the pointer: over it a large code pops up, and it goes when the
+	# pointer is on neither.
+	await process_frame
 	var condensed_verb: float = main.toolbar.toolbar_add_button.custom_minimum_size.y
-	var condensed_qr: float = main.toolbar.toolbar_qr.custom_minimum_size.x
-	main.toolbar.set_condensed(false)
-	check(condensed_verb < float(Design.scale(Design.HIT_TARGET)) * 0.5 + 0.5
-			and condensed_qr < float(Design.scale(Design.HIT_TARGET)) * 0.5 + 0.5
-			and main.toolbar.toolbar_add_button.custom_minimum_size.y
-				== float(Design.scale(Design.HIT_TARGET))
-			and main.toolbar.toolbar_qr.custom_minimum_size.x
-				== float(Design.scale(Design.HIT_TARGET)),
-		"the toolbar condenses to half at 4K and comes back whole under the pointer "
-			+ "(%.0f / %.0f verb, %.0f / %.0f QR)" % [condensed_verb,
-			main.toolbar.toolbar_add_button.custom_minimum_size.y, condensed_qr,
-			main.toolbar.toolbar_qr.custom_minimum_size.x])
+	check(main.toolbar.condensed
+			and condensed_verb < float(Design.scale(Design.HIT_TARGET)) * 0.5 + 0.5,
+		"the toolbar stands at half height at 4K (%.0f of %d)"
+			% [condensed_verb, Design.scale(Design.HIT_TARGET)])
+	main.toolbar._show_qr_hover()
+	var hover_shown: bool = main.toolbar._qr_hover != null and main.toolbar._qr_hover.visible
+	main.toolbar._hide_qr_hover()
+	check(hover_shown and not main.toolbar._qr_hover.visible,
+		"hovering the QR pops a large code up, and leaving it takes it down")
 	# The dock's geometry stops at XL too, and the strip's buttons stand at the strip's
 	# own target rather than the chrome's: the keys at 4K are XL's height, not double.
 	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(56)
@@ -3062,6 +3060,10 @@ func _initialize() -> void:
 	check(minimap_z > 100, "the minimap's z-index puts it over the glow and the cords (%d)" % minimap_z)
 	main._use_ui_scale(Design.Scale.XL)
 	await process_frame
+	await process_frame
+	check(not main.toolbar.condensed and main.toolbar.toolbar_add_button.custom_minimum_size.y
+			== float(Design.scale(Design.HIT_TARGET)),
+		"and at XL the toolbar is whole again, the verb at the chrome's hit target")
 	# Fresh routes for what follows. The router keeps a route once made for as long as
 	# it stays legal, and a route made around nodes four times the size is legal and
 	# strange at a desk size — a crossing site left sitting on a port. A real reader

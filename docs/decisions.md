@@ -1443,3 +1443,17 @@ Consequences:
 Below 4K the toolbar never condenses, so the chrome's hit-target floor
 holds everywhere the suite measures it. The furniture stops at XL as
 before; the halving is in the boxes, not the type.
+
+## 2026-09-09 — The toolbar's half height is fixed at 4K; the QR alone answers the pointer
+
+Decision:
+At 4K the toolbar stands at half its height, always. The hover-to-expand of
+the previous entry is withdrawn. The small QR grows a hover: over it a large
+code pops up in its own panel, sized to most of the window's height, and it
+goes when the pointer is on neither the QR nor the code. A click still opens
+the sticky dialog.
+
+Reason:
+A row that changes height as the hand passes moves the thing under the
+hand. The one reason the row came back was the QR, and the QR can answer
+for itself.
