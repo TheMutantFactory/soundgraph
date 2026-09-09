@@ -3239,6 +3239,59 @@ func _initialize() -> void:
 	check(shrunk < 28 and shrunk >= 9 and kept_size == 28,
 		"a rack legend shrinks to its plate before it is clipped (%d for the long name, "
 			+ "%d for the short)" % [shrunk, kept_size])
+
+	# The rack can be panned beyond its frame, and has a map. The rackmap_holder is the case
+	# plus half a window of rack_slack on every side, the rack sits in the middle of it,
+	# fitting the case scrolls to the case rather than to the rack_slack, the middle button
+	# drags the window, and the map shows the case with the window over it and puts
+	# the window where it is clicked.
+	main._set_patch_view(main.PatchView.RACK)
+	for i in 8:
+		await process_frame
+	main.rack.fit_case()
+	for i in 4:
+		await process_frame
+	var rack_slack: Vector2 = main.rack.pan_slack
+	var rackmap_holder: Control = main.rack.get_parent()
+	check(rack_slack.x > 0.0 and rack_slack.y > 0.0 and main.rack.position == rack_slack
+			and rackmap_holder.custom_minimum_size.x
+				> main.rack.content_size().x * main.rack.view_zoom + 1.0,
+		"the rack sits in a rackmap_holder with rack_slack to pan into on every side (%s)" % str(rack_slack))
+	check(main.rack_scroll.scroll_horizontal == int(rack_slack.x * main.rack.view_zoom)
+			and main.rack_scroll.scroll_vertical == int(rack_slack.y * main.rack.view_zoom),
+		"and fitting the case scrolls to the case, not to the rack_slack (%d, %d)"
+			% [main.rack_scroll.scroll_horizontal, main.rack_scroll.scroll_vertical])
+	var rackmap_before_pan: int = main.rack_scroll.scroll_horizontal
+	var rackmap_grab := InputEventMouseButton.new()
+	rackmap_grab.button_index = MOUSE_BUTTON_MIDDLE
+	rackmap_grab.pressed = true
+	rackmap_grab.position = Vector2(100.0, 100.0)
+	main.rack._gui_input(rackmap_grab)
+	var rackmap_pull := InputEventMouseMotion.new()
+	rackmap_pull.position = Vector2(60.0, 100.0)
+	rackmap_pull.relative = Vector2(-40.0, 0.0)
+	rackmap_pull.button_mask = MOUSE_BUTTON_MASK_MIDDLE
+	main.rack._gui_input(rackmap_pull)
+	rackmap_grab.pressed = false
+	main.rack._gui_input(rackmap_grab)
+	check(main.rack_scroll.scroll_horizontal > rackmap_before_pan,
+		"the middle button drags the window over the case (%d from %d)"
+			% [main.rack_scroll.scroll_horizontal, rackmap_before_pan])
+	check(main.rack_minimap != null and main.rack_minimap.visible
+			and main.rack_minimap.map_scale() > 0.0,
+		"the rack lens shows a map of the case (scale %.3f)" % main.rack_minimap.map_scale())
+	var rackmap_window_before: Rect2 = main.rack_minimap.window_in_rack()
+	main.rack_minimap.look_at_map_point(main.rack_minimap.size)
+	var rackmap_window_after: Rect2 = main.rack_minimap.window_in_rack()
+	check(rackmap_window_after.position.x > rackmap_window_before.position.x
+			and rackmap_window_after.position.y > rackmap_window_before.position.y,
+		"and clicking the map's far corner moves the window that way (%s -> %s)"
+			% [str(rackmap_window_before.position.round()), str(rackmap_window_after.position.round())])
+	main.rack.centre_case()
+	main._set_patch_view(main.PatchView.GRAPH)
+	for i in 6:
+		await process_frame
+	check(not main.rack_minimap.visible, "the map goes with the rack lens")
 	# The demo zoom holds through a load: the fit frames the patch, and then the work
 	# area goes to the session's zoom in both lenses, so the words on the nodes are the
 	# size the show asked for whatever example is opened.

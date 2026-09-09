@@ -414,6 +414,7 @@ var view_zoom := 1.0:
 func fit_case() -> void:
 	if case_hp <= 0:
 		view_zoom = 1.0
+		centre_case.call_deferred()
 		return
 	# The window is the scroll container, not this control: once a case is set the
 	# rack is exactly as wide as the case, and measuring yourself answers 1.0 forever.
@@ -422,6 +423,31 @@ func fit_case() -> void:
 		scroll = scroll.get_parent()
 	var window := maxf(scroll.size.x if scroll != null else size.x, 200.0)
 	view_zoom = window / (case_hp * HP + CASE_MARGIN * 2.0)
+	centre_case.call_deferred()
+
+
+## The scroll container two levels up, when there is one.
+func _scroller() -> ScrollContainer:
+	var holder := get_parent()
+	return holder.get_parent() as ScrollContainer if holder != null else null
+
+
+## Scrolls so the case, not the slack around it, is what the window shows first.
+func centre_case() -> void:
+	var scroll := _scroller()
+	if scroll == null:
+		return
+	scroll.scroll_horizontal = int(pan_slack.x * view_zoom)
+	scroll.scroll_vertical = int(pan_slack.y * view_zoom)
+
+
+## One step of a middle-button pan: the window follows the hand, in screen pixels.
+func pan_by(screen_delta: Vector2) -> void:
+	var scroll := _scroller()
+	if scroll == null:
+		return
+	scroll.scroll_horizontal = int(scroll.scroll_horizontal - screen_delta.x)
+	scroll.scroll_vertical = int(scroll.scroll_vertical - screen_delta.y)
 
 var selected_id := ""
 
@@ -492,6 +518,16 @@ var _modules: Dictionary = {}          # node id -> RackModule
 var _knobs: Dictionary = {}            # node id -> {parameter name -> Knob}
 var _cables: CableLayer
 var _content_size := Vector2.ZERO
+## Room around the case to pan into: half the window on every side, so the case can be
+## put anywhere on the screen rather than pinned to its top-left. The rack sits at
+## `pan_slack` inside its holder; the holder is the case plus the slack.
+var pan_slack := Vector2.ZERO
+var _pan_from := Vector2.INF
+
+
+## The case's own extent, for the map.
+func content_size() -> Vector2:
+	return _content_size
 
 
 func _ready() -> void:
@@ -673,11 +709,14 @@ func _relayout() -> void:
 	# window silently answered a different question. The window catches up through
 	# view_zoom instead. The span comes from the holder — this control sizes itself.
 	var host := get_parent() as Control
-	var span: float = host.size.x if host != null else size.x
-	# A hidden tab's holder may not have been laid out yet; walk up to whatever has
-	# real width rather than wrapping the whole rack at the 200px floor.
-	if span <= 1.0 and host != null and host.get_parent() is Control:
+	# The window's width, from the scroll container, not the holder's: the holder is
+	# the case plus the pan slack, so measuring it would feed the slack back into the
+	# case and the case back into the slack, without end.
+	var span: float = size.x
+	if host != null and host.get_parent() is Control:
 		span = (host.get_parent() as Control).size.x
+	elif host != null:
+		span = host.size.x
 	if span <= 1.0:
 		span = maxf(size.x, get_viewport_rect().size.x if is_inside_tree() else 0.0)
 	var available := maxf(span / maxf(view_zoom, 0.01) - CASE_MARGIN * 2.0, 200.0)
@@ -707,10 +746,17 @@ func _relayout() -> void:
 	# Outside a container, this control sizes itself; the holder carries the scaled
 	# footprint into the scroll area's arithmetic.
 	size = Vector2(maxf(_content_size.x, span / maxf(view_zoom, 0.01)), _content_size.y)
+	# The slack, in rack units, from the window the scroll container has: half of it on
+	# every side. The holder grows by the slack and the rack moves into the middle.
+	var window := Vector2(span, 0.0)
+	if host != null and host.get_parent() is Control:
+		window = (host.get_parent() as Control).size
+	pan_slack = window * 0.5 / maxf(view_zoom, 0.01)
+	position = pan_slack
 	if host != null:
 		host.custom_minimum_size = Vector2(
-			_content_size.x * view_zoom if case_hp > 0 else 0.0,
-			_content_size.y * view_zoom)
+			(_content_size.x if case_hp > 0 else size.x) + pan_slack.x * 2.0,
+			_content_size.y + pan_slack.y * 2.0) * view_zoom
 	queue_redraw()
 	redraw_cables()
 
@@ -868,9 +914,20 @@ func _gui_input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion != null:
 		_update_cable_hover(motion.position)
+		# The middle button drags the window over the case, the gesture every canvas
+		# already answers to. Relative motion is in the rack's own units, so it is
+		# scaled back to the screen the scroll container moves in.
+		if _pan_from != Vector2.INF and (motion.button_mask & MOUSE_BUTTON_MASK_MIDDLE) != 0:
+			pan_by(motion.relative * view_zoom)
+			accept_event()
+			return
 	# A click on the case selects the cable under it, or clears the selection when there
 	# is none. Selection is persistent hover, so it is picked up the same way.
 	var click := event as InputEventMouseButton
+	if click != null and click.button_index == MOUSE_BUTTON_MIDDLE:
+		_pan_from = click.position if click.pressed else Vector2.INF
+		accept_event()
+		return
 	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT \
 			and not click.ctrl_pressed:
 		selected_cable = cable_at(click.position)

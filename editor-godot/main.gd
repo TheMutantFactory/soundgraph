@@ -231,6 +231,7 @@ var face_edit_mode := false
 ## own vocabulary; none of them owns it.
 var selected_module := ""
 var rack_scroll: ScrollContainer
+var rack_minimap: RackMinimap
 var container_of_views: Control
 var view_switch: PanelContainer
 ## The segments inside the switches. The track is a frame around them; anything that
@@ -1285,7 +1286,10 @@ func _build_ui() -> void:
 
 	rack_scroll = ScrollContainer.new()
 	rack_scroll.name = "Rack"
-	rack_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# Scrolls both ways and shows no bars: the wheel, the middle button and the map
+	# are how the window moves over a case with slack on every side.
+	rack_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	rack_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	rack = Rack.new()
 	rack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rack.type_colours = TYPE_COLOURS
@@ -1319,6 +1323,22 @@ func _build_ui() -> void:
 	rack_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	rack_scroll.visible = false
 	container_tab.add_child(rack_scroll)
+	# The rack's map, bottom right like the graph's, over the rack and under the doors.
+	rack_minimap = RackMinimap.new()
+	rack_minimap.rack = rack
+	rack_minimap.scroll = rack_scroll
+	rack_minimap.anchor_left = 1.0
+	rack_minimap.anchor_right = 1.0
+	rack_minimap.anchor_top = 1.0
+	rack_minimap.anchor_bottom = 1.0
+	var map_size: Vector2 = RackMinimap.MAP_SIZE * float(Design.SCALE_FACTORS[Design.ui_scale])
+	rack_minimap.offset_left = -map_size.x - float(Design.scale(Design.SPACE_M))
+	rack_minimap.offset_top = -map_size.y - float(Design.scale(Design.SPACE_M))
+	rack_minimap.offset_right = -float(Design.scale(Design.SPACE_M))
+	rack_minimap.offset_bottom = -float(Design.scale(Design.SPACE_M))
+	rack_minimap.z_index = 20
+	rack_minimap.visible = false
+	container_tab.add_child(rack_minimap)
 	container_tab.add_child(lens_bar)
 	# Over everything the lenses draw, always. It is the last child here, which puts it
 	# on top today; a z-index says so in a way a later add_child cannot undo, and the

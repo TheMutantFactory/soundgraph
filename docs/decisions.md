@@ -1500,3 +1500,24 @@ knob's name was an ellipsis on every narrow panel.
 Consequences:
 Legends on narrow panels are smaller than on wide ones, as on hardware.
 Nothing below the floor changes; eliding still catches the rest.
+
+## 2026-09-09 — The rack has a map, and slack to pan into
+
+Decision:
+The rack's holder is the case plus half a window of slack on every side,
+with the rack in the middle; the scroll container scrolls both ways and
+shows no bars; fitting the case scrolls to the case; the middle button
+drags the window; and a RackMinimap in the corner of the rack lens draws
+the case, its modules in their tints and the window over them, and puts
+the window where it is clicked or dragged.
+
+Reason:
+At 168 HP on a show screen the case is wider than the window, and the rack
+was pinned to its top-left with no way to move the window but the wheel,
+vertically. The graph had a map because GraphEdit ships one; the rack is a
+plain Control and had none, so "where am I on the case" had no answer.
+
+Consequences:
+A rack lens opens on the case, not on the slack. Module positions are
+unchanged — the rack node moved, not its contents — so cables, hit tests
+and the layout harnesses read as before.
