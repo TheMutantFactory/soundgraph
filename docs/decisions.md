@@ -1108,3 +1108,36 @@ hardware is the tripwire. Nodes with per-block schedules that depend on
 history (cutoff_sweep) stay refused until replicated. Patch switching remains
 stop/load/start. The subset grows kernel by kernel, each landing with its
 golden case.
+
+## 2026-09-08 — One ceiling for the piece: reader, roll and schema share MAX_STEPS
+
+Decision:
+The MIDI reader's cap is the roll's `MAX_STEPS` (2048, 128 bars of sixteenths),
+read from `piano_roll.gd` rather than restated; the schema's `sequence.steps`
+maximum moves from 256 to 2048 to match; and the editor suite holds all three to
+one number and pins every vendored tune's note count against an independent
+parser's reading.
+
+Reason:
+An audit of whether Import MIDI takes the whole file found it did not. The reader
+was written with `MAX_STEPS := 256` when that was the roll's ceiling; the roll
+grew to 2048 (2026-08, "the piece grows a ceiling") and the reader kept sixteen
+bars, so five of the seven vendored tunes lost between a fifth and four fifths of
+their notes — The Entertainer arrived as 560 of 2621. The parser itself was
+faithful: python-mido and the reader agree note for note on what survived, and
+pickups keep their place (Invention 8 opens on step 2). Every loss was the stale
+constant. The schema had the same stale number, which meant the roll could
+already write documents the schema forbade.
+
+Alternatives:
+Keep 256 and shorten the vendored tunes — hides the defect in the corpus.
+Raise the reader and leave the schema — the roll had already outgrown it.
+Add beats-per-bar to the schema so bar lines follow the file's time signature —
+a real gap (see known-issues) but a schema design question, not this repair.
+
+Consequences:
+A document may now carry up to 2048 steps; readers that stored 256 as a limit
+should read the schema. `tempo` is now written to the hundredth so a file's
+666667 µs a beat lands as 90, not 90.00009. Bar lines still assume sixteen
+steps to the bar, so tunes in 3/4, 3/8, 6/8 or 9/8 keep exact timing but their
+bars do not fall on the roll's lines.

@@ -13,8 +13,12 @@ extends RefCounted
 ## SMPTE-timed file (division with the high bit set), or a truncated chunk all come
 ## back empty, and the caller says so in words.
 
-## The roll's own ceiling, sixteen bars of sixteenths — the schema's cap.
-const MAX_STEPS := 256
+## The piece's ceiling is the roll's, not a number of this file's own. It used to be:
+## 256 here, written when that was also the roll's, and when the roll grew to 2048 the
+## reader kept its old sixteen bars and quietly dropped four fifths of The Entertainer.
+## One constant, read from where it lives, and the suite checks the schema says the same.
+const PianoRoll := preload("res://piano_roll.gd")
+const MAX_STEPS: int = PianoRoll.MAX_STEPS
 
 
 static func read(path: String) -> Dictionary:
@@ -122,7 +126,7 @@ static func parse(bytes: PackedByteArray) -> Dictionary:
 		tracks_read += 1
 
 	# Quantise to sixteenths. What starts past the roll's ceiling is dropped and
-	# counted, so the caller can say "the first sixteen bars" honestly.
+	# counted, so the caller can say how much of the piece it is holding honestly.
 	var sixteenth := float(division) / 4.0
 	var notes: Array = []
 	var furthest := 0
@@ -140,7 +144,8 @@ static func parse(bytes: PackedByteArray) -> Dictionary:
 		return {}
 	var steps := clampi(ceili(float(furthest) / 16.0) * 16, 16, MAX_STEPS)
 	return {
-		"tempo": clampf(60000000.0 / tempo_us, 40.0, 240.0),
+		# To the hundredth: a file says 666667 µs a beat and means 90, not 90.00009.
+		"tempo": snappedf(clampf(60000000.0 / tempo_us, 40.0, 240.0), 0.01),
 		"steps": steps,
 		"notes": notes,
 		"dropped": dropped,

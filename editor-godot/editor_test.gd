@@ -3207,23 +3207,70 @@ func _initialize() -> void:
 		"the MIDI dialog opens files rather than offering to save one")
 
 	# Every vendored tune parses — a sweep, so dropping a new file into
-	# examples/midi cannot silently ship something the importer refuses.
+	# examples/midi cannot silently ship something the importer refuses — and every
+	# one arrives whole. The counts are a second parser's reading of the same files
+	# (python-mido, in tools/audio-to-midi/.venv), so this is two readers agreeing
+	# rather than the importer agreeing with itself. It did not use to: the reader
+	# kept a 256-step ceiling after the roll had grown to 2048, and The Entertainer
+	# came through as 560 of its 2621 notes with the rest "counted out loud".
+	var whole_tunes := {"bach-invention-04.mid": 443, "bach-invention-08.mid": 598,
+		"bach-invention-10.mid": 439, "entertainer.mid": 2621, "fur-elise.mid": 905,
+		"greensleeves.mid": 235, "ode-to-joy.mid": 30}
 	var midi_folder: String = ProjectSettings.globalize_path("res://") \
 		.path_join("../examples/midi")
 	var tunes_counted := 0
 	var unread_tunes: Array = []
+	var short_tunes: Array = []
 	for file_name in DirAccess.get_files_at(midi_folder):
 		if not file_name.ends_with(".mid"):
 			continue
 		tunes_counted += 1
 		var vendored_tune: Dictionary = main.MidiImport.read(
 			midi_folder.path_join(file_name))
-		if vendored_tune.is_empty() \
-				or (vendored_tune.get("notes", []) as Array).is_empty():
+		var arrived: int = (vendored_tune.get("notes", []) as Array).size()
+		if vendored_tune.is_empty() or arrived == 0:
 			unread_tunes.append(file_name)
+		elif int(vendored_tune.get("dropped", 0)) > 0 or (whole_tunes.has(file_name)
+				and arrived != int(whole_tunes[file_name])):
+			short_tunes.append("%s: %d notes, %d dropped, %s expected" % [file_name,
+				arrived, int(vendored_tune.get("dropped", 0)),
+				str(whole_tunes.get(file_name, "?"))])
 	check(tunes_counted >= 7 and unread_tunes.is_empty(),
 		"every vendored tune parses (%d files, refused: %s)"
 			% [tunes_counted, str(unread_tunes)])
+	check(short_tunes.is_empty(),
+		"and every vendored tune arrives whole (%s)" % str(short_tunes))
+
+	# One ceiling. The reader, the roll and the schema each stated how long a piece
+	# can be, and three copies of a number drift: the roll went to 2048 and the other
+	# two stayed at 256. The reader now takes the roll's; this is what holds the
+	# schema to it.
+	var schema: Variant = JSON.parse_string(FileAccess.get_file_as_string(
+		ProjectSettings.globalize_path("res://").path_join("../schema/patch.schema.json")))
+	var schema_steps: int = int(schema["properties"]["sequence"]["properties"]["steps"]
+		["maximum"]) if schema is Dictionary else -1
+	check(main.MidiImport.MAX_STEPS == PianoRoll.MAX_STEPS
+			and schema_steps == PianoRoll.MAX_STEPS,
+		"the reader, the roll and the schema agree on how long a piece can be "
+			+ "(%d, %d, %d)" % [main.MidiImport.MAX_STEPS, PianoRoll.MAX_STEPS,
+			schema_steps])
+
+	# The longest tune, whole: The Entertainer's last note ends on step 1214, so the
+	# piece is 76 bars of the roll's sixteenths. And a pickup keeps its place —
+	# Invention 8 opens on an eighth rest, so its first note is step 2: nothing
+	# pulled it to zero and nothing pushed it later.
+	var rag: Dictionary = main.MidiImport.read(midi_folder.path_join("entertainer.mid"))
+	check(int(rag.get("steps", 0)) == 1216 and int(rag.get("dropped", -1)) == 0,
+		"The Entertainer arrives whole, 76 bars (%d steps, %d dropped)"
+			% [int(rag.get("steps", 0)), int(rag.get("dropped", -1))])
+	var invention: Dictionary = main.MidiImport.read(
+		midi_folder.path_join("bach-invention-08.mid"))
+	var earliest := 1 << 30
+	for entry: Dictionary in invention.get("notes", []):
+		earliest = mini(earliest, int(entry["step"]))
+	check(earliest == 2 and absf(float(invention.get("tempo", 0.0)) - 90.0) < 0.001,
+		"a pickup keeps its place and the tempo is read to the hundredth "
+			+ "(step %d, %.5f bpm)" % [earliest, float(invention.get("tempo", 0.0))])
 	var tune: Dictionary = main.MidiImport.read(tune_path)
 	check(not tune.is_empty(), "the demo MIDI parses")
 	check((tune.get("notes", []) as Array).size() == 30,

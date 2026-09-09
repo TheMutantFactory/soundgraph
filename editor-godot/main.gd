@@ -5725,7 +5725,7 @@ func _grow_roll_to(needed_steps: int) -> void:
 
 
 ## A Standard MIDI File lands in the roll: notes and tempo through the reader,
-## quantised to sixteenths, first sixteen bars. One undo step, roll opened on it.
+## quantised to sixteenths, up to the roll's ceiling. One undo step, roll opened on it.
 func _import_midi_file(path: String) -> void:
 	var sung: Dictionary = MidiImport.read(path)
 	if sung.is_empty():
@@ -5744,7 +5744,8 @@ func _import_midi_file(path: String) -> void:
 	var bars := ceili(float(int(sung["steps"])) / 16.0)
 	_say("%d notes over %d bars at %d bpm%s" % [(sung["notes"] as Array).size(), bars,
 		int(round(float(sung["tempo"]))),
-		" — %d notes past bar sixteen stayed behind" % int(sung["dropped"])
+		" — %d notes past bar %d stayed behind" % [int(sung["dropped"]),
+			PianoRoll.MAX_STEPS / 16]
 			if int(sung["dropped"]) > 0 else ""])
 
 
