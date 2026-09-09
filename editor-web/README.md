@@ -73,9 +73,9 @@ control one, and says so by drawing them all the same.
 
 ## The introduction
 
-A first-time visitor gets `examples/patches/start-here.json` and a six-step tour: hear the
-patch, read it left to right, drag the filter cutoff, hear the difference, decide what to
-keep. Only the first screen is a modal — the rest are coach marks over a page that stays
+A first-time visitor gets `examples/patches/first-synth.json` and a six-step tour: hear the
+patch (the tour holds a note for them), read it left to right, drag the filter cutoff, hear
+the difference, decide what to keep. Only the first screen is a modal — the rest are coach marks over a page that stays
 usable. Progress lives in localStorage, **Help → Restart introduction** runs it again, and
 the mailing-list panel cannot appear before the golden moment.
 

@@ -28,8 +28,8 @@ Open problems, ordered by how much they threaten the Knobcon demo.
   280 of its checks. Four defects found doing it are fixed; see docs/decisions.md for
   the one that needed a decision.
 - **No `getUserMedia` in the browser.** `AudioInput` nodes schedule correctly but receive
-  silence, so `delay-echo.json` validates and runs in the browser without doing anything
-  audible.
+  silence, so a patch built on one validates and runs in the browser without doing
+  anything audible.
 - **The Waveshare board's microphone array is not driven.** The ES7210 is recorded in the
   board profile; the firmware only opens the ES8311 output path.
 - **`set_audio_input` assumes the host's frame count lines up with block boundaries.** If a

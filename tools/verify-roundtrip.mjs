@@ -21,7 +21,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // game/jump.json earns its place by being generated rather than hand-written: it is the
 // one that uses whatever the mapper emitted most recently, so it is the one that notices
 // when the editor and the mapper disagree about a port that only just started existing.
-const PATCHES = ['first-synth.json', 'delay-echo.json', 'game/jump.json'];
+const PATCHES = ['first-synth.json', 'plucked-string.json', 'game/jump.json'];
 const RENDER_SECONDS = 2;
 const NOTES = '45,52,57';
 

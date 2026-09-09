@@ -8,7 +8,7 @@
 // by different people.
 //
 //   * The tour names nodes — `filter`, `osc`, `clock` — and those names live in a patch
-//     file. Renaming a node in examples/patches/start-here.json would leave the tour
+//     file. Renaming a node in examples/patches/first-synth.json would leave the tour
 //     highlighting nothing at all, with no error anywhere: the ring would simply light up
 //     an empty set and the visitor would be told to look at something invisible.
 //
@@ -35,7 +35,7 @@ const { MILESTONES, browserFamily, funnelText, isDevelopmentOrigin, looksLikeAdd
 const { GraphView } = await import('./graph-view.js');
 const { SURFACES, isReachable } = await import('./surfaces.js');
 
-const patch = JSON.parse(readFileSync(join(root, 'examples', 'patches', 'start-here.json'), 'utf8'));
+const patch = JSON.parse(readFileSync(join(root, 'examples', 'patches', 'first-synth.json'), 'utf8'));
 
 let failures = 0;
 
@@ -52,7 +52,7 @@ function check(name, condition, detail = '') {
 // The tour and the patch agree about what is in the patch
 // ---------------------------------------------------------------------------------
 
-console.log('the tour and examples/patches/start-here.json');
+console.log('the tour and examples/patches/first-synth.json');
 
 const nodeIds = new Set(patch.nodes.map((node) => node.id));
 const named = [...new Set(COPY.read.lines.flatMap((line) => line.nodes))];
@@ -281,11 +281,15 @@ check('every node is placed', view.boxes.size === patch.nodes.length);
 
 // Two cables leaving the same node must not leave from the same point, or the picture
 // says one cable where the patch has two.
-const clockGate = view.anchor('clock', 'gate', 'out');
-const seqClock = view.anchor('seq', 'clock', 'in');
+const noteFrequency = view.anchor('note', 'frequency', 'out');
+const noteGate = view.anchor('note', 'gate', 'out');
+const oscFrequency = view.anchor('osc', 'frequency', 'in');
 const envGate = view.anchor('env', 'gate', 'in');
 check('a cable has somewhere to start and somewhere to land',
-    clockGate !== null && seqClock !== null && envGate !== null);
+    noteFrequency !== null && noteGate !== null && oscFrequency !== null && envGate !== null);
+check('two cables leaving the keyboard leave from two points',
+    noteFrequency === null || noteGate === null
+        || noteFrequency.x !== noteGate.x || noteFrequency.y !== noteGate.y);
 
 const description = view.describe(patch);
 const unnamed = patch.nodes.filter((node) => !description.includes(node.name || node.type));

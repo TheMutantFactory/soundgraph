@@ -20,9 +20,8 @@ esac
 
 mkdir -p "$target"
 
-for entry in synths drums drums606 drums909 dx7 fm game \
-             first-synth.json plucked-string.json delay-echo.json warehouse.json \
-             envelope-amp.json filter-envelope.json break-chopper.json kit-chopper.json; do
+for entry in synths drums drums606 drums909 dx7 fm game sfxr \
+             first-synth.json plucked-string.json warehouse.json envelope-amp.json; do
     if [ -e "$source_root/$entry" ]; then
         cp -R "$source_root/$entry" "$target/"
     fi

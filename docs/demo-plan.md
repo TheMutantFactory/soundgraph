@@ -23,7 +23,7 @@ The docs/KNOBCon_2026.md script, unchanged: play `first-synth.json` in the brows
 turn the cutoff, plug the LFO into the filter, hear it, save, then deploy to the
 ESP32-S3 and hear the board play the same graph.
 
-- **Examples:** `start-here.json` for the lite page; `first-synth.json` for the deploy.
+- **Examples:** `first-synth.json` for the lite page and for the deploy.
 - **Path:** `tools/serve.py` → `/editor-web/` lite page → "Open in the full editor" →
   Web Serial deploy → board.
 - **Blocker, must close today:** the Web Serial deploy button has never been clicked by
@@ -98,8 +98,7 @@ checked on Tuesday:
 
 | # | file | why it is first-click |
 |---|---|---|
-| 1 | `start-here.json` | the lite page's opener, seven nodes, nothing to explain |
-| 2 | `first-synth.json` | the deploy patch; the same graph on every target |
+| 1 | `first-synth.json` | the lite page's opener and the deploy patch; the same graph on every target |
 | 3 | `plucked-string.json` | sounds like an instrument in one keypress |
 | 4 | `game/coin.json`, `game/jump.json` | recognisable in a quarter second |
 | 5 | `drums909/` | a beat from the roll, loud enough for a hall |

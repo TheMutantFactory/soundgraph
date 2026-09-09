@@ -1242,3 +1242,31 @@ with it. Scrubbing while playing releases what was sounding and speaks the
 new row on the next tick. A song chosen from the folder is an ordinary
 Import MIDI: one undo step, and the file's meter and tempo come with it.
 The keyboard strip has eleven buttons now, counted by the suite.
+
+## 2026-09-09 — Seven examples retired, and the tour teaches First Synth
+
+Decision:
+start-here, delay-echo, filter-envelope, break-chopper, kit-chopper, wrist-both
+and wrist-kit leave the example library, with the two generators that existed
+only to write them (tools/make-break.mjs, editor-godot/make_filter_env.gd) and
+the ctest case that checked the break. The lite page's tutorial patch is
+first-synth.json: the tour's four sentences are rewritten for its seven nodes,
+and because it does not play itself, the page holds middle C for the visitor
+from the "hear" step until the instrument is handed over. The Godot suite's
+example-loading and module-import checks use Plucked String and First Synth.
+
+Reason:
+The author removed the seven by hand. Two of them held things up — start-here
+was the tour's patch and the onboarding check's fixture, delay-echo and
+kit-chopper were the suite's fixtures — and a library entry kept alive only by
+a test is a test measuring the wrong thing. Teaching First Synth also means
+the visitor hears on the page the graph they will hear on the board.
+
+Alternatives:
+Keep the five with dependents — overrides the author's edit. Copy start-here
+under another name — the same patch back under a hat.
+
+Consequences:
+The tour now presses a key. Silent mode is unchanged. install-patches.sh
+installs the sfxr shelf in their place. docs/sampler-design.md still
+describes the chopper as it was designed; that is history, not a promise.

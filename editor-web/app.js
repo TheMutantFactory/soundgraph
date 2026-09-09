@@ -57,15 +57,13 @@ const ui = {
 // The patch the introduction teaches. Named here rather than in the tour, because the page
 // also offers it in the menu and a second spelling of the path is a second thing to keep
 // in step.
-const TUTORIAL_PATCH = '../examples/patches/start-here.json';
+const TUTORIAL_PATCH = '../examples/patches/first-synth.json';
 
 // A short, curated menu rather than all 280. The Godot editor scans the corpus, which is
 // the right answer for an editor; a first visit wants five good ones and a way out.
 const EXAMPLES = [
-    { label: 'Start Here', path: TUTORIAL_PATCH },
-    { label: 'First Synth', path: '../examples/patches/first-synth.json' },
+    { label: 'First Synth', path: TUTORIAL_PATCH },
     { label: 'Plucked String', path: '../examples/patches/plucked-string.json' },
-    { label: 'Delay Echo', path: '../examples/patches/delay-echo.json' },
     { label: 'Poly Five', path: '../examples/patches/synths/poly-five.json' },
     { label: 'Acid Bass', path: '../examples/patches/synths/acid-bass.json' },
     { label: 'Warehouse', path: '../examples/patches/warehouse.json' },
@@ -931,6 +929,11 @@ const tour = new Onboarding({
     // timeout as starting. A resume that never settles hangs just as silently.
     resumeAudio: () => engine.start(),
     loadTutorialPatch: () => loadExample(TUTORIAL_PATCH),
+    // The tutorial patch is played, not self-playing: the tour holds middle C for the
+    // visitor so there is something to hear and something for the cutoff to change,
+    // and lets go when it hands the instrument over.
+    holdNote: () => noteOn(60),
+    releaseNote: () => noteOff(60),
     controlElement: (id) => controlSurfaces.get(id)?.slider ?? null,
     controlValue: (id) => controlSurfaces.get(id)?.value ?? null,
     setControlValue: (id, value) => controlSurfaces.get(id)?.set(value),

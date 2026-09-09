@@ -551,8 +551,8 @@ func _initialize() -> void:
 		"the FM bank credits its source")
 	check(str(blurbs.blurb("Node: Abs")).contains("Abs"),
 		"a node demo's blurb names its node")
-	check(main._matching_devices("jungle").has("Break Chopper"),
-		"the blurbs are searchable: 'jungle' finds the Break Chopper")
+	check(main._matching_devices("pick").has("Plucked String"),
+		"the blurbs are searchable: 'pick' finds the Plucked String")
 
 	main._toggle_loved("SineOscillator")
 	main._toggle_loved("Comb")
@@ -847,8 +847,8 @@ func _initialize() -> void:
 		shown.append(str(row.get_meta("id")))
 	check(main.node_browser.selected_item == "Delay",
 		"searching All puts the Delay node first (%s)" % main.node_browser.selected_item)
-	check(shown.has("device:Delay Echo"),
-		"and reaches the devices a browse would not have shown")
+	check(shown.has("device:Node: Delay"),
+		"and reaches the devices a browse would not have shown (%s)" % str(shown))
 
 	main.node_browser.select_category("Examples")
 	main.node_browser.search_field.text = "kit"
@@ -861,7 +861,7 @@ func _initialize() -> void:
 		shown.append(id)
 		if not id.begins_with("device:"):
 			strays += 1
-	check(shown.has("device:Kit Chopper") and strays == 0,
+	check(shown.has("device:808: kit") and strays == 0,
 		"a search inside Examples stays inside Examples (%d rows, %d strays)"
 			% [shown.size(), strays])
 
@@ -937,13 +937,13 @@ func _initialize() -> void:
 	# Something other than the patch already open, or the check passes without the button
 	# doing anything at all. It was written against First Synth, which the suite loaded
 	# on the way in.
-	main.node_browser.select_item("device:Kit Chopper")
+	main.node_browser.select_item("device:Plucked String")
 	await process_frame
 	var document_before: String = main.document_name
 	(main.node_browser._preview_actions.get_child(0) as Button).pressed.emit()
 	for i in 40:
 		await process_frame
-	check(main.document_name == "kit-chopper.json"
+	check(main.document_name == "plucked-string.json"
 			and document_before == "first-synth.json",
 		"Load example loads it (%s -> %s)" % [document_before, main.document_name])
 	check(not main.node_browser.visible,
@@ -2757,7 +2757,7 @@ func _initialize() -> void:
 
 	# Opening another document clears it, or the mark would follow you around for the
 	# rest of the session and stop meaning anything.
-	await main._load_example("Delay Echo")
+	await main._load_example("Plucked String")
 	await process_frame
 	check(not main.unsaved, "opening another one clears the mark")
 	await main._load_example("First Synth")
@@ -5055,30 +5055,28 @@ func _initialize() -> void:
 	check(is_equal_approx(bell_up, 1.0),
 		"and turning to it brings the bell forward (level %.2f)" % bell_up)
 
-	# The Capture button: draw drums on the roll, press it, and the chopper's buffer
-	# becomes the bar you drew. The hybrid kit ships chopping a bar of the Euclid
-	# groove; capture must replace it with a render of the kit's own roll — different
-	# bytes, same one-bar shape — and leave the engine loaded and playable.
-	await main._load_example("Kit Chopper")
+	# The Capture button: draw drums on the roll, press it, and a render of the roll
+	# lands in the document as the "capture" buffer. The 808 kit ships with a roll and
+	# no buffer; capture must write one and leave the engine loaded and playable.
+	await main._load_example("808: kit")
 	for i in 8:
 		await process_frame
 	var shipped_data: String = str(((main.patch.get("buffers", {}) as Dictionary)
 		.get("capture", {}) as Dictionary).get("data", ""))
-	check(shipped_data != "", "the hybrid kit ships with a capture buffer")
+	check(shipped_data == "", "the kit ships with a roll and no capture buffer")
 	main._capture_roll()
 	for i in 8:
 		await process_frame
 	var captured_data: String = str(((main.patch.get("buffers", {}) as Dictionary)
 		.get("capture", {}) as Dictionary).get("data", ""))
-	check(captured_data != "" and captured_data != shipped_data,
-		"Capture replaces the shipped bar with the roll's own render")
+	check(captured_data != "", "Capture writes the roll's own render into the document")
 	check(int(main.patch.get("schema_version", 1)) >= 3,
 		"and the document declares the version that says buffers exist")
 	check(main.engine != null and main.engine.is_loaded(),
 		"and the engine is still standing afterwards")
 	var chopped_peak: float = await _struck_peak(main, 48)
 	check(chopped_peak > 0.005,
-		"the kit still strikes over the captured chop (peak %.3f)" % chopped_peak)
+		"the kit still strikes after the capture (peak %.3f)" % chopped_peak)
 
 	# The bank travels with the face. Mounted as a device, the poly's strip must
 	# hold the same five pages its file shipped — every device's strip said "no
@@ -7124,14 +7122,14 @@ func _initialize() -> void:
 	# No example is busy enough on its own any more — the envelopes siphon four knobs
 	# each into sliders — so the fixture is authored: a panel that lists twelve knobs on
 	# one node, which an authored `controls` list is perfectly entitled to do.
-	await main._load_example("Filter Envelope")
+	await main._load_example("First Synth")
 	for i in 8:
 		await process_frame
 	var wide: Array = []
 	for repeat in 3:
 		for wide_parameter in ["cutoff", "resonance", "mode", "cutoff_sweep"]:
 			wide.append({"id": "k%d_%s" % [repeat, wide_parameter], "kind": "knob",
-				"target": {"node": "filter_env", "parameter": wide_parameter}})
+				"target": {"node": "filter", "parameter": wide_parameter}})
 	main.patch["controls"] = wide
 	await main._rebuild_view()
 	for i in 8:
@@ -9220,9 +9218,9 @@ func _initialize() -> void:
 	main._shift_octave(0)
 
 	# ---- the open document is named -----------------------------------------------------
-	await main._load_example("Delay Echo")
+	await main._load_example("Plucked String")
 	await process_frame
-	check(main.document_name == "delay-echo.json",
+	check(main.document_name == "plucked-string.json",
 		"opening a patch names it in the toolbar (%s)" % main.document_name)
 	await main._load_example("First Synth")
 	await process_frame
@@ -9231,13 +9229,15 @@ func _initialize() -> void:
 
 	# ---- adding a patch as a module ----------------------------------------------------
 	var before_import: int = main.patch["nodes"].size()
-	var delay_text := FileAccess.get_file_as_string("res://examples-mirror/delay-echo.json")
+	# First Synth, into First Synth: a plain graph with a keyboard and an output to leave
+	# behind, and no module of its own to complicate the question.
+	var delay_text := FileAccess.get_file_as_string("res://examples-mirror/first-synth.json")
 	if delay_text.is_empty():
 		delay_text = FileAccess.get_file_as_string(
-			ProjectSettings.globalize_path("res://").path_join("../examples/patches/delay-echo.json"))
-	check(not delay_text.is_empty(), "the delay example is readable for the module test")
+			ProjectSettings.globalize_path("res://").path_join("../examples/patches/first-synth.json"))
+	check(not delay_text.is_empty(), "the synth example is readable for the module test")
 
-	main._import_module(delay_text, "echo")
+	main._import_module(delay_text, "synth")
 	await process_frame
 
 	check(main.patch["nodes"].size() > before_import,
@@ -9246,7 +9246,7 @@ func _initialize() -> void:
 	var prefixed := 0
 	var terminals := 0
 	for node in main.patch["nodes"]:
-		if str(node["id"]).begins_with("echo" + ModuleImport.SEPARATOR):
+		if str(node["id"]).begins_with("synth" + ModuleImport.SEPARATOR):
 			prefixed += 1
 			if str(main.registry.get(node["type"], {}).get("category", "")) == "Terminals":
 				terminals += 1
@@ -9283,11 +9283,11 @@ func _initialize() -> void:
 
 	# The whole point of prefixing: importing twice must give two modules, not one merged
 	# heap with silently colliding ids.
-	main._import_module(delay_text, "echo")
+	main._import_module(delay_text, "synth")
 	await process_frame
 	var second := 0
 	for node in main.patch["nodes"]:
-		if str(node["id"]).begins_with("echo-2" + ModuleImport.SEPARATOR):
+		if str(node["id"]).begins_with("synth-2" + ModuleImport.SEPARATOR):
 			second += 1
 	check(second > 0 and second == prefixed,
 		"importing the same file twice gives a second, separate module")
