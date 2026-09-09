@@ -3219,6 +3219,26 @@ func _initialize() -> void:
 			and main._zoom_from_args(PackedStringArray(["--zoom=9"])) < 0.0
 			and main._zoom_from_args(PackedStringArray([])) < 0.0,
 		"--size names an interface size and --zoom a zoom the views can hold")
+	check(main._case_from_args(PackedStringArray(["--case=168"])) == 3
+			and main._case_from_args(PackedStringArray(["--case=84"])) == 1
+			and main._case_from_args(PackedStringArray(["--case=fit"])) == 0
+			and main._case_from_args(PackedStringArray(["--case=99"])) == -1,
+		"--case names a case by its width in HP")
+	main._use_case_width(3)
+	await process_frame
+	check(main.rack.case_hp == 168 and view_item_checked(main, 13),
+		"and the launcher's case goes through the menu's own path (%d HP)" % main.rack.case_hp)
+	main._use_case_width(0)
+	await process_frame
+	# The rack prints a legend as large as its plate allows and no larger: a long name
+	# on a narrow panel shrinks to fit before it is clipped, and a short one keeps its
+	# size. The graph does the opposite on purpose, and this is not the graph.
+	var legend_font: Font = Design.font(Design.WEIGHT_MEDIUM)
+	var shrunk: int = Rack.fitted(legend_font, "Filter cutoff frequency", 28, 60.0)
+	var kept_size: int = Rack.fitted(legend_font, "Cut", 28, 600.0)
+	check(shrunk < 28 and shrunk >= 9 and kept_size == 28,
+		"a rack legend shrinks to its plate before it is clipped (%d for the long name, "
+			+ "%d for the short)" % [shrunk, kept_size])
 	# The demo zoom holds through a load: the fit frames the patch, and then the work
 	# area goes to the session's zoom in both lenses, so the words on the nodes are the
 	# size the show asked for whatever example is opened.

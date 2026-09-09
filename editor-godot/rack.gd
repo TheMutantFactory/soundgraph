@@ -1863,12 +1863,16 @@ class RackModule extends Control:
 
 		if font != null:
 			var label := title.to_upper()
-			var width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-			# A long user-given name is clipped rather than shrunk, so every module's title
-			# sits on the same baseline at the same size, as a row of panels does.
+			# The title is printed as large as the plate allows, to a floor, and only
+			# clipped past that: every module's title sits on the same baseline, and
+			# a long user-given name reads whole on a narrow panel rather than losing
+			# its tail.
+			var title_size := Rack.fitted(font, label, 14, size.x - 12.0, 9)
+			var width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				title_size).x
 			var legend: Color = paint.get("legend", Color(0, 0, 0, 0))
 			draw_string(font, Vector2((size.x - width) * 0.5, 26.0), label,
-				HORIZONTAL_ALIGNMENT_LEFT, size.x - 12.0, 14,
+				HORIZONTAL_ALIGNMENT_LEFT, size.x - 12.0, title_size,
 				rack.ink if legend.a <= 0.0 else legend)
 
 		_draw_analysis()
@@ -1961,13 +1965,14 @@ class Jack extends Control:
 		var room := size.x - Rack.jack_radius() * 2.0 - 6.0
 		if room <= 4.0:
 			return
-		var text := Rack.elided(font, face_label if face_label != "" else port_name,
-			_label_size(), room)
-		var baseline := size.y * 0.5 + float(_label_size()) * 0.36
+		var wanted := face_label if face_label != "" else port_name
+		var fitted_size := Rack.fitted(font, wanted, _label_size(), room)
+		var text := Rack.elided(font, wanted, fitted_size, room)
+		var baseline := size.y * 0.5 + float(fitted_size) * 0.36
 		draw_string(font,
 			Vector2(Rack.jack_radius() * 2.0 + 6.0 if is_input else 0.0, baseline), text,
 			HORIZONTAL_ALIGNMENT_LEFT if is_input else HORIZONTAL_ALIGNMENT_RIGHT,
-			room, _label_size(),
+			room, fitted_size,
 			rack.ink_dim if _legend().a <= 0.0 else _legend())
 
 	## The panel's lettering colour, at full strength - see the note on Knob._legend for
@@ -2410,10 +2415,12 @@ class Knob extends Control:
 		# measured half-width from the middle: the old version had no bound at all, so a
 		# name wider than its cell simply printed over the knob beside it.
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
-		var label_size := Design.canvas_type(Design.SIZE_SECONDARY)
 		var room := size.x - Rack.KNOB_PAD * 2.0
+		var label_size := Rack.fitted(label_font, _name_text(),
+			Design.canvas_type(Design.SIZE_SECONDARY), room)
 		var value_font: Font = Design.numeric_font()
-		var value_size := Design.canvas_type(Design.SIZE_NUMERIC)
+		var value_size := Rack.fitted(value_font, _value_text(),
+			Design.canvas_type(Design.SIZE_NUMERIC), room)
 		var value_baseline := size.y - Rack.KNOB_PAD * 0.5
 		var name_baseline := value_baseline - float(value_size) - 4.0
 		draw_string(label_font, Vector2(Rack.KNOB_PAD, name_baseline),
@@ -2559,8 +2566,9 @@ class Fader extends Knob:
 				false, 2.0)
 
 		if label_font != null and label != "":
+			var fitted_size := Rack.fitted(label_font, label, label_size, size.x)
 			draw_string(label_font, Vector2(0.0, label_baseline), label,
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, label_size, _legend(true))
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, fitted_size, _legend(true))
 
 
 ## A module's aluminium: the plate, its edges, and the category stripe under the title.
@@ -2768,6 +2776,22 @@ static func draw_screw(canvas: CanvasItem, centre: Vector2, radius: float,
 ##
 ## An ellipsis rather than a hard cut, because "cutoff_mo" and "cutoff_mod" are two
 ## plausible port names and the reader cannot tell which one they are looking at.
+## The largest size at or under `size` at which `text` fits `room`, down to `floor_size`.
+## The rack's answer to a word wider than its panel, and a different answer from the
+## graph's: the graph pins words to a screen minimum and drops the controls around them,
+## because it is a diagram read at any zoom; a panel is a fixed thing with a legend
+## printed on it, and a legend is printed as large as the plate allows. Below the floor
+## the caller elides, as before.
+static func fitted(font: Font, text: String, size: int, room: float, floor_size: int = 9) -> int:
+	if font == null or room <= 0.0 or text == "":
+		return size
+	var chosen := size
+	while chosen > floor_size \
+			and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, chosen).x > room:
+		chosen -= 1
+	return chosen
+
+
 static func elided(font: Font, text: String, size: int, room: float) -> String:
 	if font == null or room <= 0.0:
 		return ""

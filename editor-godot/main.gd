@@ -527,6 +527,9 @@ func _ready() -> void:
 	var asked_size := _scale_from_args(OS.get_cmdline_user_args())
 	if asked_size >= 0 and asked_size != Design.ui_scale:
 		_use_ui_scale(asked_size)
+	var asked_case := _case_from_args(OS.get_cmdline_user_args())
+	if asked_case >= 0:
+		_use_case_width(asked_case)
 	if not _load_handed_off_patch():
 		_load_example("Synth: poly-five")
 
@@ -2467,11 +2470,32 @@ func _on_view_menu(id: int) -> void:
 		graph_edit.cable_style = id
 		graph_edit.refresh_cables()
 		return
-	var choice := id - 10
-	toolbar.tick_one_of(range(10, 10 + EditorToolbar.CASE_LABELS.size()), id)
+	_use_case_width(id - 10)
+
+
+## The case, by index into the toolbar's widths: the menu's path and the launcher's.
+func _use_case_width(choice: int) -> void:
+	choice = clampi(choice, 0, EditorToolbar.CASE_WIDTHS.size() - 1)
+	toolbar.tick_one_of(range(10, 10 + EditorToolbar.CASE_LABELS.size()), 10 + choice)
 	rack.case_hp = EditorToolbar.CASE_WIDTHS[choice]
 	# Picking a case answers "does my patch fit it" — so show the whole case at once.
 	rack.fit_case()
+
+
+## A case named on the command line — `--case=168`, in HP, or `--case=fit` — or -1.
+static func _case_from_args(args: PackedStringArray) -> int:
+	for arg: String in args:
+		if not arg.begins_with("--case="):
+			continue
+		var wanted := arg.substr("--case=".length()).to_lower()
+		if wanted == "fit":
+			return 0
+		if wanted.is_valid_int():
+			var hp := wanted.to_int()
+			for index in EditorToolbar.CASE_WIDTHS.size():
+				if int(EditorToolbar.CASE_WIDTHS[index]) == hp:
+					return index
+	return -1
 
 
 ## One step of a face drag. The hidden widgets move — they are where positions live

@@ -1480,3 +1480,23 @@ Consequences:
 Below 4K nothing about the toolbar changes; the strip and the tabs are
 shorter everywhere, as furniture is. A file's stored positions are
 untouched by `--arrange` until somebody saves.
+
+## 2026-09-09 — The rack prints its legends to fit; the demo's case is 168 HP
+
+Decision:
+`Rack.fitted()`: the largest size at or under the asked one at which a text
+fits its room, to a floor of 9, after which the caller elides as before.
+The knob's name and value, the fader's letter, the jack's label and the
+panel's title go through it. `--case=<HP>` joins the launcher's arguments,
+applied through the case menu's own path; run-demo.bat asks for 168.
+
+Reason:
+The rack is not the graph. The graph pins words to a screen minimum and
+drops the controls around them, because it is a diagram read at any zoom;
+a panel is a fixed plate with a legend printed on it, and a legend is
+printed as large as the plate allows. At 4K, with the canvas doubled, a
+knob's name was an ellipsis on every narrow panel.
+
+Consequences:
+Legends on narrow panels are smaller than on wide ones, as on hardware.
+Nothing below the floor changes; eliding still catches the rest.

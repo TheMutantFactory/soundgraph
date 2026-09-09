@@ -38,4 +38,4 @@ if not exist "%REPO%\editor-godot\bin\soundgraph_godot.dll" (
     exit /b 1
 )
 
-"%GODOT%" --path "%REPO%\editor-godot" -- --detail=1:1 --size=4k --arrange %*
+"%GODOT%" --path "%REPO%\editor-godot" -- --detail=1:1 --size=4k --arrange --case=168 %*
