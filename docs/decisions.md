@@ -1353,3 +1353,31 @@ already right.
 Consequences:
 At 200% a whole patch does not fit the window; Fit is one key away and the
 zoom returns on the next load. The rack draws at up to twice real size.
+
+## 2026-09-09 — The canvas boost: 4K draws the work area's text at twice the chrome
+
+Decision:
+A canvas factor above the interface factor, `Design.canvas_factor()`, which
+is the interface factor times a per-size boost — 1 everywhere but 4K, where
+it is 2. The work area goes through it: the words on the nodes, the rack's
+labels and values, the schematic, the face, the pinned screen minimums, and
+the node cells and gaps that hold the words (NodeGrid.scaled). Chrome — the
+menus, the browser, the toolbar — keeps the interface factor. run-demo.bat
+no longer passes a zoom; 4K alone doubles the words.
+
+Reason:
+Asked for, twice: the work area's text bigger without the nodes growing by
+zoom. Doubling the zoom doubled the cables, the spacing and the patch's
+footprint with it; the boost doubles the words and the cells around them
+and nothing else.
+
+Alternatives:
+Text alone, cells untouched — a word twice as tall does not fit a row that
+did not grow, and a GraphNode grows to its contents whether or not the
+layout classes say so; the classes would then describe nodes the editor
+does not draw, which is what the per-scale pass exists to catch.
+
+Consequences:
+Nodes at 4K are wider and taller than at XL by the boost, as their words
+are. Everything measured by the layout harnesses goes through the same
+factor, so the classes stay honest at every size.

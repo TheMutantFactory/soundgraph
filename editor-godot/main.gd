@@ -1591,8 +1591,8 @@ func _dress_anatomy(widget: GraphNode, lit: bool, health: int) -> void:
 	# Top and bottom differ, so they are set rather than passed: the space under the
 	# header's rule and the space above the body's foot are two measurements that happen
 	# to be equal today and are not the same thing.
-	body.content_margin_top = Design.scale(NodeGrid.INSET_TOP)
-	body.content_margin_bottom = Design.scale(NodeGrid.INSET_BOTTOM)
+	body.content_margin_top = Design.canvas_scale(NodeGrid.INSET_TOP)
+	body.content_margin_bottom = Design.canvas_scale(NodeGrid.INSET_BOTTOM)
 	body.corner_radius_top_left = 0
 	body.corner_radius_top_right = 0
 	body.border_width_top = 0
@@ -1680,7 +1680,7 @@ func _dress_anatomy(widget: GraphNode, lit: bool, health: int) -> void:
 	if title_label != null:
 		title_label.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
 		title_label.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_NODE_TITLE))
+			Design.canvas_type(Design.SIZE_NODE_TITLE))
 		title_label.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		# The name as it was written, at the left, in its own case.
@@ -4859,7 +4859,7 @@ func _create_widget(node: Dictionary) -> void:
 				# own contents and two rows of two read as four separate islands, which
 				# is exactly what the Lowpass looked like.
 				if gridded:
-					cell.custom_minimum_size.x = Design.scale(NodeGrid.COLUMN)
+					cell.custom_minimum_size.x = Design.canvas_scale(NodeGrid.COLUMN)
 				cells.add_child(cell)
 		line.add_child(cells)
 		line.set_meta("cells_box", cells)
@@ -4914,7 +4914,7 @@ func _create_widget(node: Dictionary) -> void:
 			# Capped. One long port name is allowed to widen its own gutter and not to
 			# set the width of the node system; past the ceiling it clips, and the node
 			# says so rather than growing quietly.
-			var ceiling := float(Design.scale(NodeGrid.PORT_GUTTER_MAX))
+			var ceiling := float(Design.canvas_scale(NodeGrid.PORT_GUTTER_MAX))
 			if widest > ceiling:
 				widget.set_meta("gutter_overflow", widest - ceiling)
 				widest = ceiling
@@ -5118,7 +5118,7 @@ func _add_ghost_ports(widget: GraphNode, node_id: String, descriptor: Dictionary
 		# Where it comes from, not just what it is called. Two inner nodes may both have a
 		# "gain", and the name this port would end up with is the document's to choose.
 		label.text = "%s.%s" % [str(binding.get("node", "")), str(binding.get("port", ""))]
-		label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+		label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_SECONDARY))
 		label.add_theme_color_override("font_color", Design.INK_SECOND)
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		line.add_child(label)
@@ -5141,7 +5141,7 @@ func _style_node_title(widget: GraphNode, descriptor: Dictionary) -> void:
 		if label == null:
 			continue
 		label.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
-		label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_NODE_TITLE))
+		label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_NODE_TITLE))
 		label.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		# Centred and in capitals, as on the module. A left title with a tag pushed to the
 		# right is a software header; a centred legend is a panel, and the whole point of
@@ -5360,7 +5360,7 @@ func _port_label(port: Dictionary, align_right: bool, roles: bool = false) -> Co
 	else:
 		name_label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
 		name_label.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_BODY))
+			Design.canvas_type(Design.SIZE_BODY))
 		name_label.add_theme_color_override("font_color", Design.INK_NORMAL)
 	name_label.set_meta("port_label", true)
 	# Operational: what is plugged in here is not guessable from the colour alone, so
@@ -5393,7 +5393,7 @@ func _unit_label(unit: String) -> Label:
 	# down from the value, which is the whole of its styling: rank carried by type, not
 	# by dimming the ink further.
 	label.add_theme_font_override("font", Design.unit_font())
-	label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_UNIT))
+	label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_UNIT))
 	label.add_theme_color_override("font_color", Design.INK_SECOND)
 	label.set_meta("port_label", true)
 	label.set_meta("screen_min", Design.MIN_SCREEN_UNIT)
@@ -5769,7 +5769,7 @@ func _size_cell_columns(widget: GraphNode) -> void:
 ## One line of numerals, the height every cell's value slot shares.
 func _numeric_line_height() -> float:
 	var font := Design.numeric_font()
-	return font.get_height(Design.type(Design.SIZE_NUMERIC)) if font != null else 0.0
+	return font.get_height(Design.canvas_type(Design.SIZE_NUMERIC)) if font != null else 0.0
 
 
 ## The top slot of every parameter cell: a fixed-height box with the control centred
@@ -5812,7 +5812,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 	# dropdown was flat and square. One key.
 	var roles := NodeIdentity.migrated(_type_key(node))
 	row.add_theme_constant_override("separation",
-		Design.scale(NodeGrid.LABEL_GAP) if roles else 0)
+		Design.canvas_scale(NodeGrid.LABEL_GAP) if roles else 0)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.set_meta("cell", "parameter")
@@ -5844,7 +5844,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		NodeText.dress(label, NodeText.Role.PARAM_LABEL)
 	else:
 		label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-		label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
+		label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_BODY))
 		label.add_theme_color_override("font_color", Design.INK_NORMAL)
 	label.set_meta("screen_min", Design.MIN_SCREEN_LABEL)
 	label.set_meta("screen_kind", "parameter")
@@ -5888,7 +5888,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		# under the pointer that had just clicked it — the same reflow the knob's readout
 		# avoids by reserving room for the widest value it could ever show.
 		var option_font := Design.font(Design.WEIGHT_MEDIUM)
-		var option_size := Design.type(Design.SIZE_CONTROL)
+		var option_size := Design.canvas_type(Design.SIZE_CONTROL)
 		var widest := 0.0
 		for entry in parameter["enum"]:
 			widest = maxf(widest, option_font.get_string_size(str(entry),
@@ -5920,7 +5920,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		else:
 			chosen.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
 			chosen.add_theme_font_size_override("font_size",
-				Design.type(Design.SIZE_NUMERIC))
+				Design.canvas_type(Design.SIZE_NUMERIC))
 			chosen.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		chosen.set_meta("screen_min", Design.MIN_SCREEN_LABEL)
 		chosen.set_meta("screen_kind", "value")

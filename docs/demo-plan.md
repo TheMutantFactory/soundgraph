@@ -119,9 +119,9 @@ Everything else stays reachable through search, not the front row.
 
 **Tuesday 2026-09-09**
 - On the show laptop, restart the editor with `tools\run-demo.bat`: no rebuild, and it
-  starts in 1:1 detail, at the 4K interface size, with the work area held at 200% after
-  every load — twice the words on the nodes and the panels — whatever the last hand
-  left behind. Fit (Ctrl+0) still frames a whole patch when one is needed.
+  starts in 1:1 detail at the 4K interface size, whose work area draws its words and
+  cells at twice the chrome, whatever the last hand left behind. Add `--zoom=2` to the
+  launcher for twice that again, nodes and all; Fit (Ctrl+0) frames a whole patch.
 - View → QR code → Medium, so the wordmark's QR scans from across the table. Keyboard →
   Play is the jukebox: Keys, Arpeggiate held keys, or Play the songs folder.
 - Full dry run of all five stations, in order, on the laptop that goes to the show.

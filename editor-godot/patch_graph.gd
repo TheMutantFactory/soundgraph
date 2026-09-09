@@ -1740,7 +1740,7 @@ func _draw_case() -> void:
 	var font := Design.font(Design.WEIGHT_SEMIBOLD)
 	if font == null:
 		return
-	var text_size := int(maxf(float(Design.type(Design.SIZE_CONTROL)) * scale, 8.0))
+	var text_size := int(maxf(float(Design.canvas_type(Design.SIZE_CONTROL)) * scale, 8.0))
 
 	# The mounted face draws its own case, and two cases in one spot is one too many —
 	# so the aluminium and the title are skipped while it is up. The chips are not: they
@@ -2314,7 +2314,7 @@ class WandOverlay extends Control:
 		_dive_hits_out.clear()
 		var scale: float = graph.zoom if graph.zoom > 0.0 else 1.0
 		var font := Design.font(Design.WEIGHT_SEMIBOLD)
-		var size := Design.type(Design.SIZE_CONTROL)
+		var size := Design.canvas_type(Design.SIZE_CONTROL)
 		var pad: float = float(Design.scale(Design.SPACE_M))
 
 		for module_name in graph.groups:
@@ -3471,7 +3471,7 @@ class ScreenText extends Control:
 	## is GraphNode's own furniture: its height is what the port rows are measured from,
 	## so it is the one place where a grown label would cost the most.
 	func _draw_title(node: GraphNode) -> void:
-		var size := Design.type(Design.SIZE_NODE_TITLE)
+		var size := Design.canvas_type(Design.SIZE_NODE_TITLE)
 		var active := Design.below_screen_minimum(size, graph.zoom,
 			Design.screen_minimum(Design.MIN_SCREEN_NODE_TITLE))
 		var label: Label = node.get_meta("title_label") if node.has_meta("title_label") else null

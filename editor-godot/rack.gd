@@ -815,7 +815,7 @@ func _draw() -> void:
 ## read as a measurement instead of a mood — the same reason a real rail has holes.
 func _draw_hp_ruler(rows: int, row_pitch: float) -> void:
 	var font := Design.numeric_font()
-	var font_size := Design.scale(11)
+	var font_size := Design.canvas_scale(11)
 	var end_x := CASE_MARGIN + case_hp * HP
 	for row in maxi(rows, 1):
 		var top := CASE_MARGIN + row * row_pitch
@@ -1930,7 +1930,7 @@ class Jack extends Control:
 		return Design.font(Design.WEIGHT_MEDIUM)
 
 	func _label_size() -> int:
-		return Design.type(Design.SIZE_SECONDARY)
+		return Design.canvas_type(Design.SIZE_SECONDARY)
 
 	func _text_width() -> float:
 		var font := _label_font()
@@ -2109,9 +2109,9 @@ class Knob extends Control:
 			var across := _radius() * 2.0 + 22.0
 			return Vector2(across, maxf(across, Design.scale(Design.HIT_TARGET)))
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
-		var label_size := Design.type(Design.SIZE_SECONDARY)
+		var label_size := Design.canvas_type(Design.SIZE_SECONDARY)
 		var value_font: Font = Design.numeric_font()
-		var value_size := Design.type(Design.SIZE_NUMERIC)
+		var value_size := Design.canvas_type(Design.SIZE_NUMERIC)
 		var widest := Rack.knob_radius() * 2.0 + 12.0
 		if label_font != null:
 			widest = maxf(widest, minf(label_font.get_string_size(_name_text(),
@@ -2399,10 +2399,10 @@ class Knob extends Control:
 		# measured half-width from the middle: the old version had no bound at all, so a
 		# name wider than its cell simply printed over the knob beside it.
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
-		var label_size := Design.type(Design.SIZE_SECONDARY)
+		var label_size := Design.canvas_type(Design.SIZE_SECONDARY)
 		var room := size.x - Rack.KNOB_PAD * 2.0
 		var value_font: Font = Design.numeric_font()
-		var value_size := Design.type(Design.SIZE_NUMERIC)
+		var value_size := Design.canvas_type(Design.SIZE_NUMERIC)
 		var value_baseline := size.y - Rack.KNOB_PAD * 0.5
 		var name_baseline := value_baseline - float(value_size) - 4.0
 		draw_string(label_font, Vector2(Rack.KNOB_PAD, name_baseline),
@@ -2501,7 +2501,7 @@ class Fader extends Knob:
 		# at all, which is the only reason it is this low — a fader is read as a height
 		# against its three neighbours, and four of them say the same shape small.
 		return Vector2(Design.scale(26),
-			Design.scale(26) + float(Design.type(Design.SIZE_SECONDARY)))
+			Design.scale(26) + float(Design.canvas_type(Design.SIZE_SECONDARY)))
 
 	## Where the thumb may sit, as (top, bottom) in local coordinates.
 	##
@@ -2511,7 +2511,7 @@ class Fader extends Knob:
 	## the plainest possible way to break a fader.
 	func _track() -> Vector2:
 		var foot := size.y - Rack.KNOB_PAD * 0.4 \
-			- float(Design.type(Design.SIZE_SECONDARY)) - 6.0
+			- float(Design.canvas_type(Design.SIZE_SECONDARY)) - 6.0
 		return Vector2(Rack.KNOB_PAD * 0.5, foot)
 
 	## The track's own length: on a fader the travel is visible, so the thumb follows the
@@ -2525,7 +2525,7 @@ class Fader extends Knob:
 
 	func _draw() -> void:
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
-		var label_size := Design.type(Design.SIZE_SECONDARY)
+		var label_size := Design.canvas_type(Design.SIZE_SECONDARY)
 		var label_baseline := size.y - Rack.KNOB_PAD * 0.4
 		var track := _track()
 		var track_top := track.x

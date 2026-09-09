@@ -328,6 +328,13 @@ enum Scale { COMPACT, COMFORTABLE, LARGE, XL, FOUR_K }
 
 const SCALE_NAMES := ["Compact", "Comfortable", "Large", "XL", "4K"]
 const SCALE_FACTORS := [0.875, 1.0, 1.15, 1.35, 2.0]
+## What the work area gets on top of the interface: the words on the nodes, the panels'
+## labels and values, the schematic's and the face's text, and the node cells that hold
+## them. 1 everywhere but 4K, where the chrome at 2.0 was right and the canvas was
+## still read from standing distance. Asked for as text alone; the cells follow because
+## a word twice as tall does not fit a row that did not grow, and a node in Godot grows
+## to its contents whether or not anybody declared it — better declared.
+const CANVAS_BOOST := [1.0, 1.0, 1.0, 1.0, 2.0]
 
 static var ui_scale: int = Scale.COMFORTABLE
 
@@ -355,6 +362,21 @@ static func type(value: float) -> int:
 	return maxi(scale(value), TYPE_FLOOR)
 
 
+## The interface factor with the canvas boost on it: what the work area is drawn at.
+static func canvas_factor() -> float:
+	return SCALE_FACTORS[ui_scale] * CANVAS_BOOST[ui_scale]
+
+
+## scale() and type() for the work area — the graph's nodes, the rack's panels, the
+## schematic and the face. Chrome keeps scale() and type().
+static func canvas_scale(value: float) -> int:
+	return int(roundf(value * canvas_factor()))
+
+
+static func canvas_type(value: float) -> int:
+	return maxi(canvas_scale(value), TYPE_FLOOR)
+
+
 ## A screen minimum, after the reader's UI-scale preference.
 ##
 ## The floors are absolute — they never go below what the spec sets, so Compact cannot
@@ -364,7 +386,9 @@ static func type(value: float) -> int:
 ## into one after all, just at the bottom of the range instead of the top — UI scale
 ## erased by graph zoom, which is the thing it is supposed to be independent of.
 static func screen_minimum(base: int) -> int:
-	return int(roundf(float(base) * maxf(1.0, SCALE_FACTORS[ui_scale])))
+	# The canvas factor, not the interface one: every caller is pinning a word on the
+	# canvas, and the canvas is what the boost is for.
+	return int(roundf(float(base) * maxf(1.0, canvas_factor())))
 
 
 ## True when `logical` px of type, once `zoom` has scaled it, lands under `minimum` real

@@ -39,14 +39,14 @@ static func dress(label: Control, role: int) -> void:
 	match role:
 		Role.NODE_TITLE:
 			_apply(label, Design.font(Design.WEIGHT_SEMIBOLD),
-				Design.type(Design.SIZE_NODE_TITLE), Design.INK_BRIGHT)
+				Design.canvas_type(Design.SIZE_NODE_TITLE), Design.INK_BRIGHT)
 		Role.PARAM_VALUE:
 			# Tabular figures, from Design.numeric_font, so a value that changes under
 			# the pointer does not shove its own unit sideways.
-			_apply(label, Design.numeric_font(), Design.type(Design.SIZE_NUMERIC),
+			_apply(label, Design.numeric_font(), Design.canvas_type(Design.SIZE_NUMERIC),
 				Design.INK_BRIGHT)
 		Role.PARAM_UNIT:
-			_apply(label, Design.unit_font(), Design.type(Design.SIZE_UNIT),
+			_apply(label, Design.unit_font(), Design.canvas_type(Design.SIZE_UNIT),
 				Design.INK_SECOND)
 		Role.PARAM_LABEL:
 			# A shade under its value, in ink and not in size. It was body size in normal
@@ -59,19 +59,19 @@ static func dress(label: Control, role: int) -> void:
 			# and every value went missing from the node. Rank here is carried by weight
 			# and ink, which the floor has no opinion about.
 			_apply(label, Design.font(Design.WEIGHT_MEDIUM),
-				Design.type(Design.SIZE_BODY), Design.INK_SECOND)
+				Design.canvas_type(Design.SIZE_BODY), Design.INK_SECOND)
 		Role.PORT_LABEL:
 			# The quietest text on the node, and the only one in regular weight: a port
 			# name is a fact about the perimeter, not an operating control. Weight and a
 			# shade of ink are what separate it from a parameter name — see the
 			# Amplifier, where both words are "gain".
 			_apply(label, Design.font(Design.WEIGHT_REGULAR),
-				Design.type(Design.SIZE_BODY),
+				Design.canvas_type(Design.SIZE_BODY),
 				Design.INK_SECOND.lerp(Design.SURFACES[Design.Surface.NODE], 0.2))
 		Role.CONTROL_OPTION:
 			# What a dropdown is set to is a value, and reads like one.
 			_apply(label, Design.font(Design.WEIGHT_MEDIUM),
-				Design.type(Design.SIZE_CONTROL), Design.INK_BRIGHT)
+				Design.canvas_type(Design.SIZE_CONTROL), Design.INK_BRIGHT)
 
 
 static func _apply(label: Control, face: Font, size: int, ink: Color) -> void:

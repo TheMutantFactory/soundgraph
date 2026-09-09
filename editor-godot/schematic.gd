@@ -345,8 +345,8 @@ func _draw_card(id: String, box: Rect2, font: Font, small: Font, mono: Font) -> 
 	var room := box.size.x - 36.0
 
 	draw_string(font, Vector2(left, box.position.y + 26.0),
-		_elided(font, title, Design.type(Design.SIZE_BODY), room),
-		HORIZONTAL_ALIGNMENT_LEFT, room, Design.type(Design.SIZE_BODY),
+		_elided(font, title, Design.canvas_type(Design.SIZE_BODY), room),
+		HORIZONTAL_ALIGNMENT_LEFT, room, Design.canvas_type(Design.SIZE_BODY),
 		Design.INK_BRIGHT)
 
 	# Two lines, not three. The kind-line earns its place; the id spent years on the
@@ -357,8 +357,8 @@ func _draw_card(id: String, box: Rect2, font: Font, small: Font, mono: Font) -> 
 		var kind := beneath if selected_id != id or mono == null \
 			else "%s · %s" % [beneath, id]
 		draw_string(small, Vector2(left, box.position.y + 46.0),
-			_elided(small, kind, Design.type(Design.SIZE_SECONDARY), room),
-			HORIZONTAL_ALIGNMENT_LEFT, room, Design.type(Design.SIZE_SECONDARY),
+			_elided(small, kind, Design.canvas_type(Design.SIZE_SECONDARY), room),
+			HORIZONTAL_ALIGNMENT_LEFT, room, Design.canvas_type(Design.SIZE_SECONDARY),
 			Design.INK_SECOND)
 
 	# A modulator wears a thread of its tint under the name — the one class whose
@@ -375,7 +375,7 @@ func _draw_card(id: String, box: Rect2, font: Font, small: Font, mono: Font) -> 
 ## ends at the dot, which is what makes this a schematic and not a diagram of cards.
 func _draw_ports(id: String, box: Rect2, small: Font) -> void:
 	var descriptor := _descriptor_of(id)
-	var label_size := maxi(Design.type(Design.SIZE_SECONDARY) - 1, 9)
+	var label_size := maxi(Design.canvas_type(Design.SIZE_SECONDARY) - 1, 9)
 	for side in 2:
 		var is_input: bool = side == 0
 		var ports: Array = descriptor.get("inputs" if is_input else "outputs", [])

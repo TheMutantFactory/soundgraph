@@ -2992,8 +2992,25 @@ func _initialize() -> void:
 			and int(Settings.fetch("ui_scale", 0)) == Design.Scale.FOUR_K,
 		"4K is bigger than XL again, in the type and in the graph's floors (%d from %d)"
 			% [Design.type(Design.SIZE_BODY), body_at_xl])
+	# And the work area twice that again: the words on the nodes, not the chrome. A
+	# node title at 4K is drawn at twice the interface's own body size, and the cells
+	# that hold it grew with it — declared, so the layout classes still describe the
+	# nodes the editor draws.
+	check(Design.canvas_type(Design.SIZE_BODY) == Design.type(Design.SIZE_BODY) * 2
+			and Design.canvas_scale(10) == Design.scale(10) * 2
+			and NodeGrid.scaled(100) == Design.canvas_scale(100),
+		"the canvas boost doubles the work area's text and its cells at 4K (%d vs %d)"
+			% [Design.canvas_type(Design.SIZE_BODY), Design.type(Design.SIZE_BODY)])
 	main._use_ui_scale(Design.Scale.XL)
 	await process_frame
+	# Fresh routes for what follows. The router keeps a route once made for as long as
+	# it stays legal, and a route made around nodes four times the size is legal and
+	# strange at a desk size — a crossing site left sitting on a port. A real reader
+	# who changes size and back gets the same until the next load, which is the
+	# router's own contract; the suite reloads so its later measurements are its own.
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
 
 	# The whole interface, not only the type — padding, ports and hit areas move with it,
 	# which is the difference between a scale setting and a font-size setting.
@@ -11518,7 +11535,12 @@ func _initialize() -> void:
 									continue
 								if piece is BaseButton or piece is Range:
 									ghosts += 1
-		Design.ui_scale = Design.Scale.COMFORTABLE
+		# Through the setter, so the widgets are rebuilt at Comfortable: setting the
+		# variable alone left the last scale's nodes on the canvas - four times their
+		# size after 4K - for every measurement that follows.
+		main._use_ui_scale(Design.Scale.COMFORTABLE)
+		for _restoring in 8:
+			await process_frame
 		check(elided == 0,
 			"no migrated title in the dense graph is ever cut (%d)" % elided)
 		check(over_class == 0,
