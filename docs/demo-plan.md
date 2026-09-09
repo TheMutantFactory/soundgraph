@@ -98,7 +98,8 @@ checked on Tuesday:
 
 | # | file | why it is first-click |
 |---|---|---|
-| 1 | `first-synth.json` | the lite page's opener and the deploy patch; the same graph on every target |
+| 1 | `synths/poly-five.json` | what the editor opens on: five voices, a bank of pages, chords under the keys |
+| 1b | `first-synth.json` | the lite page's opener and the deploy patch; the same graph on every target |
 | 3 | `plucked-string.json` | sounds like an instrument in one keypress |
 | 4 | `game/coin.json`, `game/jump.json` | recognisable in a quarter second |
 | 5 | `drums909/` | a beat from the roll, loud enough for a hall |
@@ -120,6 +121,8 @@ Everything else stays reachable through search, not the front row.
 - On the show laptop, restart the editor with `tools\run-demo.bat`: no rebuild, and it
   starts in 1:1 detail so every control stays on every node however far out the graph
   is zoomed on the big screen, whatever the last hand left behind.
+- View → QR code → Medium, so the wordmark's QR scans from across the table. Keyboard →
+  Play is the jukebox: Keys, Arpeggiate held keys, or Play the songs folder.
 - Full dry run of all five stations, in order, on the laptop that goes to the show.
   Time each. Write the per-station checklist on one page.
 - Reliability: thirty consecutive runs of station 1 end to end. Log every miss.

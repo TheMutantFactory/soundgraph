@@ -57,12 +57,20 @@ var preview_column: VBoxContainer
 var _close_button: Button
 
 ## What the rail holds, in order: a name and its mark, or null for a rule between
-## families. Three families, and the rules are what say so — the primitive node classes,
-## then the examples, then the banks. Deliberately not section headings: CATEGORIES is
-## already a heading, and a heading under a heading over three rows is a hierarchy
-## announcing itself rather than being read.
+## families. Three families, and the rules are what say so — the worked examples and
+## the banks first, because a visitor's first click is "give me something that plays",
+## then the primitive node classes for whoever is wiring. Deliberately not section
+## headings: CATEGORIES is already a heading, and a heading under a heading over three
+## rows is a hierarchy announcing itself rather than being read.
 const CATEGORIES: Array = [
 	["All", Icons.Kind.GRID],
+	["Examples", Icons.Kind.EXAMPLE],
+	null,
+	["Node bank", Icons.Kind.BANK],
+	["FM bank", Icons.Kind.BANK],
+	["DX7 bank", Icons.Kind.BANK],
+	["Drum bank", Icons.Kind.BANK],
+	null,
 	["Sources", Icons.Kind.WAVE],
 	["Filters", Icons.Kind.FUNNEL],
 	["Envelopes", Icons.Kind.ENVELOPE],
@@ -72,18 +80,15 @@ const CATEGORIES: Array = [
 	["Effects", Icons.Kind.ECHO],
 	["MIDI & IO", Icons.Kind.PLUG],
 	["Sequencers", Icons.Kind.STEPS],
-	null,
-	["Examples", Icons.Kind.EXAMPLE],
-	null,
-	["Node bank", Icons.Kind.BANK],
-	["FM bank", Icons.Kind.BANK],
-	["DX7 bank", Icons.Kind.BANK],
 ]
 
 ## Room to scan, and not scaled with the UI. Fourteen rows at an XL scale factor is more
 ## rail than there is browser, and the one thing this must not do is rebuild the scrolling
 ## pile it exists to replace. The text inside still scales.
-const ROW_HEIGHT := 36
+## 34, not 36: the Drum bank made fifteen rows, and fifteen at 36 plus two rules is
+## 566 against a budget of 545. Two pixels a row keeps the rail unscrolled everywhere
+## it was, and the text inside never depended on them.
+const ROW_HEIGHT := 34
 const ROW_ICON := 20
 ## Above and below a rule between families. Enough to read as a break, and no more: the
 ## rail's budget is the whole reason the rows are not taller.

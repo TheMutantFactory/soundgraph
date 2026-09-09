@@ -359,6 +359,16 @@ var view_popup: PopupMenu
 var keyboard_bar: Control
 var keyboard_dock: PanelContainer
 var keyboard_toggle: MenuButton
+## How the instrument is played: "keys" sounds what is held; "arp" holds the keys and
+## walks them one at a time at the roll's pace; "songs" runs the songs folder through
+## the roll. A setting of the machine, like the keyboard's size.
+var play_mode := "keys"
+const PLAY_MODES := ["keys", "arp", "songs"]
+## The keys held while arpeggiating, in the order they arrived; the one sounding now;
+## and the clock that walks them.
+var _arp_pool: Array = []
+var _arp_sounding := -1
+var _arp_clock := 0.0
 ## The instrument's own volume and mute; see _build_keyboard_bar.
 var master_knob
 var master_mute: Button
@@ -509,7 +519,7 @@ func _ready() -> void:
 	# pressed "open in the full editor" asked for their patch, and opening First Synth over
 	# it would throw away the thing they had just made.
 	if not _load_handed_off_patch():
-		_load_example("First Synth")
+		_load_example("Synth: poly-five")
 
 
 ## One theme on the root, inherited by everything — including the GraphNodes generated for
@@ -1282,6 +1292,11 @@ func _build_ui() -> void:
 	rack_scroll.visible = false
 	container_tab.add_child(rack_scroll)
 	container_tab.add_child(lens_bar)
+	# Over everything the lenses draw, always. It is the last child here, which puts it
+	# on top today; a z-index says so in a way a later add_child cannot undo, and the
+	# view switch re-fronts it besides. Rack, Graph, Schematic and Face are the four
+	# doors, and a door behind the furniture is not a door.
+	lens_bar.z_index = 32
 
 	# A third view, and a different kind of answer: not how a patch looks, but what it is
 	# for. Editing the jump patch in the Graph tab and hearing it change here, without a
@@ -1350,6 +1365,7 @@ func _build_ui() -> void:
 
 	_set_keyboard_mode(str(Settings.fetch("keyboard_mode", "full")))
 	_set_key_hints(bool(Settings.fetch("keyboard_hints", true)))
+	_set_play_mode(str(Settings.fetch("play_mode", "keys")), false)
 	_set_roll_orientation(str(Settings.fetch("roll_orientation", "vertical")))
 	for key in Settings.fetch("loved_nodes", []):
 		_loved_nodes[str(key)] = true
@@ -1460,6 +1476,8 @@ func _set_patch_view(view: int) -> void:
 	show_view("Patch")
 	patch_view = view
 	_sync_view_switch()
+	if lens_bar != null:
+		lens_bar.move_to_front()
 	# A short dissolve — same patch, different representation. Content-only and brief,
 	# so rapid switching never waits on a spectacle.
 	if container_of_views != null:
@@ -1852,13 +1870,14 @@ func _sync_view_menu() -> void:
 	toolbar.tick_one_of(range(30, 30 + Design.PALETTE_NAMES.size()), 30 + Design.palette)
 	toolbar.tick(20, Design.reduced_motion)
 	toolbar.tick(104, toolbar_qr != null and toolbar_qr.visible)
+	toolbar.tick_one_of([106, 107, 108], 106 + int(Settings.fetch("qr_scale", 0)))
 	_sync_panels_menu()
 
 
 func _sync_panels_menu() -> void:
 	if toolbar == null:
 		return
-	var panels := toolbar.menu_named("PanelsMenu")
+	var panels := toolbar.menu_named("ThemeMenu")
 	if panels == null:
 		return
 	var current := str(patch.get("arrangement", {}).get("theme", ""))
@@ -2385,6 +2404,9 @@ func _on_view_menu(id: int) -> void:
 	if id == 73:
 		graph_edit.zoom_actual()
 		return
+	if id >= 106 and id <= 108:
+		_use_qr_scale(id - 106)
+		return
 	if id >= 70:
 		_choose_detail_mode(id - 70)
 		return
@@ -2513,6 +2535,16 @@ static func _detail_from_args(args: PackedStringArray) -> int:
 			"adaptive", "map":
 				return PatchGraph.DetailMode.ADAPTIVE
 	return -1
+
+
+## How big the wordmark's QR stands. Small is a mark beside the name; a phone across a
+## table wants Medium or Large to lock on. A machine setting, like the rest of View.
+func _use_qr_scale(index: int) -> void:
+	var chosen := clampi(index, 0, EditorToolbar.QR_SCALE_NAMES.size() - 1)
+	toolbar.set_qr_scale(chosen)
+	Settings.store("qr_scale", chosen)
+	toolbar.tick_one_of([106, 107, 108], 106 + chosen)
+	_say("QR: %s" % str(EditorToolbar.QR_SCALE_NAMES[chosen]).to_lower())
 
 
 ## One path for menu and key alike: the mode, the memory, the checkmarks, the word.
@@ -3803,6 +3835,7 @@ func _process(_delta: float) -> void:
 		engine.fill_playback(playback, playback.get_frames_available())
 	_update_port_levels(_delta)
 	_advance_roll(_delta)
+	_advance_arp(_delta)
 	if rack != null and rack.is_visible_in_tree():
 		rack.refresh_displays()
 	if message_label != null and message_label.text != "" \
@@ -6775,11 +6808,20 @@ func _on_midi(event: InputEventMIDI) -> void:
 ## Every note goes through these two, whether a mouse or a computer key started it. The
 ## on-screen keyboard lights up from held_notes rather than from its own clicks, so what
 ## you see is what the engine was actually told.
-func _hold_note(note: int, velocity: float = 0.9) -> void:
+## `through_arp` is what the keys and MIDI say; the roll says false, because a tune
+## drawn on the grid is already an arrangement and is not for arpeggiating.
+func _hold_note(note: int, velocity: float = 0.9, through_arp: bool = true) -> void:
 	if engine == null or held_notes.has(note):
 		return
 	held_notes[note] = true
-	engine.note_on(note, velocity)
+	if through_arp and play_mode == "arp":
+		# Held, shown, not sounded: the arpeggiator speaks it in its turn. From empty,
+		# primed so the first key answers on the next frame rather than a step later.
+		if _arp_pool.is_empty():
+			_arp_clock = _roll_step_seconds()
+		_arp_pool.append(note)
+	else:
+		engine.note_on(note, velocity)
 	if keyboard != null:
 		keyboard.set_held_notes(held_notes)
 	if roll_pitch != null:
@@ -6790,11 +6832,83 @@ func _let_go_note(note: int) -> void:
 	if engine == null or not held_notes.has(note):
 		return
 	held_notes.erase(note)
-	engine.note_off(note)
+	if _arp_pool.has(note):
+		_arp_pool.erase(note)
+		if _arp_sounding == note:
+			engine.note_off(note)
+			_arp_sounding = -1
+	else:
+		engine.note_off(note)
 	if keyboard != null:
 		keyboard.set_held_notes(held_notes)
 	if roll_pitch != null:
 		roll_pitch.queue_redraw()
+
+
+## The arpeggiator's clock: one held key per step of the roll's pace, lowest to
+## highest, round and round while anything is held. Letting everything go silences it.
+func _advance_arp(delta: float) -> void:
+	if play_mode != "arp" or engine == null:
+		return
+	if _arp_pool.is_empty():
+		if _arp_sounding >= 0:
+			engine.note_off(_arp_sounding)
+			_arp_sounding = -1
+		_arp_clock = 0.0
+		return
+	_arp_clock += delta
+	var step := _roll_step_seconds()
+	if _arp_clock < step:
+		return
+	_arp_clock = fmod(_arp_clock, step)
+	var order: Array = _arp_pool.duplicate()
+	order.sort()
+	var next_index := 0
+	if _arp_sounding >= 0:
+		var at: int = order.find(_arp_sounding)
+		next_index = (at + 1) % order.size() if at >= 0 else 0
+		engine.note_off(_arp_sounding)
+	_arp_sounding = int(order[next_index])
+	engine.note_on(_arp_sounding, 0.9)
+
+
+## Keys, arpeggiator or songs. Leaving the arpeggiator lets its note go; leaving the
+## songs stops the roll; entering the songs turns play-through on and starts the first
+## song if none was chosen. `remember` is false only while restoring the setting.
+func _set_play_mode(mode: String, remember: bool = true) -> void:
+	if not PLAY_MODES.has(mode):
+		mode = "keys"
+	var was := play_mode
+	play_mode = mode
+	if was == "arp" and mode != "arp":
+		if _arp_sounding >= 0 and engine != null:
+			engine.note_off(_arp_sounding)
+		_arp_sounding = -1
+		for note in _arp_pool:
+			held_notes.erase(int(note))
+		_arp_pool.clear()
+		if keyboard != null:
+			keyboard.set_held_notes(held_notes)
+	if was == "songs" and mode != "songs" and roll_play != null and roll_play.button_pressed:
+		roll_play.button_pressed = false
+	if mode == "songs" and remember:
+		Settings.store("songs_play_through", true)
+		_refresh_songs_menu()
+		if _song_index < 0 and not _songs.is_empty():
+			_choose_song(0)
+		if roll_play != null and not _songs.is_empty():
+			roll_play.button_pressed = true
+	if remember:
+		Settings.store("play_mode", mode)
+	if keyboard_toggle != null:
+		var menu := keyboard_toggle.get_popup()
+		for index in PLAY_MODES.size():
+			var item := menu.get_item_index(10 + index)
+			if item >= 0:
+				menu.set_item_checked(item, PLAY_MODES[index] == mode)
+	if remember:
+		_say({"keys": "playing the keys", "arp": "arpeggiating whatever you hold",
+			"songs": "playing the songs folder through the roll"}[mode])
 
 
 ## ---- the piano roll ----------------------------------------------------------------
@@ -7360,7 +7474,7 @@ func _roll_tick() -> void:
 			continue
 		var note := int(entry.get("note", -1))
 		if note >= 0 and not _roll_sounding.has(note):
-			_hold_note(note)
+			_hold_note(note, 0.9, false)
 			_roll_sounding[note] = maxi(1, int(entry.get("length", 1)))
 	piano_roll.playing_step = _roll_step
 
@@ -7601,11 +7715,24 @@ func _build_keyboard_bar() -> Control:
 	# way, and somebody who knows where D is by now can have the piano back.
 	size_menu.add_check_item("Key hints", 3)
 	size_menu.set_item_checked(size_menu.get_item_index(3), true)
+	# The jukebox. Three ways to make the patch play, on the menu that is already about
+	# the instrument: the keys as they are, the keys arpeggiated, or the songs folder.
+	size_menu.add_separator("Play")
+	size_menu.add_radio_check_item("Keys", 10)
+	size_menu.add_radio_check_item("Arpeggiate held keys", 11)
+	size_menu.add_radio_check_item("Play the songs folder", 12)
+	size_menu.set_item_tooltip(size_menu.get_item_index(11),
+		"Hold a chord and the keys take turns, one per step of the roll's clock.")
+	size_menu.set_item_tooltip(size_menu.get_item_index(12),
+		"Every MIDI file in the songs folder, one after another, through the roll.")
+	size_menu.set_item_checked(size_menu.get_item_index(10), true)
 	size_menu.id_pressed.connect(func(id: int) -> void:
 		if id <= 2:
 			_set_keyboard_mode(["full", "mini", "hide"][id])
-		else:
-			_set_key_hints(not size_menu.is_item_checked(size_menu.get_item_index(3))))
+		elif id == 3:
+			_set_key_hints(not size_menu.is_item_checked(size_menu.get_item_index(3)))
+		elif id >= 10 and id - 10 < PLAY_MODES.size():
+			_set_play_mode(PLAY_MODES[id - 10]))
 	bar.add_child(_defocus(keyboard_toggle))
 
 	# The roll's fold and transport: Roll opens the grid, Play runs it, and the

@@ -58,6 +58,17 @@ var toolbar_menu_button: MenuButton
 var toolbar_identity_margin: MarginContainer
 var toolbar_menu_popup: PopupMenu
 var toolbar_qr: TextureRect
+## How big the QR stands beside the name, as multiples of a hit target. Small is the
+## mark it always was; Medium and Large are what a phone needs from across a table.
+const QR_SCALE_NAMES := ["Small", "Medium", "Large"]
+const QR_SCALES := [1.0, 1.5, 2.0]
+
+
+func set_qr_scale(index: int) -> void:
+	if toolbar_qr == null:
+		return
+	var factor: float = QR_SCALES[clampi(index, 0, QR_SCALES.size() - 1)]
+	toolbar_qr.custom_minimum_size = Vector2.ONE * float(Design.scale(Design.HIT_TARGET)) * factor
 var toolbar_add_button: Button
 var toolbar_rung := Rung.FULL
 var undo_button: Button
@@ -187,8 +198,7 @@ func _build() -> void:
 	qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	# Nearest, or the modules smear into grey and the phone gives up.
 	qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	qr.custom_minimum_size = Vector2(Design.scale(Design.HIT_TARGET),
-		Design.scale(Design.HIT_TARGET))
+	set_qr_scale(int(Settings.fetch("qr_scale", 0)))
 	qr.tooltip_text = "mutantfactory.net/soundgraph — click for a scannable size"
 	qr.mouse_filter = Control.MOUSE_FILTER_STOP
 	qr.gui_input.connect(func(event: InputEvent) -> void:
@@ -450,41 +460,6 @@ func _build() -> void:
 		rack_menu.add_radio_check_item(Rack.DENSITY_NAMES[index], 40 + index)
 	rack_menu.id_pressed.connect(func(id: int) -> void: view_action.emit(id))
 
-	# What the panels are painted in. A whole-rack default, because a rack that is one
-	# family reads as a rack; individual panels are repainted by right-clicking them,
-	# which is where somebody is already pointing when they want to change one.
-	#
-	# Its own door rather than a room inside Rack display: width and presentation
-	# describe the rack, and a panel is a panel in every view that draws one.
-	var panels_popup := _submenu(view_popup, "PanelsMenu", "Panels")
-	panels_popup.add_radio_check_item("Category colours", 200)
-	panels_popup.set_item_tooltip(0,
-		"One graphite panel each, with a stripe saying what the module is.")
-	panels_popup.add_separator()
-	for index in ModuleThemes.ORDER.size():
-		var key: String = ModuleThemes.ORDER[index]
-		panels_popup.add_radio_check_item(ModuleThemes.display_name(key), 201 + index)
-		panels_popup.set_item_tooltip(panels_popup.get_item_index(201 + index),
-			str(ModuleThemes.THEMES[key].get("blurb", "")))
-	# The wordmark's QR, with the panels rather than alone at the foot of View. It is a
-	# thing drawn on the interface, which is what this door holds; on its own it was a
-	# checkbox nobody had decided the kind of.
-	panels_popup.add_separator()
-	panels_popup.add_check_item("Show QR code", 104)
-	panels_popup.set_item_tooltip(panels_popup.get_item_index(104),
-		"The door into the program: mutantfactory.net/soundgraph, beside the "
-		+ "wordmark. Untick to work without it watching.")
-	panels_popup.about_to_popup.connect(func() -> void:
-		panels_popup.set_item_checked(panels_popup.get_item_index(104),
-			toolbar_qr != null and toolbar_qr.visible))
-	panels_popup.id_pressed.connect(func(id: int) -> void:
-		if id == 104:
-			if toolbar_qr != null:
-				toolbar_qr.visible = not toolbar_qr.visible
-				Settings.store("qr_visible", toolbar_qr.visible)
-			return
-		view_action.emit(id))
-
 	var zoom_menu := _submenu(view_popup, "ZoomMenu", "Zoom")
 	zoom_menu.add_item("Fit to screen", 72)
 	zoom_menu.set_item_tooltip(zoom_menu.get_item_index(72),
@@ -510,10 +485,49 @@ func _build() -> void:
 		size_menu.add_radio_check_item(Design.SCALE_NAMES[index], 50 + index)
 	size_menu.id_pressed.connect(func(id: int) -> void: view_action.emit(id))
 
+	# Theme, in two registers. The panels come first because they are what a patch looks
+	# like — the newer family, one name each, a whole-rack default; a single panel is
+	# repainted by right-clicking it. The interface palettes below recolour the chrome
+	# around them. Both used to be doors of their own, and "Panels" was the door nobody
+	# opened looking for a theme.
 	var theme_menu := _submenu(view_popup, "ThemeMenu", "Theme")
+	_section(theme_menu, "Panels")
+	theme_menu.add_radio_check_item("Category colours", 200)
+	theme_menu.set_item_tooltip(theme_menu.get_item_index(200),
+		"One graphite panel each, with a stripe saying what the module is.")
+	for index in ModuleThemes.ORDER.size():
+		var key: String = ModuleThemes.ORDER[index]
+		theme_menu.add_radio_check_item(ModuleThemes.display_name(key), 201 + index)
+		theme_menu.set_item_tooltip(theme_menu.get_item_index(201 + index),
+			str(ModuleThemes.THEMES[key].get("blurb", "")))
+	theme_menu.add_separator()
+	_section(theme_menu, "Interface")
 	for index in Design.PALETTE_NAMES.size():
 		theme_menu.add_radio_check_item(Design.PALETTE_NAMES[index], 30 + index)
 	theme_menu.id_pressed.connect(func(id: int) -> void: view_action.emit(id))
+
+	# The wordmark's QR: whether it stands beside the name, and how big. Twenty-four
+	# pixels is a mark, not a code — a phone across a table wants a little more to lock
+	# on to, and a show is a table with a queue at it.
+	var qr_menu := _submenu(view_popup, "QrMenu", "QR code")
+	qr_menu.add_check_item("Show beside the name", 104)
+	qr_menu.set_item_tooltip(qr_menu.get_item_index(104),
+		"The door into the program: mutantfactory.net/soundgraph, beside the "
+		+ "wordmark. Untick to work without it watching.")
+	qr_menu.add_separator()
+	_section(qr_menu, "Size")
+	for index in QR_SCALE_NAMES.size():
+		qr_menu.add_radio_check_item(QR_SCALE_NAMES[index], 106 + index)
+	qr_menu.about_to_popup.connect(func() -> void:
+		qr_menu.set_item_checked(qr_menu.get_item_index(104),
+			toolbar_qr != null and toolbar_qr.visible))
+	qr_menu.id_pressed.connect(func(id: int) -> void:
+		if id == 104:
+			if toolbar_qr != null:
+				toolbar_qr.visible = not toolbar_qr.visible
+				Settings.store("qr_visible", toolbar_qr.visible)
+			return
+		view_action.emit(id))
 
 	# An accessibility switch that only exists as a hope is not one. Everything that
 	# moves on its own in this editor is off behind this: the signal glow and the grid

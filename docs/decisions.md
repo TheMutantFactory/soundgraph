@@ -1270,3 +1270,34 @@ Consequences:
 The tour now presses a key. Silent mode is unchanged. install-patches.sh
 installs the sfxr shelf in their place. docs/sampler-design.md still
 describes the chopper as it was designed; that is history, not a promise.
+
+## 2026-09-09 — The face-lift: doors on top, themes in one place, Poly Five, a jukebox
+
+Decision:
+Six small things for the show, on one branch. The lens band (Rack, Graph,
+Schematic, Face) carries a z-index and re-fronts itself on every switch, so
+nothing a lens draws can cover the four doors. The Theme menu holds both
+registers — the panel themes first, then the interface palettes — and the
+Panels door is gone; the QR gets a door of its own with Show and three sizes.
+The editor opens on Poly Five. The Add node rail leads with Examples and the
+banks, gains a Drum bank row, and its rows are two pixels shorter so fifteen
+still fit the budget. The keyboard menu grows a Play section: Keys,
+Arpeggiate held keys (one held key per roll step, lowest to highest, round
+and round), and Play the songs folder (play-through on, the roll running).
+
+Reason:
+Each is a thing a visitor reaches for in the first minute. Examples above the
+wiring because the first click is "give me something that plays". Panel
+themes under Theme because that is the word people look for. A QR a phone
+can read from across a table. A jukebox because a patch that only sounds
+when somebody plays it well is a patch nobody hears at a show.
+
+Alternatives:
+A Play button of its own — the keyboard menu is already the instrument's.
+An arpeggiator node — exists, in the graph; this one is the host's, over the
+keys a person holds, and touches no document.
+
+Consequences:
+The suite's boot assumptions moved with the default patch. Play mode,
+QR size and theme are machine settings. The roll bypasses the arpeggiator:
+a drawn tune is already an arrangement.

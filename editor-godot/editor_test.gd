@@ -570,6 +570,12 @@ func _initialize() -> void:
 	main._toggle_loved("Comb")
 	check(not main._loved_nodes.has("Comb"), "and a second tap takes the love back")
 
+	# First Synth, by hand: the editor opens on Poly Five now, and this section is about
+	# First Synth's seven nodes.
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
+
 	# ---- the graph's topology, which a visual pass may not touch --------------------
 	# Step 1 of the node redesign freezes this: First Synth is seven nodes, seven wires,
 	# and a known set of ports. Everything the pass is about — surfaces, type, icons,
@@ -631,10 +637,11 @@ func _initialize() -> void:
 	var rail_listed: Array = []
 	for row: Button in main.node_browser._rows:
 		rail_listed.append(str(row.get_meta("category")))
-	check(rail_listed == ["All", "Sources", "Filters", "Envelopes", "Modulation",
-			"Utilities", "Mixing", "Effects", "MIDI & IO", "Sequencers", "Examples",
-			"Node bank", "FM bank", "DX7 bank"],
-		"the rail carries the fourteen categories in order (%d)" % rail_listed.size())
+	check(rail_listed == ["All", "Examples", "Node bank", "FM bank", "DX7 bank",
+			"Drum bank", "Sources", "Filters", "Envelopes", "Modulation", "Utilities",
+			"Mixing", "Effects", "MIDI & IO", "Sequencers"],
+		"the rail carries the fifteen categories in order: what plays first, then the "
+			+ "wiring (%d)" % rail_listed.size())
 	# Against the rail's budget rather than against its scrollbar: a popup that is never
 	# drawn has no size, so headless there is nothing for a scrollbar to be wrong about.
 	# The figure is the rail's real height at the tightest supported window and scale,
@@ -646,11 +653,11 @@ func _initialize() -> void:
 	check(main.node_browser.selected_category == "All", "All is lit to begin with")
 
 	# Pressed through the button's own signal, which is the route a click takes.
-	(main.node_browser._rows[2] as Button).pressed.emit()
+	(main.node_browser._rows[7] as Button).pressed.emit()
 	await process_frame
 	check(main.node_browser.selected_category == "Filters",
 		"pressing a row lights it (%s)" % main.node_browser.selected_category)
-	var rail_row: Button = main.node_browser._rows[2]
+	var rail_row: Button = main.node_browser._rows[7]
 	var rail_next: Button = main.node_browser._rows[3]
 	var rail_lit: StyleBoxFlat = rail_row.get_theme_stylebox("normal")
 	var rail_unlit: StyleBoxFlat = rail_next.get_theme_stylebox("normal")
@@ -670,15 +677,15 @@ func _initialize() -> void:
 	# the two is step eight.
 	main.node_browser.search_field.release_focus()
 	main.node_browser.select_category("All")
-	for i in 13:
+	for i in 14:
 		_press(KEY_DOWN)
 		await process_frame
-	check(main.node_browser.selected_category == "DX7 bank",
-		"down walks from All to the last bank (%s)"
+	check(main.node_browser.selected_category == "Sequencers",
+		"down walks from All to the last row, the wiring's end (%s)"
 			% main.node_browser.selected_category)
 	_press(KEY_DOWN)
 	await process_frame
-	check(main.node_browser.selected_category == "DX7 bank",
+	check(main.node_browser.selected_category == "Sequencers",
 		"and stops there rather than wrapping")
 	for i in 20:
 		_press(KEY_UP)
@@ -851,7 +858,7 @@ func _initialize() -> void:
 		"and reaches the devices a browse would not have shown (%s)" % str(shown))
 
 	main.node_browser.select_category("Examples")
-	main.node_browser.search_field.text = "kit"
+	main.node_browser.search_field.text = "pluck"
 	main.node_browser.refresh_results()
 	await process_frame
 	shown = []
@@ -861,7 +868,7 @@ func _initialize() -> void:
 		shown.append(id)
 		if not id.begins_with("device:"):
 			strays += 1
-	check(shown.has("device:808: kit") and strays == 0,
+	check(shown.has("device:Plucked String") and strays == 0,
 		"a search inside Examples stays inside Examples (%d rows, %d strays)"
 			% [shown.size(), strays])
 
@@ -937,6 +944,11 @@ func _initialize() -> void:
 	# Something other than the patch already open, or the check passes without the button
 	# doing anything at all. It was written against First Synth, which the suite loaded
 	# on the way in.
+	# First Synth first, by hand: the editor opens on Poly Five now, and this check
+	# wants to see the name change.
+	await main._load_example("First Synth")
+	for i in 6:
+		await process_frame
 	main.node_browser.select_item("device:Plucked String")
 	await process_frame
 	var document_before: String = main.document_name
@@ -4104,6 +4116,72 @@ func _initialize() -> void:
 			+ "(song %d, step %d)" % [main._song_index, main.piano_roll.playing_step])
 	Settings.store("songs_play_through", false)
 	main._refresh_songs_menu()
+
+	# The jukebox, on the keyboard's own menu. Arpeggiate: held keys are shown and not
+	# sounded, and the clock speaks them lowest to highest, one per step, round and
+	# round; letting go of everything silences it. Songs: play-through comes on, a song
+	# is chosen if none was, and the roll runs. Keys: back to the instrument as it was.
+	var play_menu: PopupMenu = main.keyboard_toggle.get_popup()
+	play_menu.id_pressed.emit(11)
+	for i in 2:
+		await process_frame
+	main._hold_note(67)
+	main._hold_note(60)
+	main._hold_note(64)
+	check(main.play_mode == "arp" and main.held_notes.size() == 3
+			and main._arp_sounding == -1,
+		"arpeggiate holds three keys and sounds none of them yet")
+	var arp_walked: Array = []
+	for step in 4:
+		main._advance_arp(main._roll_step_seconds())
+		arp_walked.append(main._arp_sounding)
+	check(arp_walked == [60, 64, 67, 60],
+		"and the clock walks them lowest to highest, round and round (%s)" % str(arp_walked))
+	main._let_go_note(64)
+	main._advance_arp(main._roll_step_seconds())
+	check(main._arp_sounding == 67 and not main.held_notes.has(64),
+		"a key let go leaves the round (%d)" % main._arp_sounding)
+	main._let_go_note(60)
+	main._let_go_note(67)
+	main._advance_arp(0.001)
+	check(main._arp_sounding == -1 and main.held_notes.is_empty(),
+		"and letting everything go silences it")
+	check(str(Settings.fetch("play_mode", "")) == "arp", "the play mode is remembered")
+	play_menu.id_pressed.emit(12)
+	for i in 6:
+		await process_frame
+	check(main.play_mode == "songs" and bool(Settings.fetch("songs_play_through", false))
+			and main._song_index >= 0 and main.roll_playing,
+		"the songs mode turns play-through on and runs the folder (song %d, playing %s)"
+			% [main._song_index, str(main.roll_playing)])
+	play_menu.id_pressed.emit(10)
+	for i in 3:
+		await process_frame
+	check(main.play_mode == "keys" and not main.roll_playing,
+		"and keys stops the roll and hands the instrument back")
+	main._hold_note(60)
+	check(main.held_notes.has(60) and main._arp_pool.is_empty(), "the keys sound directly again")
+	main._let_go_note(60)
+	Settings.store("songs_play_through", false)
+	main._refresh_songs_menu()
+
+	# The QR's size is a menu choice: Medium is half again the mark, and the choice is
+	# remembered. Small is what it always was.
+	main.view_popup.id_pressed.emit(107)
+	for i in 2:
+		await process_frame
+	var qr_medium: float = main.toolbar_qr.custom_minimum_size.x
+	check(is_equal_approx(qr_medium, float(Design.scale(Design.HIT_TARGET)) * 1.5)
+			and int(Settings.fetch("qr_scale", 0)) == 1 and view_item_checked(main, 107),
+		"QR code → Medium grows the mark by half and is remembered (%.0f px)" % qr_medium)
+	main.view_popup.id_pressed.emit(106)
+	for i in 2:
+		await process_frame
+	check(is_equal_approx(main.toolbar_qr.custom_minimum_size.x,
+			float(Design.scale(Design.HIT_TARGET))),
+		"and Small is the mark it always was")
+	check(view_item_checked(main, 200) or view_item_checked(main, 201),
+		"the Theme menu carries the panel themes, and one of them is lit")
 
 	main._import_midi_file(tune_path)
 	for i in 6:

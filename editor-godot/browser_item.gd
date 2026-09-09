@@ -77,6 +77,11 @@ const DEVICE_ROWS := {
 	"Node": "Node bank",
 	"FM": "FM bank",
 	"DX7": "DX7 bank",
+	"808": "Drum bank",
+	"909": "Drum bank",
+	"606": "Drum bank",
+	"SDS": "Drum bank",
+	"Gated": "Drum bank",
 }
 
 ## What the browser hands back when the item is taken. Stable, and the only string any
