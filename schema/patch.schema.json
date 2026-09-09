@@ -110,10 +110,10 @@
           "maximum": 240
         },
         "steps": {
-          "description": "Loop length, counted in steps of whatever the division says.",
+          "description": "Loop length, counted in steps of whatever the division says. The ceiling is the editor's roll ceiling (128 bars of sixteenths); it was 256 until the roll outgrew it, and a document written at either ceiling stays valid.",
           "type": "integer",
           "minimum": 1,
-          "maximum": 256
+          "maximum": 2048
         },
         "division": {
           "description": "Steps to the beat: 4 is sixteenths, 8 thirty-seconds, 16 sixty-fourths. Absent means 4, because every roll written before this field existed was played as sixteenths and must keep sounding that way.",
