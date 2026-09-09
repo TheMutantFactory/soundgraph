@@ -377,6 +377,15 @@ static func canvas_type(value: float) -> int:
 	return maxi(canvas_scale(value), TYPE_FLOOR)
 
 
+## type() for the furniture: the keyboard dock's strip and keycaps, the probe scope.
+## These scale with the interface up to XL and no further. At 4K the canvas doubled and
+## the chrome doubled, and a strip of transport buttons doubled with them — furniture
+## that is glanced at, not read, taking a quarter of the screen. It stays XL-sized.
+static func furniture_type(value: float) -> int:
+	var factor: float = minf(SCALE_FACTORS[ui_scale], SCALE_FACTORS[Scale.XL])
+	return maxi(int(roundf(value * factor)), TYPE_FLOOR)
+
+
 ## A screen minimum, after the reader's UI-scale preference.
 ##
 ## The floors are absolute — they never go below what the spec sets, so Compact cannot

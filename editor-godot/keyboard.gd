@@ -208,11 +208,11 @@ func _notification(what: int) -> void:
 ## follow the UI-scale setting like everything else, and floored so that setting can
 ## never take them under what somebody has to read mid-performance.
 static func keycap_size() -> int:
-	return maxi(Design.type(Design.SIZE_KEYCAP), Design.MIN_SCREEN_KEYCAP)
+	return maxi(Design.furniture_type(Design.SIZE_KEYCAP), Design.MIN_SCREEN_KEYCAP)
 
 
 static func octave_size() -> int:
-	return maxi(Design.type(Design.SIZE_OCTAVE), Design.MIN_SCREEN_OCTAVE)
+	return maxi(Design.furniture_type(Design.SIZE_OCTAVE), Design.MIN_SCREEN_OCTAVE)
 
 
 ## A held key changes in two ways, not one.

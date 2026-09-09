@@ -1071,8 +1071,11 @@ func _build_ui() -> void:
 		segment.flat = false
 		segment.tooltip_text = "%s — %d" % [lens_names[lens], int(lens) + 1] \
 			if lens != PatchView.RACK else "Rack — 1"
+		# The four doors read from across the room: the app-title size, a step above
+		# every other button, because which lens you are looking through is the first
+		# thing a visitor asks and the band is the answer.
 		segment.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_CONTROL))
+			Design.type(Design.SIZE_APP_TITLE))
 		segment.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var chosen := int(lens)
 		segment.pressed.connect(func() -> void: _set_patch_view(chosen))
@@ -1119,7 +1122,7 @@ func _build_ui() -> void:
 	lens_bar.anchor_bottom = 0.0
 	lens_bar.offset_top = float(Design.scale(Design.SPACE_S))
 	lens_bar.offset_right = -float(Design.scale(Design.SPACE_M))
-	lens_bar.offset_bottom = float(Design.scale(44))
+	lens_bar.offset_bottom = float(Design.scale(56))
 	lens_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	lens_bar.add_theme_constant_override("separation", Design.scale(Design.SPACE_S))
 	lens_bar.add_child(view_switch)
@@ -2640,6 +2643,14 @@ func _use_ui_scale(index: int) -> void:
 	_rebuild_view()
 	_refresh_context()
 	_refresh_keyboard_range()
+	if keyboard_bar != null:
+		_dress_furniture(keyboard_bar)
+	# The doors' size was set when the band was built and would stay there.
+	for lens: int in _view_buttons:
+		(_view_buttons[lens] as Button).add_theme_font_size_override("font_size",
+			Design.type(Design.SIZE_APP_TITLE))
+	if lens_bar != null:
+		lens_bar.offset_bottom = float(Design.scale(56))
 	if rack != null:
 		rack.rebuild()
 	if outline != null:
@@ -8001,7 +8012,25 @@ func _build_keyboard_bar() -> Control:
 		func() -> void: _show_octaves(keyboard_octaves + 1)))
 
 	keyboard_bar = bar
+	_dress_furniture(bar)
 	return bar
+
+
+## The strip's own text, at the furniture size: every button, menu and field on it,
+## walked after it is built and again whenever the interface size changes, because an
+## override set once outlives the theme it was set against.
+func _dress_furniture(strip: Control) -> void:
+	var queue: Array = [strip]
+	while not queue.is_empty():
+		var node: Node = queue.pop_back()
+		for child in node.get_children():
+			queue.append(child)
+		if node is Button:
+			(node as Control).add_theme_font_size_override("font_size",
+				Design.furniture_type(Design.SIZE_CONTROL))
+		elif node is Label or node is LineEdit:
+			(node as Control).add_theme_font_size_override("font_size",
+				Design.furniture_type(Design.SIZE_NUMERIC))
 
 
 ## Moves the keyboard, letting go first.

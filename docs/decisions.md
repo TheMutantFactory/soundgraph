@@ -1381,3 +1381,22 @@ Consequences:
 Nodes at 4K are wider and taller than at XL by the boost, as their words
 are. Everything measured by the layout harnesses goes through the same
 factor, so the classes stay honest at every size.
+
+## 2026-09-09 — Furniture stops at XL; the four doors grow
+
+Decision:
+`Design.furniture_type()`: text that scales with the interface up to XL and
+no further. The keyboard dock's strip — every button, menu and field on it —
+its keycaps and octave marks, and the probe scope's labels use it. The lens
+band's four doors (Rack, Graph, Schematic, Face) wear the app-title size.
+
+Reason:
+At 4K the chrome doubled and the canvas doubled, and a strip of transport
+buttons doubled with them: furniture that is glanced at, not read, taking a
+quarter of the screen. The doors are the opposite case — the first thing a
+visitor asks is which lens they are looking through.
+
+Consequences:
+Overrides on the strip are re-dressed whenever the size changes, because an
+override set once outlives the theme it was set against. Nothing below XL
+changes.

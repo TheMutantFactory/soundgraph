@@ -143,7 +143,7 @@ func _ready() -> void:
 	trigger_label.tooltip_text = "Rising edges the trigger wire has fired since the " 		+ "probe was pointed — counted in the engine, where no pulse can be missed."
 	trigger_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	trigger_label.add_theme_font_size_override("font_size",
-		Design.type(Design.SIZE_SECONDARY))
+		Design.furniture_type(Design.SIZE_SECONDARY))
 	trigger_label.add_theme_color_override("font_color", Design.INK_SECOND)
 	mode_row.add_child(trigger_label)
 	level_field = ValueField.new()
@@ -397,7 +397,7 @@ class ScopeDisplay extends Control:
 			var font := Design.font(Design.WEIGHT_MEDIUM)
 			draw_string(font, Vector2(Design.scale(12), size.y * 0.5),
 				"point the probe at a wire", HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-				Design.type(Design.SIZE_SECONDARY), Design.INK_SECOND)
+				Design.furniture_type(Design.SIZE_SECONDARY), Design.INK_SECOND)
 			return
 		# A gate never goes below zero, and drawn on the audio axis it lived in the
 		# top half with its floor on the centre line. A unipolar signal gets the

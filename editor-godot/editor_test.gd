@@ -3001,6 +3001,24 @@ func _initialize() -> void:
 			and NodeGrid.scaled(100) == Design.canvas_scale(100),
 		"the canvas boost doubles the work area's text and its cells at 4K (%d vs %d)"
 			% [Design.canvas_type(Design.SIZE_BODY), Design.type(Design.SIZE_BODY)])
+	# The furniture does not follow: the keycaps and the strip stay at XL's size, and
+	# the four doors of the lens band wear the app-title size at every scale.
+	var keycap_at_4k: int = Keyboard.keycap_size()
+	var strip_button: Button = null
+	for strip_child in main.keyboard_bar.get_children():
+		if strip_child is Button and strip_button == null:
+			strip_button = strip_child
+	check(Design.furniture_type(Design.SIZE_KEYCAP) == int(roundf(Design.SIZE_KEYCAP * 1.35))
+			and keycap_at_4k == Design.furniture_type(Design.SIZE_KEYCAP)
+			and strip_button != null
+			and strip_button.get_theme_font_size("font_size")
+				== Design.furniture_type(Design.SIZE_CONTROL)
+			and Design.furniture_type(Design.SIZE_CONTROL) < Design.type(Design.SIZE_CONTROL),
+		"the keycaps and the strip stop at XL's size while the chrome doubles (%d vs %d)"
+			% [Design.furniture_type(Design.SIZE_CONTROL), Design.type(Design.SIZE_CONTROL)])
+	check((main._view_buttons[main.PatchView.GRAPH] as Button).get_theme_font_size("font_size")
+			== Design.type(Design.SIZE_APP_TITLE),
+		"and the lens band's doors wear the app-title size")
 	main._use_ui_scale(Design.Scale.XL)
 	await process_frame
 	# Fresh routes for what follows. The router keeps a route once made for as long as
