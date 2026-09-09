@@ -3074,6 +3074,15 @@ func _initialize() -> void:
 	check(not main.toolbar.condensed and main.toolbar.toolbar_add_button.custom_minimum_size.y
 			== float(Design.scale(Design.HIT_TARGET)),
 		"and at XL the toolbar is whole again, the verb at the chrome's hit target")
+	# The probe on the Output's host side reads the signal leaving the graph: the
+	# terminal's own first output, which is the VCA's out through the level. "host" is
+	# a port the engine does not have, and the probe was drawing nothing for it.
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
+	var host_tap: Array = main._engine_signal_source("out", Seams.HOST_PORT)
+	check(host_tap.size() == 2 and str(host_tap[0]) == "out" and str(host_tap[1]) == "left",
+		"the Output's host side probes as the terminal's left out (%s)" % str(host_tap))
 	# Fresh routes for what follows. The router keeps a route once made for as long as
 	# it stays legal, and a route made around nodes four times the size is legal and
 	# strange at a desk size — a crossing site left sitting on a port. A real reader

@@ -4677,7 +4677,18 @@ func _engine_parameter_target(node_id: String, parameter: String) -> Array:
 ## Where an instance's declared port actually carries signal, for scopes and glow.
 func _engine_signal_source(node_id: String, port: String) -> Array:
 	for node in patch.get("nodes", []):
-		if node["id"] != node_id or str(node.get("type", "")) != "module":
+		if node["id"] != node_id:
+			continue
+		# The host side of an Output seam is what the machine hears. In the engine that
+		# node is the terminal it names, and the terminal's own first output is the
+		# signal leaving the graph — the VCA's out, through the output's level. Asked
+		# for "host" the engine found no such port and the probe drew nothing.
+		if port == Seams.HOST_PORT and str(node.get("type", "")) == "Output":
+			var terminal := Seams.terminal_for(node)
+			var outlets: Array = registry.get(terminal, {}).get("outputs", [])
+			if terminal != "" and not outlets.is_empty():
+				return [node_id, str(outlets[0].get("name", port))]
+		if str(node.get("type", "")) != "module":
 			continue
 		var definition: Dictionary = patch.get("modules", {}).get(str(node["module"]), {})
 		# Through the shared reader: a module's outputs are drawn as seams now, and a
