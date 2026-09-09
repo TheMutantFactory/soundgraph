@@ -3085,6 +3085,17 @@ func _initialize() -> void:
 	for i in 3:
 		await process_frame
 
+	# The launcher's word: tools/run-demo.bat passes --detail=1:1 so the show starts in
+	# the photograph whatever was left behind. The reader is a pure function of the
+	# argument list, so it is asked directly; the real list reaches it only at startup.
+	check(main._detail_from_args(PackedStringArray(["--detail=1:1"]))
+				== main.PatchGraph.DetailMode.ONE_TO_ONE
+			and main._detail_from_args(PackedStringArray(["--detail=adaptive"]))
+				== main.PatchGraph.DetailMode.ADAPTIVE
+			and main._detail_from_args(PackedStringArray(["--detail=sideways"])) == -1
+			and main._detail_from_args(PackedStringArray([])) == -1,
+		"--detail=1:1 on the command line names the photograph, and nonsense names nothing")
+
 	# The map from here down, chosen through the same path a hand would choose it.
 	main._choose_detail_mode(main.PatchGraph.DetailMode.ADAPTIVE)
 	for i in 3:

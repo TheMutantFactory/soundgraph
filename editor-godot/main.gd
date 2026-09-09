@@ -916,6 +916,13 @@ func _build_ui() -> void:
 	# into existing installs, and a default you cannot reach is not a default.
 	graph_edit.set_detail_mode(int(Settings.fetch("graph_detail",
 		PatchGraph.DetailMode.ONE_TO_ONE)))
+	# The command line outranks the memory, and writes it: tools/run-demo.bat starts
+	# the show in 1:1 every time, whatever the last hand at the laptop left behind,
+	# and the menu's tick reads the stored value so the two must agree.
+	var asked := _detail_from_args(OS.get_cmdline_user_args())
+	if asked >= 0:
+		graph_edit.set_detail_mode(asked)
+		Settings.store("graph_detail", asked)
 	graph_edit.port_hovered.connect(_on_port_hovered)
 	graph_edit.ghost_port_picked.connect(_on_ghost_port_picked)
 	graph_edit.region_drawn.connect(_on_region_drawn)
@@ -2491,6 +2498,21 @@ func _modernize_stereo_outputs() -> void:
 				rewired.append(split)
 	if touched > 0:
 		patch["connections"] = rewired
+
+
+## A detail mode named on the command line — `--detail=1:1` or `--detail=adaptive`,
+## after Godot's own `--` — or -1 when none was. Separate from the reading so the suite
+## can hand it a list; the launcher is the only caller that hands it the real one.
+static func _detail_from_args(args: PackedStringArray) -> int:
+	for arg: String in args:
+		if not arg.begins_with("--detail="):
+			continue
+		match arg.substr("--detail=".length()).to_lower():
+			"1:1", "one-to-one", "photograph":
+				return PatchGraph.DetailMode.ONE_TO_ONE
+			"adaptive", "map":
+				return PatchGraph.DetailMode.ADAPTIVE
+	return -1
 
 
 ## One path for menu and key alike: the mode, the memory, the checkmarks, the word.
