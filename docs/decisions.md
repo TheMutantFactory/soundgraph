@@ -1326,3 +1326,30 @@ Consequences:
 The graph's compact band starts further out at 4K, as it does at XL: the
 same trade, one step more. Anything that listed the four names by hand now
 lists five.
+
+## 2026-09-09 — The work area's text doubles by zoom, and the demo asks for it
+
+Decision:
+`--size=<name>` and `--zoom=<n>` on the command line, beside `--detail=`.
+The size is applied before the first patch is laid out; the zoom is held for
+the session and applied in both zooming lenses after every load's fit. The
+rack's zoom now runs to 2.0. tools/run-demo.bat passes 4K and 2.
+
+Reason:
+At 4K the words on the nodes were still too small from standing distance,
+and "twice the text" cannot be done to the text alone: a node's width is
+sized from its words through the layout classes, and the suite's per-scale
+pass refuses the first row that no longer fits. In 1:1 the words on the
+canvas are the font times the zoom, so twice the words is twice the zoom —
+of the nodes and the cables too, which on a big screen is the point. Held
+after every load because a demo switches examples, and a fit that quietly
+shrank the show back would be a bug found on stage.
+
+Alternatives:
+A canvas-only text factor — misfits inside every node at that size. A
+bigger 4K factor — doubles the menus and the browser as well, which were
+already right.
+
+Consequences:
+At 200% a whole patch does not fit the window; Fit is one key away and the
+zoom returns on the next load. The rack draws at up to twice real size.

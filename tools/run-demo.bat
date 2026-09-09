@@ -5,7 +5,9 @@ rem For the show floor. test-soundgraph-godot.bat rebuilds before it launches, w
 rem is right at a desk and wrong in front of a queue -- a restart must take seconds
 rem and must not depend on a compiler. This launches whatever is already built, and
 rem tells the editor to start in 1:1 so every control is on every node however far
-rem out the graph is zoomed, whatever the last hand at the laptop left behind.
+rem out the graph is zoomed, at the 4K interface size, with the work area held at 200%
+rem after every load - twice the words on the nodes - whatever the last hand at the
+rem laptop left behind.
 rem
 rem Anything else on the command line is passed through to the editor after its own
 rem arguments, so a patch or a further --detail= can follow.
@@ -36,4 +38,4 @@ if not exist "%REPO%\editor-godot\bin\soundgraph_godot.dll" (
     exit /b 1
 )
 
-"%GODOT%" --path "%REPO%\editor-godot" -- --detail=1:1 %*
+"%GODOT%" --path "%REPO%\editor-godot" -- --detail=1:1 --size=4k --zoom=2 %*

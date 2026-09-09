@@ -518,6 +518,12 @@ func _ready() -> void:
 	# A patch carried here from /soundgraph wins over the default example: somebody who
 	# pressed "open in the full editor" asked for their patch, and opening First Synth over
 	# it would throw away the thing they had just made.
+	# The interface size named on the command line, before the first patch is laid out:
+	# tools/run-demo.bat asks for 4K, so the show does not depend on what the last hand
+	# left in the settings.
+	var asked_size := _scale_from_args(OS.get_cmdline_user_args())
+	if asked_size >= 0 and asked_size != Design.ui_scale:
+		_use_ui_scale(asked_size)
 	if not _load_handed_off_patch():
 		_load_example("Synth: poly-five")
 
@@ -933,6 +939,11 @@ func _build_ui() -> void:
 	if asked >= 0:
 		graph_edit.set_detail_mode(asked)
 		Settings.store("graph_detail", asked)
+	# And how far in the work area sits, for the session: a demo on a big screen wants
+	# the words on the nodes twice the size, and in 1:1 the words are the zoom. Every
+	# load fits the patch and then holds this, so switching examples on the floor does
+	# not quietly shrink the show back.
+	_demo_zoom = _zoom_from_args(OS.get_cmdline_user_args())
 	graph_edit.port_hovered.connect(_on_port_hovered)
 	graph_edit.ghost_port_picked.connect(_on_ghost_port_picked)
 	graph_edit.region_drawn.connect(_on_region_drawn)
@@ -2289,7 +2300,7 @@ func _view_zoom_span() -> Vector2:
 		"Graph":
 			return Vector2(graph_edit.zoom_min, graph_edit.zoom_max)
 		"Rack":
-			return Vector2(0.25, 1.0)
+			return Vector2(0.25, 2.0)
 	return Vector2(1.0, 1.0)
 
 
@@ -2520,6 +2531,51 @@ func _modernize_stereo_outputs() -> void:
 				rewired.append(split)
 	if touched > 0:
 		patch["connections"] = rewired
+
+
+## The zoom the work area holds for the session, or -1 for none: set from `--zoom=2`
+## on the command line and applied after every load's fit.
+var _demo_zoom := -1.0
+
+
+## An interface size named on the command line — `--size=4k`, or any of the size
+## names — or -1 when none was.
+static func _scale_from_args(args: PackedStringArray) -> int:
+	for arg: String in args:
+		if not arg.begins_with("--size="):
+			continue
+		var wanted := arg.substr("--size=".length()).to_lower()
+		for index in Design.SCALE_NAMES.size():
+			if str(Design.SCALE_NAMES[index]).to_lower() == wanted:
+				return index
+	return -1
+
+
+## A zoom named on the command line — `--zoom=2` — or -1 when none, or when the number
+## is not one the views could hold.
+static func _zoom_from_args(args: PackedStringArray) -> float:
+	for arg: String in args:
+		if not arg.begins_with("--zoom="):
+			continue
+		var text := arg.substr("--zoom=".length())
+		if text.is_valid_float():
+			var zoom := text.to_float()
+			if zoom >= 0.1 and zoom <= 4.0:
+				return zoom
+	return -1.0
+
+
+## Puts the work area at the session's demo zoom, when there is one, in both lenses
+## that zoom. Called after a load has fitted the patch; the fit stops at 100%, and
+## this is what says "and then twice that".
+func _hold_demo_zoom() -> void:
+	if _demo_zoom <= 0.0:
+		return
+	if graph_edit != null:
+		graph_edit.zoom = _demo_zoom
+	if rack != null:
+		rack.view_zoom = _demo_zoom
+	_refresh_view_zoom_slider()
 
 
 ## A detail mode named on the command line — `--detail=1:1` or `--detail=adaptive`,
@@ -12248,6 +12304,7 @@ func _load_text(text: String) -> void:
 	# being asked to frame have been laid out.
 	await get_tree().process_frame
 	graph_edit.fit_graph()
+	_hold_demo_zoom()
 
 	# A document that arrives carrying notes shows them. The roll's fold is a stored
 	# preference that starts closed, so a patch shipping a tune opened onto silence and

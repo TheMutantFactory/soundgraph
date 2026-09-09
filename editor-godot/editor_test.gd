@@ -3123,6 +3123,30 @@ func _initialize() -> void:
 			and main._detail_from_args(PackedStringArray(["--detail=sideways"])) == -1
 			and main._detail_from_args(PackedStringArray([])) == -1,
 		"--detail=1:1 on the command line names the photograph, and nonsense names nothing")
+	check(main._scale_from_args(PackedStringArray(["--size=4k"])) == Design.Scale.FOUR_K
+			and main._scale_from_args(PackedStringArray(["--size=Comfortable"]))
+				== Design.Scale.COMFORTABLE
+			and main._scale_from_args(PackedStringArray(["--size=huge"])) == -1
+			and is_equal_approx(main._zoom_from_args(PackedStringArray(["--zoom=2"])), 2.0)
+			and main._zoom_from_args(PackedStringArray(["--zoom=9"])) < 0.0
+			and main._zoom_from_args(PackedStringArray([])) < 0.0,
+		"--size names an interface size and --zoom a zoom the views can hold")
+	# The demo zoom holds through a load: the fit frames the patch, and then the work
+	# area goes to the session's zoom in both lenses, so the words on the nodes are the
+	# size the show asked for whatever example is opened.
+	main._demo_zoom = 2.0
+	await main._load_example("Plucked String")
+	for i in 8:
+		await process_frame
+	check(is_equal_approx(main.graph_edit.zoom, 2.0) and is_equal_approx(main.rack.view_zoom, 2.0),
+		"a demo zoom of 2 holds after a load, in the graph and the rack (%.2f, %.2f)"
+			% [main.graph_edit.zoom, main.rack.view_zoom])
+	main._demo_zoom = -1.0
+	main.rack.view_zoom = 1.0
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
+	check(main.graph_edit.zoom <= 1.0, "and without one, a load fits as it always did")
 
 	# The map from here down, chosen through the same path a hand would choose it.
 	main._choose_detail_mode(main.PatchGraph.DetailMode.ADAPTIVE)

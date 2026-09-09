@@ -400,9 +400,11 @@ var case_hp: int = 0:
 ## How far away the viewer stands. 1.0 is workbench distance; a 168 HP case on a
 ## laptop needs the room. Purely visual — layout happens in unscaled units and the
 ## wrap width is the case's, not the window's.
+## Up to 2.0, not 1.0: a rack is drawn at real size for a desk, and a show on a 4K
+## screen wants the same panels twice as big, which is a zoom and not a redesign.
 var view_zoom := 1.0:
 	set(value):
-		view_zoom = clampf(value, 0.25, 1.0)
+		view_zoom = clampf(value, 0.25, 2.0)
 		scale = Vector2(view_zoom, view_zoom)
 		_relayout()
 

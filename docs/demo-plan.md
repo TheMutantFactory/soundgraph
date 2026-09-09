@@ -119,10 +119,9 @@ Everything else stays reachable through search, not the front row.
 
 **Tuesday 2026-09-09**
 - On the show laptop, restart the editor with `tools\run-demo.bat`: no rebuild, and it
-  starts in 1:1 detail so every control stays on every node however far out the graph
-  is zoomed on the big screen, whatever the last hand left behind.
-- View → Interface size → **4K** on the show laptop's screen: twice Comfortable, in
-  the graph's words and the knobs' values as well as the chrome.
+  starts in 1:1 detail, at the 4K interface size, with the work area held at 200% after
+  every load — twice the words on the nodes and the panels — whatever the last hand
+  left behind. Fit (Ctrl+0) still frames a whole patch when one is needed.
 - View → QR code → Medium, so the wordmark's QR scans from across the table. Keyboard →
   Play is the jukebox: Keys, Arpeggiate held keys, or Play the songs folder.
 - Full dry run of all five stations, in order, on the laptop that goes to the show.
