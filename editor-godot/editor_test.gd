@@ -3096,9 +3096,46 @@ func _initialize() -> void:
 	main._advance_roll(main._roll_step_seconds())
 	check(not main.held_notes.has(57), "and lets go when the step ends")
 	main.roll_play.button_pressed = false
-	check(main.piano_roll.playing_step == -1
-			and main.held_notes.is_empty(),
-		"stopping parks the playhead and releases everything")
+	check(main.piano_roll.playing_step == 1 and main.held_notes.is_empty(),
+		"stopping releases everything and leaves the playhead on its row (%d)"
+			% main.piano_roll.playing_step)
+
+	# The playhead is a thing you can move. The right button scrubs it to the row under
+	# the pointer, a left press on its line takes hold of it, and Play starts from
+	# wherever it was put rather than from the top.
+	var scrub := InputEventMouseButton.new()
+	scrub.button_index = MOUSE_BUTTON_RIGHT
+	scrub.pressed = true
+	scrub.position = Vector2(main.piano_roll.size.x * 0.5,
+		main.piano_roll.size.y - main.piano_roll._row_height() * 3.5)
+	main.piano_roll._gui_input(scrub)
+	check(main.piano_roll.playing_step == 3,
+		"the right button scrubs the playhead to the row under it (%d)"
+			% main.piano_roll.playing_step)
+	scrub.pressed = false
+	main.piano_roll._gui_input(scrub)
+	var playhead_grip := InputEventMouseButton.new()
+	playhead_grip.button_index = MOUSE_BUTTON_LEFT
+	playhead_grip.pressed = true
+	playhead_grip.position = Vector2(main.piano_roll.size.x * 0.5,
+		main.piano_roll.size.y - main.piano_roll._row_height() * 3.0 - 1.0)
+	main.piano_roll._gui_input(playhead_grip)
+	var playhead_drag := InputEventMouseMotion.new()
+	playhead_drag.position = Vector2(main.piano_roll.size.x * 0.5,
+		main.piano_roll.size.y - main.piano_roll._row_height() * 5.5)
+	main.piano_roll._gui_input(playhead_drag)
+	playhead_grip.pressed = false
+	main.piano_roll._gui_input(playhead_grip)
+	check(main.piano_roll.playing_step == 5 and main.piano_roll._drag_note < 0,
+		"a left press on the line drags the playhead, not a note (%d)"
+			% main.piano_roll.playing_step)
+	main.roll_play.button_pressed = true
+	main._advance_roll(0.001)
+	check(main.piano_roll.playing_step == 5,
+		"and Play starts from where the playhead was put (%d)" % main.piano_roll.playing_step)
+	main.roll_play.button_pressed = false
+	main._seek_roll(0)
+	check(main.piano_roll.playing_step == 0, "seeking to the top parks it there")
 
 	# The tune is part of the file: through text and back, the sequence survives.
 	var sung := JSON.stringify(main.patch)
@@ -3353,6 +3390,43 @@ func _initialize() -> void:
 	check(int(main.patch.get("sequence", {}).get("beats_per_bar", 0)) == 3
 			and main.roll_meter.text == "3/8",
 		"undo brings the file's 3/8 back (%s)" % main.roll_meter.text)
+
+	# The songs: every MIDI file in the songs folder, one click away — the repository's
+	# own tunes until a folder is chosen — next and previous wrap round the folder, and
+	# Play through the folder hands over to the next song when a piece ends.
+	check(main._songs.size() >= 7,
+		"the Songs menu found the shipped tunes (%d)" % main._songs.size())
+	var ode := -1
+	for song_index in main._songs.size():
+		if str(main._songs[song_index]).ends_with("ode-to-joy.mid"):
+			ode = song_index
+	main._choose_song(ode)
+	for i in 6:
+		await process_frame
+	check(ode >= 0 and main._song_index == ode
+			and (main.patch.get("sequence", {}).get("notes", []) as Array).size() == 30,
+		"choosing a song lands it in the roll (%d notes)"
+			% (main.patch.get("sequence", {}).get("notes", []) as Array).size())
+	main._advance_song(1)
+	for i in 6:
+		await process_frame
+	check(main._song_index == (ode + 1) % main._songs.size(),
+		"Next song moves down the folder, wrapping at the end (%d)" % main._song_index)
+	main._advance_song(-1)
+	for i in 6:
+		await process_frame
+	check(main._song_index == ode, "and Previous comes back (%d)" % main._song_index)
+	Settings.store("songs_play_through", true)
+	main.roll_play.button_pressed = true
+	for step in 130:
+		main._advance_roll(0.001 if step == 0 else main._roll_step_seconds())
+	main.roll_play.button_pressed = false
+	check(main._song_index == (ode + 1) % main._songs.size()
+			and main.piano_roll.playing_step >= 0 and main.piano_roll.playing_step < 4,
+		"Play through the folder hands over to the next song when the piece ends "
+			+ "(song %d, step %d)" % [main._song_index, main.piano_roll.playing_step])
+	Settings.store("songs_play_through", false)
+	main._refresh_songs_menu()
 
 	main._import_midi_file(tune_path)
 	for i in 6:
@@ -7367,9 +7441,10 @@ func _initialize() -> void:
 	await process_frame
 	check(not main.muted, "and unmuting puts it back")
 
-	check(buttons == 10,
-		"with ten buttons on it: collapse, mute, roll, meter, play, capture, two octave, "
-		+ "two width — the bar-zoom button folded into the Roll menu (%d)" % buttons)
+	check(buttons == 11,
+		"with eleven buttons on it: collapse, mute, roll, meter, songs, play, capture, "
+		+ "two octave, two width — the bar-zoom button folded into the Roll menu (%d)"
+			% buttons)
 
 	# The dock. The keyboard was the brightest, heaviest thing on screen and the eye
 	# went straight to it, so it has to be able to get out of the way.
