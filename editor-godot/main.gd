@@ -226,6 +226,15 @@ var roll_capture: Button
 var roll_tempo: ValueField
 var roll_division: ValueField
 var roll_meter: MenuButton
+## The songs: every MIDI file in a folder, listed on a button beside the roll's controls.
+var songs_button: MenuButton
+var songs_dialog: FileDialog
+var _songs: Array = []
+var _song_index := -1
+const SONG_CHOOSE := -1
+const SONG_NEXT := -2
+const SONG_PREVIOUS := -3
+const SONG_PLAY_THROUGH := -4
 ## The meters the button offers. Anything else a MIDI file carries is kept and shown;
 ## these are the ones somebody reaches for.
 const METERS := [[4, 4], [3, 4], [2, 4], [5, 4], [6, 8], [3, 8], [9, 8], [12, 8], [7, 8]]
@@ -1140,8 +1149,15 @@ func _build_ui() -> void:
 	midi_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	midi_dialog.add_filter("*.mid,*.midi", "Standard MIDI file")
 	midi_dialog.title = "Import MIDI into the piano roll"
-	midi_dialog.file_selected.connect(_import_midi_file)
+	midi_dialog.file_selected.connect(_import_midi_by_hand)
 	add_child(midi_dialog)
+
+	songs_dialog = FileDialog.new()
+	songs_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	songs_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+	songs_dialog.title = "Choose the songs folder"
+	songs_dialog.dir_selected.connect(_set_songs_folder)
+	add_child(songs_dialog)
 
 	audio_dialog = FileDialog.new()
 	audio_dialog.access = FileDialog.ACCESS_FILESYSTEM
@@ -5414,6 +5430,7 @@ func _set_roll_open(open: bool, remember := true) -> void:
 	roll_tempo.visible = open
 	roll_division.visible = open
 	roll_meter.visible = open
+	songs_button.visible = open
 	if remember:
 		Settings.store("piano_roll", open)
 	_sync_roll_menu()
@@ -5468,14 +5485,143 @@ func _set_roll_playing(playing: bool) -> void:
 	if roll_play != null:
 		roll_play.icon = _icon(Icons.Kind.PAUSE if playing else Icons.Kind.PLAY)
 	if playing:
-		# Primed so the very first tick speaks step zero rather than a beat of silence.
-		_roll_step = -1
+		# From the row the playhead is on — a paused piece resumes where it stopped and a
+		# scrubbed one starts where it was put — or from the top when there is none.
+		# Primed so the very first tick speaks that row rather than a beat of silence.
+		_roll_step = piano_roll.playing_step - 1 if piano_roll.playing_step >= 0 else -1
 		_roll_clock = _roll_step_seconds()
 	else:
 		for note in _roll_sounding:
 			_let_go_note(int(note))
 		_roll_sounding.clear()
+		# The playhead stays on its row: stopping is pausing, and Play picks up there.
+
+
+## The playhead, put somewhere by hand — scrubbed with the right button or dragged by its
+## line. Playing, that row sounds on the next tick; stopped, it is where Play will start.
+func _seek_roll(step: int) -> void:
+	var rows: int = maxi(1, int(patch.get("sequence", {}).get("steps", 16)))
+	var wanted := clampi(step, 0, rows - 1)
+	for note in _roll_sounding:
+		_let_go_note(int(note))
+	_roll_sounding.clear()
+	_roll_step = wanted - 1
+	if roll_playing:
+		_roll_clock = _roll_step_seconds()
+	piano_roll.playing_step = wanted
+
+
+## The piece was replaced under the clock: back to the top.
+func _rewind_roll() -> void:
+	_roll_step = -1
+	if piano_roll != null:
 		piano_roll.playing_step = -1
+
+
+# ---- the songs folder --------------------------------------------------------------
+## Where the songs are: the folder somebody chose, or the repository's own tunes until
+## then. A setting rather than part of any document — a folder is a fact about this
+## machine, and a patch that named one would be wrong everywhere else.
+func _songs_folder() -> String:
+	var chosen := str(Settings.fetch("songs_folder", ""))
+	if chosen != "" and DirAccess.dir_exists_absolute(chosen):
+		return chosen
+	var shipped := ProjectSettings.globalize_path("res://").path_join("../examples/midi")
+	return shipped if DirAccess.dir_exists_absolute(shipped) else ""
+
+
+func _songs_play_through() -> bool:
+	return bool(Settings.fetch("songs_play_through", false))
+
+
+## Every MIDI file in the folder, sorted, and the menu rebuilt to list them.
+func _scan_songs() -> void:
+	_songs.clear()
+	var folder := _songs_folder()
+	if folder != "":
+		for file_name: String in DirAccess.get_files_at(folder):
+			var lower := file_name.to_lower()
+			if lower.ends_with(".mid") or lower.ends_with(".midi"):
+				_songs.append(folder.path_join(file_name))
+	_songs.sort()
+	_song_index = -1
+	_refresh_songs_menu()
+
+
+func _refresh_songs_menu() -> void:
+	if songs_button == null:
+		return
+	var menu := songs_button.get_popup()
+	menu.clear()
+	for index in _songs.size():
+		menu.add_radio_check_item(str(_songs[index]).get_file().get_basename().capitalize(),
+			index)
+		menu.set_item_checked(index, index == _song_index)
+	if not _songs.is_empty():
+		menu.add_separator()
+	menu.add_item("Next song", SONG_NEXT)
+	menu.add_item("Previous song", SONG_PREVIOUS)
+	menu.add_check_item("Play through the folder", SONG_PLAY_THROUGH)
+	menu.set_item_checked(menu.get_item_index(SONG_PLAY_THROUGH), _songs_play_through())
+	menu.add_separator()
+	menu.add_item("Choose songs folder…", SONG_CHOOSE)
+	var folder := _songs_folder()
+	songs_button.tooltip_text = ("%d MIDI file%s in %s. Pick one to land it in the roll. "
+		+ "Play through the folder moves on to the next when a piece ends.") % [
+			_songs.size(), "" if _songs.size() == 1 else "s",
+			folder if folder != "" else "no folder yet — choose one below"]
+
+
+func _on_songs_menu(id: int) -> void:
+	match id:
+		SONG_CHOOSE:
+			if _songs_folder() != "":
+				songs_dialog.current_dir = _songs_folder()
+			songs_dialog.popup_centered_ratio(0.7)
+		SONG_NEXT:
+			_advance_song(1)
+		SONG_PREVIOUS:
+			_advance_song(-1)
+		SONG_PLAY_THROUGH:
+			Settings.store("songs_play_through", not _songs_play_through())
+			_refresh_songs_menu()
+			_say("play through the folder: %s" % ("on" if _songs_play_through() else "off"))
+		_:
+			if id >= 0 and id < _songs.size():
+				_choose_song(id)
+
+
+func _set_songs_folder(folder: String) -> void:
+	Settings.store("songs_folder", folder)
+	_scan_songs()
+	_say("%d song%s in %s" % [_songs.size(), "" if _songs.size() == 1 else "s", folder])
+
+
+func _choose_song(index: int) -> void:
+	if index < 0 or index >= _songs.size():
+		return
+	_song_index = index
+	_import_midi_file(str(_songs[index]))
+	_refresh_songs_menu()
+
+
+## Down the folder or back up it, wrapping at either end; from nowhere, the first or
+## the last.
+func _advance_song(by: int) -> void:
+	if _songs.is_empty():
+		_say("no songs — choose a folder from the Songs menu")
+		return
+	if _song_index < 0:
+		_choose_song(0 if by > 0 else _songs.size() - 1)
+	else:
+		_choose_song(posmod(_song_index + by, _songs.size()))
+
+
+## A file picked by hand is not one of the folder's: the strip's check comes off.
+func _import_midi_by_hand(path: String) -> void:
+	_song_index = -1
+	_refresh_songs_menu()
+	_import_midi_file(path)
 
 
 ## How long one step of the roll lasts.
@@ -5687,6 +5833,7 @@ func _say_into_roll(text: String) -> void:
 	patch["sequence"] = {"tempo": spoken["tempo"], "division": spoken["division"],
 		"steps": spoken["steps"], "notes": spoken["notes"]}
 	_commit_edit("say something")
+	_rewind_roll()
 	if not roll_open:
 		_set_roll_open(true)
 	piano_roll.sequence = patch["sequence"]
@@ -5766,6 +5913,7 @@ func _import_midi_file(path: String) -> void:
 		"beats_per_bar": sung["beats_per_bar"], "beat_unit": sung["beat_unit"],
 		"notes": sung["notes"]}
 	_commit_edit("import midi")
+	_rewind_roll()
 	if not roll_open:
 		_set_roll_open(true)
 	piano_roll.sequence = patch["sequence"]
@@ -5794,6 +5942,13 @@ func _advance_roll(delta: float) -> void:
 func _roll_tick() -> void:
 	var sequence: Dictionary = patch.get("sequence", {})
 	var rows: int = maxi(1, int(sequence.get("steps", 16)))
+	if _roll_step + 1 >= rows and _songs_play_through() and _song_index >= 0 \
+			and _songs.size() > 1:
+		# The piece has ended and the folder has more: the next song, from its top,
+		# on this same tick, so the clock never misses a beat between them.
+		_choose_song(posmod(_song_index + 1, _songs.size()))
+		sequence = patch.get("sequence", {})
+		rows = maxi(1, int(sequence.get("steps", 16)))
 	_roll_step = (_roll_step + 1) % rows
 	# What ends on this step lets go before what begins on it: the same note can
 	# retrigger back-to-back without the second onset being swallowed.
@@ -5881,6 +6036,7 @@ func _build_keyboard_dock() -> Control:
 	piano_roll.custom_minimum_size.y = Design.scale(150)
 	piano_roll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	piano_roll.cell_toggled.connect(_on_roll_cell_toggled)
+	piano_roll.playhead_scrubbed.connect(_seek_roll)
 	piano_roll.note_stretched.connect(_on_roll_note_stretched)
 
 	roll_pitch = RollPitch.new()
@@ -6064,7 +6220,8 @@ func _build_keyboard_bar() -> Control:
 	roll_button = MenuButton.new()
 	roll_button.flat = false
 	roll_button.text = "Roll"
-	roll_button.tooltip_text = "A step grid over the keys: click a lane to place a " 		+ "note, click it again to take it away. Vertical rises over the keys that " 		+ "play it; horizontal runs left to right the way most sequencers do; Bars " 		+ "is how much of the piece is on screen — the wheel walks through the rest."
+	roll_button.tooltip_text = "A step grid over the keys: click a lane to place a " 		+ "note, click it again to take it away. Vertical rises over the keys that " 		+ "play it; horizontal runs left to right the way most sequencers do; Bars " 		+ "is how much of the piece is on screen — the wheel walks through the rest. " \
+		+ "The right mouse button puts the playhead where you point, and Play starts there."
 	var roll_menu := roll_button.get_popup()
 	roll_menu.add_radio_check_item("Vertical", 0)
 	roll_menu.add_radio_check_item("Horizontal", 1)
@@ -6159,6 +6316,17 @@ func _build_keyboard_bar() -> Control:
 		_set_roll_meter(id / 100, id % 100))
 	roll_meter.visible = false
 	bar.add_child(_defocus(roll_meter))
+
+	# The songs: every MIDI file in a folder, one click from the roll. The folder is a
+	# setting — the repository's own tunes until somebody points it elsewhere — and a
+	# piece that ends can hand over to the next, which is what a folder of songs is for.
+	songs_button = MenuButton.new()
+	songs_button.flat = false
+	songs_button.text = "Songs"
+	songs_button.get_popup().id_pressed.connect(_on_songs_menu)
+	songs_button.visible = false
+	bar.add_child(_defocus(songs_button))
+	_scan_songs()
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(gap)
@@ -9545,6 +9713,7 @@ func _load_text(text: String) -> void:
 		return
 	patch = parsed
 	_home_values.clear()
+	_rewind_roll()
 	# Captured state belongs to the document it came out of. The keys are the patch's own
 	# short names — "surge", "verb" — so two unrelated patches will collide on them
 	# sooner rather than later, and a Surge preset from the last file arriving in this one

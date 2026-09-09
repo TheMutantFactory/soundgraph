@@ -32,8 +32,13 @@ var keyboard: Control
 ## Which way time runs: "vertical" rises over the keys, "horizontal" runs rightward.
 var orientation := "vertical"
 
-## The row the clock is on, or -1 when stopped. Drawn as a wash over the row, and
-## followed: when the playhead leaves the window, the window turns the page.
+## The person moved the playhead: scrubbed it with the right button, or dragged it by
+## its line. The step is absolute. Whoever owns the clock decides what that means.
+signal playhead_scrubbed(step: int)
+
+## The row the clock is on, or -1 when there is none. Drawn as a wash over the row and a
+## line at its start — the wash is nothing at a hundred bars, where a row is a third of
+## a pixel — and followed: when the playhead leaves the window, the window turns the page.
 var playing_step := -1:
 	set(value):
 		playing_step = value
@@ -205,6 +210,29 @@ var _drag_note := -1
 var _drag_anchor := -1
 var _drag_length := 1
 var _drag_moved := false
+# The playhead in hand: the right button anywhere, or the left button on its line.
+var _scrubbing := false
+## How close to the playhead's line a left press counts as taking hold of it.
+const PLAYHEAD_GRIP := 5.0
+
+
+func _scrub_to(position: Vector2) -> void:
+	var step := step_at(_along_time(position))
+	if step != playing_step:
+		playhead_scrubbed.emit(step)
+
+
+## Whether a press lands on the playhead's line, close enough to grab it.
+func _on_playhead(position: Vector2) -> bool:
+	if playing_step < scroll_step or playing_step >= scroll_step + view_rows:
+		return false
+	return absf(_along_time(position) - _time_pixel(_time_of(playing_step))) <= PLAYHEAD_GRIP
+
+
+## Where a moment sits in control coordinates along the time axis — the inverse of
+## reading `_along_time` off a pointer.
+func _time_pixel(t: float) -> float:
+	return size.y - t if orientation == "vertical" else t
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -224,6 +252,19 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 		return
 	var motion := event as InputEventMouseMotion
+	if motion != null and _scrubbing:
+		_scrub_to(motion.position)
+		accept_event()
+		return
+	var button := event as InputEventMouseButton
+	if button != null and button.button_index == MOUSE_BUTTON_RIGHT:
+		# The right button scrubs: press puts the playhead under the pointer, dragging
+		# keeps it there. Nothing else on the roll uses this button.
+		_scrubbing = button.pressed
+		if button.pressed:
+			_scrub_to(button.position)
+		accept_event()
+		return
 	if motion != null and _drag_note >= 0:
 		# Toward later only: the anchor is the note's own step.
 		var row := step_at(_along_time(motion.position))
@@ -234,8 +275,17 @@ func _gui_input(event: InputEvent) -> void:
 			queue_redraw()
 		accept_event()
 		return
-	var button := event as InputEventMouseButton
 	if button == null or button.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if _scrubbing and not button.pressed:
+		_scrubbing = false
+		accept_event()
+		return
+	if button.pressed and _drag_note < 0 and _on_playhead(button.position):
+		# Taking hold of the line itself, ahead of the notes under it.
+		_scrubbing = true
+		_scrub_to(button.position)
+		accept_event()
 		return
 	if button.pressed:
 		var note := note_at(_pitch_of(button.position))
@@ -330,10 +380,12 @@ func _draw() -> void:
 		_pitch_line(octave * Keyboard.WHITE_OFFSETS.size() * white_width,
 			Color(1.0, 1.0, 1.0, 0.10), 1.0)
 
-	# The playhead, under the notes: the row being spoken.
+	# The playhead, under the notes: the row being spoken, and a line at its start so
+	# it can be found when the row itself is thinner than a pixel.
 	if playing_step >= scroll_step and playing_step < window_end:
 		draw_rect(_box(full, _time_of(playing_step), _time_of(playing_step + 1)),
 			Color(Design.ACCENT, 0.10))
+		_time_line(_time_of(playing_step), Color(Design.ACCENT, 0.85), 2.0)
 
 	# The notes themselves, clipped to the window.
 	for entry: Dictionary in sequence.get("notes", []):

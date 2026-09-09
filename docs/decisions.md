@@ -1207,3 +1207,38 @@ morphing between presets crossfades them, which is a feature. blip-select's
 sixth preset is roll 6, past the rejected roll 0. `sfxr-ref shelf` and
 `tools/mirror-examples.mjs` must both run when the generator changes, and
 `sfxr_shelf_is_reproducible` says so when they have not.
+
+## 2026-09-09 — The playhead can be moved, and a songs folder feeds the roll
+
+Decision:
+The roll's playhead is drawn as a two-pixel line at its row as well as the
+row wash, the right mouse button scrubs it to the row under the pointer, a
+left press on the line drags it, and Play starts from wherever it is;
+stopping pauses on the row rather than clearing it, and a new piece —
+loaded, imported, spoken — rewinds it. A Songs button beside the roll's
+tempo, division and meter lists every MIDI file in a songs folder, with
+Next and Previous wrapping round the folder, a "Play through the folder"
+switch that hands over to the next song on the tick a piece ends, and a
+folder chooser. The folder and the switch are settings, not document state;
+until a folder is chosen the repository's own tunes are the list.
+
+Reason:
+At a hundred bars a row is a third of a pixel and a wash over it is
+invisible, and there was no way to put the playhead anywhere but the top.
+Both are things a person reaches for in the first minute with a long piece.
+The songs folder is the same reach one level up: now that whole pieces
+import, the next question is the next piece, and a folder is how people
+keep songs.
+
+Alternatives:
+A ruler strip along the time axis for scrubbing — clearer, but it changes
+the roll's geometry, which every layout and lane test measures. A playlist
+saved in the document — a folder is a fact about this machine, and a patch
+that named one would be wrong on every other.
+
+Consequences:
+Stop no longer parks the playhead at nothing; the suite's expectation moved
+with it. Scrubbing while playing releases what was sounding and speaks the
+new row on the next tick. A song chosen from the folder is an ordinary
+Import MIDI: one undo step, and the file's meter and tempo come with it.
+The keyboard strip has eleven buttons now, counted by the suite.
