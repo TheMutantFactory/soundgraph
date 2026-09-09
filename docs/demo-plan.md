@@ -117,6 +117,9 @@ Everything else stays reachable through search, not the front row.
 - Pick the two MIDI tunes and the two FM presets by ear.
 
 **Tuesday 2026-09-09**
+- On the show laptop, restart the editor with `tools\run-demo.bat`: no rebuild, and it
+  starts in 1:1 detail so every control stays on every node however far out the graph
+  is zoomed on the big screen, whatever the last hand left behind.
 - Full dry run of all five stations, in order, on the laptop that goes to the show.
   Time each. Write the per-station checklist on one page.
 - Reliability: thirty consecutive runs of station 1 end to end. Log every miss.
