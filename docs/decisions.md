@@ -1305,7 +1305,8 @@ a drawn tune is already an arrangement.
 ## 2026-09-09 — A 4K interface size above XL
 
 Decision:
-A fifth interface size, "4K", at 1.75 — above XL's 1.35. It goes through the
+A fifth interface size, "4K", at 2.0 — above XL's 1.35; 1.75 was tried and
+read as XL from the same chair. It goes through the
 same factor everything else does: type, spacing, hit targets, the graph's
 pinned screen minimums and its compact and summary floors.
 
