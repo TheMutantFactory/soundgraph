@@ -63,6 +63,26 @@ if(SOUNDGRAPH_NODE)
         COMMAND ${SOUNDGRAPH_NODE} ${CMAKE_SOURCE_DIR}/tools/game-sounds.mjs --check)
 endif()
 
+# The sfxr shelf: one patch per generator, six rolls as presets, written by `sfxr-ref
+# shelf`. Two checks. The first is the game sounds' lesson again — a generated file must
+# match its generator, or it is a hand edit waiting to be undone. The second is the claim
+# the shelf makes: a preset is not "like" the corpus roll it is named for, it *is* that
+# roll, sample for sample, through a union graph whose switches take parts out exactly.
+# A union that quietly stopped being exact would pass every listener and fail this.
+add_test(NAME sfxr_shelf_is_reproducible
+    COMMAND ${CMAKE_COMMAND}
+        -DSFXR_REF=$<TARGET_FILE:sfxr-ref>
+        -DSHELF=${CMAKE_SOURCE_DIR}/examples/patches/sfxr
+        -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/sfxr-shelf-regenerated
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/sfxr/shelf.cmake)
+if(SOUNDGRAPH_NODE)
+    add_test(NAME sfxr_shelf_presets_are_their_rolls
+        COMMAND ${SOUNDGRAPH_NODE} ${CMAKE_SOURCE_DIR}/tools/sfxr-shelf-check.mjs
+                --dir ${CMAKE_SOURCE_DIR}/examples/patches/sfxr
+                --render $<TARGET_FILE:sg-render>
+                --ref $<TARGET_FILE:sfxr-ref>)
+endif()
+
 # The schema is the format written down for anybody outside this repository, and nothing
 # compared it to anything. It could have required a field no patch carried, or forbidden
 # one every patch had, and the only symptom would have been somebody else's tool being

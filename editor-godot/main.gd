@@ -113,6 +113,7 @@ const ProbeScope := preload("res://probe_scope.gd")
 const EXAMPLE_GROUPS := {
 	"": "",
 	"game": "Game",
+	"sfxr": "sfxr",
 	"nodes": "Node",
 	"fm": "FM",
 	"dx7": "DX7",

@@ -41,7 +41,10 @@ shoot: eight patches under `examples/patches/game/`, each a graph, each derived 
 sfxr corpus case by `tools/game-sounds.mjs`. The ten-second exhibit: open the Graph
 tab, change the jump patch, come back, jump. No reimport.
 
-- **Examples:** `examples/patches/game/*.json` (all eight).
+- **Examples:** `examples/patches/game/*.json` (all eight), and the **sfxr shelf**:
+  `examples/patches/sfxr/`, one patch per sfxr button with its six rolls as presets.
+  Open "sfxr: Pickup Coin", step the preset strip, and it is sfxr's button pressed six
+  times — then turn Punch or Arpeggio Jump and it is a coin sfxr never rolled.
 - **Talking point:** these are sfxr's sounds (Tomas Pettersson, 2007, MIT), reproduced
   by the graph within the tolerances `tests/sfxr/` measures, not sampled. A laptop tab
   with the original open (see "sfxr" below) lets a visitor compare.
