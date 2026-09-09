@@ -68,9 +68,11 @@ func set_qr_scale(index: int) -> void:
 	if toolbar_qr == null:
 		return
 	var factor: float = QR_SCALES[clampi(index, 0, QR_SCALES.size() - 1)]
-	if condensed:
-		factor *= 0.5
-	toolbar_qr.custom_minimum_size = Vector2.ONE * float(Design.scale(Design.HIT_TARGET)) * factor
+	# Condensed, the small code is a mark the size of the row — the large one is a
+	# hover away, which is what makes the mark enough.
+	var side := float(Design.furniture_scale(22)) if condensed \
+		else float(Design.scale(Design.HIT_TARGET))
+	toolbar_qr.custom_minimum_size = Vector2.ONE * side * factor
 var toolbar_add_button: Button
 ## Half its height at 4K, always. The top row was a fifth of the screen at the show
 ## size — the wordmark, its QR and one verb. A first cut brought the row back to full
@@ -80,6 +82,8 @@ var toolbar_add_button: Button
 var condensed := false
 var _bar: HBoxContainer
 var _qr_hover: PopupPanel
+## Which icon each icon button wears, so the condensed row can redraw it smaller.
+var _icon_kinds: Dictionary = {}
 var toolbar_rung := Rung.FULL
 var undo_button: Button
 var redo_button: Button
@@ -331,12 +335,14 @@ func _build() -> void:
 	toolbar_edit_group = edit_group
 	undo_button = Button.new()
 	undo_button.icon = _icon(Icons.Kind.UNDO, Design.INK_NORMAL)
+	_icon_kinds[undo_button] = Icons.Kind.UNDO
 	undo_button.disabled = true
 	undo_button.pressed.connect(func() -> void: undo_requested.emit())
 	edit_group.add_child(_defocus(undo_button))
 
 	redo_button = Button.new()
 	redo_button.icon = _icon(Icons.Kind.REDO, Design.INK_NORMAL)
+	_icon_kinds[redo_button] = Icons.Kind.REDO
 	redo_button.disabled = true
 	redo_button.pressed.connect(func() -> void: redo_requested.emit())
 	edit_group.add_child(_defocus(redo_button))
@@ -658,6 +664,7 @@ func _build() -> void:
 	var burger := MenuButton.new()
 	toolbar_menu_button = burger
 	burger.icon = _icon(Icons.Kind.HAMBURGER, Design.INK_NORMAL)
+	_icon_kinds[burger] = Icons.Kind.HAMBURGER
 	# A bounded square, the size of undo and redo. It was borderless on the argument
 	# that the glyph is the button, which is true of a glyph nobody has to find: this
 	# one is the way into every command in the program and it sits in the corner with
@@ -908,7 +915,10 @@ func set_condensed(on: bool) -> void:
 	condensed = on
 	if _bar == null:
 		return
-	_bar.custom_minimum_size.y = Design.furniture_scale(26) if on else Design.scale(52)
+	_bar.custom_minimum_size.y = Design.furniture_scale(14) if on else Design.scale(52)
+	# The row's own air, top and bottom, goes with it.
+	add_theme_constant_override("margin_top", 2 if on else Design.SPACE_S)
+	add_theme_constant_override("margin_bottom", 2 if on else Design.SPACE_S)
 	if toolbar_title != null:
 		toolbar_title.add_theme_font_size_override("font_size",
 			Design.furniture_type(Design.SIZE_HEADING) if on
@@ -920,7 +930,7 @@ func set_condensed(on: bool) -> void:
 		toolbar_identity_margin.add_theme_constant_override("margin_left", air)
 		toolbar_identity_margin.add_theme_constant_override("margin_right", air)
 	if toolbar_menu_button != null:
-		var burger_side := Design.furniture_scale(28) if on else Design.scale(40)
+		var burger_side := Design.furniture_scale(22) if on else Design.scale(40)
 		toolbar_menu_button.custom_minimum_size = Vector2(burger_side, burger_side)
 	var queue: Array = [_bar]
 	while not queue.is_empty():
@@ -929,13 +939,26 @@ func set_condensed(on: bool) -> void:
 			queue.append(child)
 		if node is Button:
 			var button := node as Button
-			button.custom_minimum_size.y = Design.furniture_scale(28) if on \
+			button.custom_minimum_size.y = Design.furniture_scale(20) if on \
 				else Design.scale(Design.HIT_TARGET)
+			# The text, the box and the icon all go: a box with the chrome's padding
+			# around a small word is still the chrome's height.
 			if on:
 				button.add_theme_font_size_override("font_size",
-					Design.furniture_type(Design.SIZE_CONTROL))
+					Design.furniture_type(Design.SIZE_SECONDARY))
+				for state in ["normal", "hover", "pressed", "disabled"]:
+					button.add_theme_stylebox_override(state, Design.furniture_box(
+						Design.Surface.ACTIVE if state in ["hover", "pressed"]
+						else Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_XS))
+				if _icon_kinds.has(button):
+					button.icon = Icons.get_icon(int(_icon_kinds[button]),
+						Design.furniture_scale(14), Design.INK_NORMAL)
 			else:
 				button.remove_theme_font_size_override("font_size")
+				for state in ["normal", "hover", "pressed", "disabled"]:
+					button.remove_theme_stylebox_override(state)
+				if _icon_kinds.has(button):
+					button.icon = _icon(int(_icon_kinds[button]), Design.INK_NORMAL)
 			if _primary_buttons.has(button):
 				Design.make_primary(button, on)
 		elif node is Label and node != toolbar_title:

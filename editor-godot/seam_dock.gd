@@ -64,7 +64,7 @@ class Jacks extends Control:
 		return Design.font(Design.WEIGHT_MEDIUM)
 
 	func _size() -> int:
-		return Design.type(Design.SIZE_SECONDARY)
+		return Design.furniture_type(Design.SIZE_SECONDARY)
 
 	## Ring beside name, one text line tall: the first cut of this stacked the name
 	## under the ring, which stood two storeys high in a row of one-storey buttons

@@ -2111,8 +2111,12 @@ class Knob extends Control:
 			# The hit area still has to clear the rule every other control obeys.
 			# Room for the printed scale, which sits nine px past the body — the old 17
 			# was measured against a value arc five px out and nothing beyond it.
-			var across := _radius() * 2.0 + 22.0
-			var floor_height := float(Design.furniture_scale(Design.HIT_TARGET) if furniture
+			# Room for the printed scale — unless this is furniture, where the scale is
+			# not printed and the room was most of the strip's height.
+			var across := _radius() * 2.0 + (6.0 if furniture else 22.0)
+			# Furniture takes the strip's target, not the chrome's: the floor was the
+			# whole reason the strip stood at 59px with 26px of knob in it.
+			var floor_height := float(Design.furniture_scale(24) if furniture
 				else Design.scale(Design.HIT_TARGET))
 			return Vector2(across, maxf(across, floor_height))
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)

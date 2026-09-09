@@ -305,6 +305,9 @@ var face_anchor := Vector2.ZERO
 ## The file's own face: the knobs somebody plays. See patch_face.gd.
 var patch_face: PatchFace
 var views: TabContainer
+## The row the tab bar hosts — the document's name, its saved word, the zoom cluster —
+## kept so the furniture pass can re-dress it when the size changes.
+var _crumb_row: Control
 var rack: Rack
 var sandbox: Sandbox
 var outline: Outline
@@ -951,6 +954,7 @@ func _build_ui() -> void:
 	# load fits the patch and then holds this, so switching examples on the floor does
 	# not quietly shrink the show back.
 	_demo_zoom = _zoom_from_args(OS.get_cmdline_user_args())
+	_demo_arrange = OS.get_cmdline_user_args().has("--arrange")
 	graph_edit.port_hovered.connect(_on_port_hovered)
 	graph_edit.ghost_port_picked.connect(_on_ghost_port_picked)
 	graph_edit.region_drawn.connect(_on_region_drawn)
@@ -1198,6 +1202,9 @@ func _build_ui() -> void:
 	for index in crumb_order.size():
 		crumb_row.move_child(crumb_order[index] as Node, index)
 	views.get_tab_bar().add_child(crumb_row)
+	_crumb_row = crumb_row
+	_dress_furniture(crumb_row)
+	_dress_tabs()
 	# One tab, one canvas, both sides of the container. The graph already owns zoom,
 	# pan and the grid, so the face is a tenant on that canvas rather than a rival
 	# view: flipping hides the wiring and mounts the face at the case's own spot, and
@@ -2543,6 +2550,9 @@ func _modernize_stereo_outputs() -> void:
 ## The zoom the work area holds for the session, or -1 for none: set from `--zoom=2`
 ## on the command line and applied after every load's fit.
 var _demo_zoom := -1.0
+## Whether every load is auto-placed before it is framed: `--arrange` on the command
+## line. A show opens patches whose stored positions were laid out for a laptop.
+var _demo_arrange := false
 
 
 ## An interface size named on the command line — `--size=4k`, or any of the size
@@ -2652,6 +2662,9 @@ func _use_ui_scale(index: int) -> void:
 	# The dock's heights were fitted at the old size and would stay there.
 	_fit_keyboard_dock()
 	_dress_lens_band()
+	_dress_tabs()
+	if _crumb_row != null:
+		_dress_furniture(_crumb_row)
 	if scope_probe != null:
 		_dress_furniture(scope_probe)
 	if rack != null:
@@ -7953,7 +7966,7 @@ func _build_keyboard_bar() -> Control:
 	master_knob.rack = rack
 	master_knob.compact = true
 	master_knob.furniture = true
-	master_knob.dial = 0.5
+	master_knob.dial = 0.36
 	# Sized to sit inside the strip with air around it, and centred in the row: a
 	# dial as tall as the row it lives in reads as jammed, not mounted.
 	master_knob.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -8027,6 +8040,27 @@ func _build_keyboard_bar() -> Control:
 	return bar
 
 
+## The tab list — Patch, Sandbox, Outline — as furniture: the tabs size through the
+## furniture scale in half-height boxes, so the row over the work area is a row.
+func _dress_tabs() -> void:
+	if views == null:
+		return
+	var tabs := views.get_tab_bar()
+	tabs.add_theme_font_size_override("font_size", Design.furniture_type(Design.SIZE_TABS))
+	var selected := Design.furniture_box(Design.Surface.NODE, Design.SPACE_M, Design.SPACE_XS,
+		Design.RADIUS_BUTTON, false)
+	selected.corner_radius_bottom_left = 0
+	selected.corner_radius_bottom_right = 0
+	tabs.add_theme_stylebox_override("tab_selected", selected)
+	var quiet := selected.duplicate() as StyleBoxFlat
+	quiet.bg_color = Design.SURFACES[Design.Surface.CANVAS]
+	quiet.border_color = Design.SURFACES[Design.Surface.CANVAS]
+	tabs.add_theme_stylebox_override("tab_unselected", quiet)
+	var hovered := quiet.duplicate() as StyleBoxFlat
+	hovered.bg_color = Design.SURFACES[Design.Surface.RAISED]
+	tabs.add_theme_stylebox_override("tab_hovered", hovered)
+
+
 ## The four doors: the app-title size through the furniture scale — a step above every
 ## other button, because which lens you are looking through is the first thing a
 ## visitor asks — in half-height boxes, so the band is a row and not a block.
@@ -8042,7 +8076,7 @@ func _dress_lens_band() -> void:
 
 ## The furniture's buttons' height: half the chrome's hit target, through the
 ## furniture scale.
-const STRIP_TARGET := 24
+const STRIP_TARGET := 18
 
 
 ## GraphEdit's own minimap: an internal grandchild, inside the top layer that also holds
@@ -8076,6 +8110,10 @@ func _dress_furniture(strip: Control) -> void:
 			# Half the padding the chrome's 44px floor gave these. The furniture is rows
 			# of small verbs, not a toolbar somebody aims at from across the room.
 			button.custom_minimum_size.y = Design.furniture_scale(STRIP_TARGET)
+			# A menu's chevron and a transport's glyph were drawn at the chrome's icon
+			# size, which is taller than the row; the icon follows the text now.
+			button.add_theme_constant_override("icon_max_width",
+				Design.furniture_type(Design.SIZE_SECONDARY))
 			button.add_theme_stylebox_override("normal",
 				Design.furniture_box(Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_XS))
 			button.add_theme_stylebox_override("hover",
@@ -9049,6 +9087,8 @@ func _add_device(label: String, at_position: Vector2) -> String:
 		await _rebuild_view()
 		_apply()
 		_commit_edit("add %s" % instance_id)
+		if _demo_arrange:
+			_auto_place()
 		if not rewired.is_empty():
 			_say("added %s — wired %s" % [instance_id, ", ".join(rewired)])
 		return instance_id
@@ -9070,6 +9110,8 @@ func _add_device(label: String, at_position: Vector2) -> String:
 	await _rebuild_view()
 	_apply()
 	_commit_edit("add %s" % result.instance_id)
+	if _demo_arrange:
+		_auto_place()
 	if not wired.is_empty():
 		_say("added %s — wired %s" % [result.instance_id, ", ".join(wired)])
 	return result.instance_id
@@ -9140,6 +9182,10 @@ func _add_node(type_name: String, at_position: Vector2) -> String:
 	await _rebuild_view()
 	_apply()
 	_commit_edit("add %s" % registry.get(type_name, {}).get("display_name", type_name))
+	# In demo mode every addition is placed as it lands: a node dropped where the
+	# pointer was is a node the wall reads as dropped.
+	if _demo_arrange:
+		_auto_place()
 	return node_id
 
 
@@ -12396,6 +12442,9 @@ func _load_text(text: String) -> void:
 	# scrollbars and minimap that rectangle subtracts do not exist until the nodes it is
 	# being asked to frame have been laid out.
 	await get_tree().process_frame
+	if _demo_arrange:
+		await _auto_place()
+		await get_tree().process_frame
 	graph_edit.fit_graph()
 	_hold_demo_zoom()
 

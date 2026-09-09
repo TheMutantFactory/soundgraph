@@ -1457,3 +1457,26 @@ Reason:
 A row that changes height as the hand passes moves the thing under the
 hand. The one reason the row came back was the QR, and the QR can answer
 for itself.
+
+## 2026-09-09 — Three rows at half a hit target, and the demo auto-places
+
+Decision:
+At 4K the toolbar, the tab list and the dock's strip each stand under half
+the chrome's hit target plus their air. What held them up was not the text:
+the toolbar's icon buttons wore the chrome's boxes and 32px icons, the
+strip's master knob kept 22px of room for a printed scale it does not print,
+and the tab bar wore the theme's boxes. All three are furniture now — boxes,
+icons, targets and air through the furniture scale, halved. The demo
+launcher passes `--arrange`, which auto-places every load before it is
+framed, and again after every node or device added.
+
+Reason:
+The rows over and under the work area were still a third of the screen's
+height between them, and every one of them was air around something small.
+The show opens patches whose stored positions were laid out for a laptop;
+auto-placing on load is what makes them read on a wall.
+
+Consequences:
+Below 4K nothing about the toolbar changes; the strip and the tabs are
+shorter everywhere, as furniture is. A file's stored positions are
+untouched by `--arrange` until somebody saves.

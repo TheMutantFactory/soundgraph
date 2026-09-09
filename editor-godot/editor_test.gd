@@ -3041,6 +3041,16 @@ func _initialize() -> void:
 	main.toolbar._hide_qr_hover()
 	check(hover_shown and not main.toolbar._qr_hover.visible,
 		"hovering the QR pops a large code up, and leaving it takes it down")
+	# Half again: the three rows over and under the work area — the toolbar, the tab
+	# list and the strip — each under half the chrome's hit target plus its air.
+	var row_ceiling: float = float(Design.scale(Design.HIT_TARGET)) * 0.5 + 8.0
+	check(main.toolbar._bar.get_combined_minimum_size().y <= row_ceiling
+			and main.views.get_tab_bar().get_combined_minimum_size().y <= row_ceiling
+			and main.keyboard_bar.get_combined_minimum_size().y <= row_ceiling,
+		"the toolbar, the tab list and the strip are each half a hit target tall at 4K "
+			+ "(%.0f, %.0f, %.0f of %.0f)" % [main.toolbar._bar.get_combined_minimum_size().y,
+			main.views.get_tab_bar().get_combined_minimum_size().y,
+			main.keyboard_bar.get_combined_minimum_size().y, row_ceiling])
 	# The dock's geometry stops at XL too, and the strip's buttons stand at the strip's
 	# own target rather than the chrome's: the keys at 4K are XL's height, not double.
 	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(56)
@@ -3219,6 +3229,37 @@ func _initialize() -> void:
 	check(is_equal_approx(main.graph_edit.zoom, 2.0) and is_equal_approx(main.rack.view_zoom, 2.0),
 		"a demo zoom of 2 holds after a load, in the graph and the rack (%.2f, %.2f)"
 			% [main.graph_edit.zoom, main.rack.view_zoom])
+	# --arrange auto-places every load before it is framed: the positions the file
+	# carried are not the positions on screen.
+	main._demo_arrange = true
+	var stored_first: Dictionary = {}
+	for node in main.patch["nodes"]:
+		stored_first[str(node["id"])] = Vector2(node.get("position", {}).get("x", 0.0),
+			node.get("position", {}).get("y", 0.0))
+	await main._load_example("Plucked String")
+	for i in 10:
+		await process_frame
+	var moved_by_arrange := 0
+	for node in main.patch["nodes"]:
+		var was: Vector2 = stored_first.get(str(node["id"]), Vector2(-1, -1))
+		var now := Vector2(node.get("position", {}).get("x", 0.0),
+			node.get("position", {}).get("y", 0.0))
+		if was != now:
+			moved_by_arrange += 1
+	check(moved_by_arrange > 0 or main.patch["nodes"].size() < 2,
+		"--arrange auto-places a load before it is framed (%d nodes moved)" % moved_by_arrange)
+	# And every addition: a node dropped far from the patch is placed with the rest.
+	var far_node: String = await main._add_node("SineOscillator", Vector2(9000.0, 9000.0))
+	for i in 12:
+		await process_frame
+	var far_now := Vector2(9000.0, 9000.0)
+	for node in main.patch["nodes"]:
+		if str(node["id"]) == far_node:
+			far_now = Vector2(node.get("position", {}).get("x", 0.0),
+				node.get("position", {}).get("y", 0.0))
+	main._demo_arrange = false
+	check(far_node != "" and far_now != Vector2(9000.0, 9000.0),
+		"and auto-places every node added (%s landed at %s)" % [far_node, str(far_now)])
 	main._demo_zoom = -1.0
 	main.rack.view_zoom = 1.0
 	await main._load_example("First Synth")
