@@ -1564,6 +1564,12 @@ bool parse_patch(const std::string& text,
             if (const json::Value* division = sequence->find("division")) {
                 out.sequence.division = static_cast<int>(division->as_number(4.0));
             }
+            if (const json::Value* beats = sequence->find("beats_per_bar")) {
+                out.sequence.beats_per_bar = static_cast<int>(beats->as_number(4.0));
+            }
+            if (const json::Value* unit = sequence->find("beat_unit")) {
+                out.sequence.beat_unit = static_cast<int>(unit->as_number(4.0));
+            }
             if (const json::Value* notes = sequence->find("notes")) {
                 if (notes->is_array()) {
                     for (const json::Value& entry : notes->array()) {
@@ -2052,6 +2058,15 @@ std::string write_patch(const GraphDescription& description, bool pretty) {
         sequence.set("steps", json::Value(static_cast<double>(description.sequence.steps)));
         sequence.set("division",
                      json::Value(static_cast<double>(description.sequence.division)));
+        // The meter is written only when it is not 4/4. Absent means 4/4 by the schema,
+        // and a roll that never said otherwise must save byte for byte as it did before
+        // the field existed — every example in the library has such a roll.
+        if (description.sequence.beats_per_bar != 4 || description.sequence.beat_unit != 4) {
+            sequence.set("beats_per_bar",
+                         json::Value(static_cast<double>(description.sequence.beats_per_bar)));
+            sequence.set("beat_unit",
+                         json::Value(static_cast<double>(description.sequence.beat_unit)));
+        }
         json::Value notes = json::Value::make_array();
         for (const SequenceNote& note : description.sequence.notes) {
             json::Value entry = json::Value::make_object();

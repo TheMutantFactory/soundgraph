@@ -224,6 +224,10 @@ var roll_play: Button
 var roll_capture: Button
 var roll_tempo: ValueField
 var roll_division: ValueField
+var roll_meter: MenuButton
+## The meters the button offers. Anything else a MIDI file carries is kept and shown;
+## these are the ones somebody reaches for.
+const METERS := [[4, 4], [3, 4], [2, 4], [5, 4], [6, 8], [3, 8], [9, 8], [12, 8], [7, 8]]
 var roll_bars_menu: PopupMenu
 var midi_dialog: FileDialog
 var audio_dialog: FileDialog
@@ -5408,6 +5412,7 @@ func _set_roll_open(open: bool, remember := true) -> void:
 	roll_capture.visible = open
 	roll_tempo.visible = open
 	roll_division.visible = open
+	roll_meter.visible = open
 	if remember:
 		Settings.store("piano_roll", open)
 	_sync_roll_menu()
@@ -5509,6 +5514,20 @@ func _set_roll_division(value: float) -> void:
 	_say("%s to the bar" % _division_name(nearest))
 
 
+## The time signature: how many beats make a bar, and which note is the beat. It moves
+## the bar lines and nothing else — the notes stay on the steps they were on.
+func _set_roll_meter(beats: int, unit: int) -> void:
+	_begin_edit()
+	var sequence := _roll_sequence()
+	sequence["beats_per_bar"] = clampi(beats, 1, 32)
+	sequence["beat_unit"] = clampi(unit, 1, 16)
+	_commit_edit("roll meter")
+	_refresh_roll_tempo_text()
+	piano_roll.sequence = patch.get("sequence", {})
+	piano_roll.queue_redraw()
+	_say("%d/%d — a bar is %d steps" % [beats, unit, PianoRoll.bar_steps_of(sequence)])
+
+
 func _division_name(division: int) -> String:
 	match division:
 		1: return "quarter notes"
@@ -5575,7 +5594,7 @@ func _capture_roll() -> void:
 	patch["buffers"] = buffers
 	_commit_edit("capture roll")
 	_apply()
-	var bars := ceili(float(steps) / 16.0)
+	var bars := ceili(float(steps) / float(PianoRoll.bar_steps_of(sequence)))
 	var plays_it := false
 	for node: Dictionary in patch.get("nodes", []):
 		if str(node.get("buffer", "")) == "capture":
@@ -5605,6 +5624,15 @@ func _refresh_roll_tempo_text() -> void:
 			+ "thirty-seconds or faster; drums rarely do.") % [
 				_division_name(division).capitalize(),
 				int(round(_roll_step_seconds() * 1000.0))]
+	if roll_meter != null:
+		var meter_now: Dictionary = patch.get("sequence", {})
+		var beats := clampi(int(meter_now.get("beats_per_bar", 4)), 1, 32)
+		var unit := clampi(int(meter_now.get("beat_unit", 4)), 1, 16)
+		roll_meter.text = "%d/%d" % [beats, unit]
+		var meter_menu := roll_meter.get_popup()
+		for index in meter_menu.item_count:
+			meter_menu.set_item_checked(index,
+				meter_menu.get_item_id(index) == beats * 100 + unit)
 
 
 ## Nonsense speech, typed. Every letter becomes a note and the punctuation becomes the
@@ -5720,7 +5748,8 @@ func _transcribe_audio_file(path: String) -> void:
 func _grow_roll_to(needed_steps: int) -> void:
 	var sequence: Dictionary = _roll_sequence()
 	if needed_steps > int(sequence.get("steps", 16)):
-		sequence["steps"] = clampi(ceili(float(needed_steps) / 16.0) * 16, 16,
+		var bar := PianoRoll.bar_steps_of(sequence)
+		sequence["steps"] = clampi(ceili(float(needed_steps) / float(bar)) * bar, bar,
 			PianoRoll.MAX_STEPS)
 
 
@@ -5733,6 +5762,7 @@ func _import_midi_file(path: String) -> void:
 		return
 	_begin_edit()
 	patch["sequence"] = {"tempo": sung["tempo"], "steps": sung["steps"],
+		"beats_per_bar": sung["beats_per_bar"], "beat_unit": sung["beat_unit"],
 		"notes": sung["notes"]}
 	_commit_edit("import midi")
 	if not roll_open:
@@ -5741,11 +5771,13 @@ func _import_midi_file(path: String) -> void:
 	piano_roll.scroll_step = 0
 	_refresh_roll_tempo_text()
 	piano_roll.queue_redraw()
-	var bars := ceili(float(int(sung["steps"])) / 16.0)
-	_say("%d notes over %d bars at %d bpm%s" % [(sung["notes"] as Array).size(), bars,
+	var bar_steps := PianoRoll.bar_steps_of(patch["sequence"])
+	var bars := ceili(float(int(sung["steps"])) / float(bar_steps))
+	_say("%d notes over %d bars of %d/%d at %d bpm%s" % [(sung["notes"] as Array).size(),
+		bars, int(sung["beats_per_bar"]), int(sung["beat_unit"]),
 		int(round(float(sung["tempo"]))),
 		" — %d notes past bar %d stayed behind" % [int(sung["dropped"]),
-			PianoRoll.MAX_STEPS / 16]
+			PianoRoll.MAX_STEPS / bar_steps]
 			if int(sung["dropped"]) > 0 else ""])
 
 
@@ -5920,13 +5952,14 @@ func _sync_roll_menu() -> void:
 
 ## How much of the piece the roll windows at once, chosen from the Bars submenu —
 ## the item ids are the row counts themselves.
-func _set_roll_bars(rows: int) -> void:
+func _set_roll_bars(half_bars: int) -> void:
 	if piano_roll != null:
-		piano_roll.set_view_rows(rows)
+		var bar := PianoRoll.bar_steps_of(patch.get("sequence", {}))
+		piano_roll.set_view_rows(maxi(1, half_bars * bar / 2))
 	if roll_bars_menu != null:
 		for index in roll_bars_menu.item_count:
 			roll_bars_menu.set_item_checked(index,
-				roll_bars_menu.get_item_id(index) == rows)
+				roll_bars_menu.get_item_id(index) == half_bars)
 
 
 ## Collapses the dock to its control strip, or opens it again.
@@ -6038,9 +6071,11 @@ func _build_keyboard_bar() -> Control:
 	roll_menu.set_item_checked(2, true)
 	roll_menu.add_separator()
 	roll_bars_menu = PopupMenu.new()
-	for rows: int in [8, 16, 32, 64, 128, 256, 512, 1024, 2048]:
-		roll_bars_menu.add_radio_check_item("½ bar" if rows == 8
-			else "%d bar%s" % [rows / 16, "s" if rows > 16 else ""], rows)
+	# In bars of whatever the meter is, so "1 bar" is a bar of the piece and not sixteen
+	# rows of it. The ids are bars doubled, so the half bar has one too.
+	for half_bars: int in [1, 2, 4, 8, 16, 32, 64, 128, 256]:
+		roll_bars_menu.add_radio_check_item("½ bar" if half_bars == 1
+			else "%d bar%s" % [half_bars / 2, "s" if half_bars > 2 else ""], half_bars)
 	roll_bars_menu.set_item_checked(1, true)
 	roll_bars_menu.id_pressed.connect(_set_roll_bars)
 	roll_menu.add_submenu_node_item("Bars", roll_bars_menu)
@@ -6104,6 +6139,25 @@ func _build_keyboard_bar() -> Control:
 	roll_division.value_submitted.connect(_set_roll_division)
 	roll_division.visible = false
 	bar.add_child(roll_division)
+
+	# And the third question: how many beats make a bar. The roll drew a bar line every
+	# sixteen steps whatever the music did, so a waltz imported from MIDI played right
+	# and looked shifted. The meter is part of the document now, and a file sets it.
+	roll_meter = MenuButton.new()
+	roll_meter.flat = false
+	roll_meter.text = "4/4"
+	roll_meter.tooltip_text = "Beats to the bar: where the bar lines fall. It moves " \
+		+ "the lines and nothing else. An imported MIDI file sets it from its own time " \
+		+ "signature."
+	var meter_menu := roll_meter.get_popup()
+	for meter: Array in METERS:
+		meter_menu.add_radio_check_item("%d/%d" % [meter[0], meter[1]],
+			int(meter[0]) * 100 + int(meter[1]))
+	meter_menu.set_item_checked(0, true)
+	meter_menu.id_pressed.connect(func(id: int) -> void:
+		_set_roll_meter(id / 100, id % 100))
+	roll_meter.visible = false
+	bar.add_child(_defocus(roll_meter))
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(gap)
