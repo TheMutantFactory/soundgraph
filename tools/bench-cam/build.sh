@@ -31,10 +31,46 @@ PLIST
 swiftc -O -o "$APP/Contents/MacOS/bench-cam" "$HERE/main.swift" "$HERE/preview.swift" \
     -framework AVFoundation -framework AppKit -framework CoreImage -framework ImageIO
 
-# Ad-hoc signature. TCC keys its record on the signature; an unsigned bundle gets a new
-# identity whenever the binary changes, so the grant would have to be given again after
-# every rebuild.
-codesign --force --sign - --identifier net.mutantfactory.soundgraph.benchcam "$APP"
+# Signing, and why this decides how often you re-authorise the camera.
+#
+# TCC stores a camera grant against the app's *designated requirement*. With no signing
+# identity, codesign -s - produces a requirement that is nothing but the code hash:
+#
+#     designated => cdhash H"4617f99e..."
+#
+# The bundle identifier does not appear in it. So every rebuild changes the bytes,
+# changes the hash, and TCC correctly concludes it has never seen this app. macOS then
+# wants to prompt, an LSUIElement bundle launched through LaunchServices cannot present
+# that prompt, and the process hangs for a minute and dies with no output. That is not a
+# flaky permission; it is exactly one re-authorisation per rebuild.
+#
+# A real signing identity fixes it, because the requirement then anchors to the
+# certificate instead of the bytes and survives recompilation. Any code-signing identity
+# will do, including a self-signed one:
+#
+#     ./make-signing-cert.sh
+#
+# The advice you will find everywhere is Keychain Access -> Certificate Assistant. That
+# advice is dead on macOS 26, which removed Keychain Access and Certificate Assistant
+# both; the script does the same job with openssl.
+#
+# Set SG_SIGN_IDENTITY, or name it soundgraph-bench and this finds it.
+IDENTITY=${SG_SIGN_IDENTITY:-}
+if [ -z "$IDENTITY" ] && security find-identity -v -p codesigning 2>/dev/null \
+        | grep -q "soundgraph-bench"; then
+    IDENTITY="soundgraph-bench"
+fi
+
+if [ -n "$IDENTITY" ]; then
+    codesign --force --sign "$IDENTITY" \
+        --identifier net.mutantfactory.soundgraph.benchcam "$APP"
+    echo "signed as $IDENTITY — the camera grant survives rebuilds"
+else
+    codesign --force --sign - --identifier net.mutantfactory.soundgraph.benchcam "$APP"
+    echo "signed ad-hoc — expect to re-allow the camera after every rebuild."
+    echo "  to stop that: make a self-signed Code Signing certificate named"
+    echo "  soundgraph-bench in Keychain Access, then run this again."
+fi
 
 echo "built $APP"
 echo "run: $APP/Contents/MacOS/bench-cam shot.jpg"

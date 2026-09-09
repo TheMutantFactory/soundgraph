@@ -101,3 +101,46 @@ Open problems, ordered by how much they threaten the Knobcon demo.
   floated every number; saving now goes through the core's serialiser.
 - Auto-place appeared non-deterministic; the algorithm was fine, the button silently
   switched to selection-only mode.
+
+## 2026-08-27 — RESOLVED: the 3.49 panel needs a true cold boot, not a reset
+
+The panel showed a lit white rectangle whatever was sent to it, with Waveshare's own
+firmware as well as ours, and the vendor firmware logged 211 I2C NACKs in eight seconds
+from the touch controller. Display and touch are the same silicon behind one flex
+connector, so I concluded the ribbon had been disturbed when the case was opened and
+recommended reseating it.
+
+That was wrong, and wrong in an instructive way. Pulling the 18650 and reconnecting
+brought the panel straight back — the vendor demo, then ours. The board has a battery, so
+a USB reset, an RTS pulse, and the RST button are all *warm* resets that never drop the
+panel's rails. Whatever state the AXS15231B had latched into survived every reset
+available over the cable, which is why hours of driver work looked like it changed
+nothing: the evidence was real, the inference from it was not. Two functions of one chip
+failing together does imply one shared cause; it does not imply the cause is mechanical.
+
+So: on this board, "have you power cycled it" and "have you reset it" are different
+questions, and only the first requires the battery to come out. Anything that presents as
+the panel being electrically absent should try that before anything is taken apart.
+
+### The original entry, kept because the reasoning is worth seeing fail
+
+The ESP32-S3-Touch-LCD-3.49 shows a uniform lit white rectangle whatever is sent to it.
+Waveshare's own `10_LVGL_V9_Test`, built from their repository and flashed to the same
+board, does exactly the same — so this is not our driver.
+
+The evidence that it is physical rather than electrical-configuration: that same vendor
+firmware logs 211 I2C NACKs in eight seconds. The AXS15231B is one part doing both jobs —
+it drives the panel over QSPI and answers touch over I2C at 0x3b. QSPI is write-only, so
+"send init commands success" means only that the ESP32 clocked bytes out of a pin, and it
+would report that into a disconnected cable just as cheerfully. The NACK is a read, and a
+read that is not answered means the part is not there.
+
+Display and touch are the same silicon behind the same flex connector, and the case was
+opened the same evening to look for a camera. First thing to try is reseating the display
+FPC. Note also that this panel was never observed working: the factory firmware was
+running when the board arrived, but nobody photographed its screen before the case came
+apart, so "it worked before" is an assumption rather than an observation.
+
+What is already known-good on this board and should not be re-derived: audio (ES8311 out,
+ES7210 in, amp on the TCA9554 at 0x20 pin 7), and the whole display path down to the last
+accepted byte — see the driver work on dd/ESP32-s3-touch-lcd-3.49.
