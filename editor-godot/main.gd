@@ -874,6 +874,13 @@ func _build_ui() -> void:
 	graph_edit.zoom_min = 0.1
 	graph_edit.minimap_enabled = true
 	graph_edit.minimap_size = Vector2(220, 136)
+	# The minimap over everything the graph draws. The cord layer, the glow overlay
+	# (z 100) and the seam cables all stack above GraphEdit's own children, and the
+	# map in the corner was going under a cable that happened to run through it. It is
+	# an internal child, reachable but not reparented — a z-index is the whole fix.
+	var minimap := _minimap_of(graph_edit)
+	if minimap != null:
+		minimap.z_index = 200
 	# Opaque, now that it is a surface rather than a grey box: it was faded to hide
 	# how out of place it looked, which is treating the symptom.
 	graph_edit.minimap_opacity = 0.9
@@ -2645,6 +2652,8 @@ func _use_ui_scale(index: int) -> void:
 	_refresh_keyboard_range()
 	if keyboard_bar != null:
 		_dress_furniture(keyboard_bar)
+	# The dock's heights were fitted at the old size and would stay there.
+	_fit_keyboard_dock()
 	# The doors' size was set when the band was built and would stay there.
 	for lens: int in _view_buttons:
 		(_view_buttons[lens] as Button).add_theme_font_size_override("font_size",
@@ -7705,7 +7714,7 @@ func _set_keyboard_mode(mode: String) -> void:
 		# of slivers that still take clicks. Mini stays a keyboard — half the height,
 		# every key still a target a finger can mean.
 		keyboard.visible = keyboard_expanded
-		keyboard.custom_minimum_size.y = Design.scale(112 if mode == "full" else 56)
+		keyboard.custom_minimum_size.y = Design.furniture_scale(112 if mode == "full" else 56)
 		if not keyboard_expanded:
 			_release_all_notes()
 	if keyboard_toggle != null:
@@ -7739,14 +7748,14 @@ func _fit_keyboard_dock(height: float = -1.0) -> void:
 	var tight := available < 700.0
 	var cramped := available < 560.0
 	if piano_roll != null:
-		piano_roll.custom_minimum_size.y = Design.scale(90 if tight else 150)
+		piano_roll.custom_minimum_size.y = Design.furniture_scale(90 if tight else 150)
 	if keyboard_mode == "full":
-		keyboard.custom_minimum_size.y = Design.scale(56 if cramped else 112)
+		keyboard.custom_minimum_size.y = Design.furniture_scale(56 if cramped else 112)
 	# The bench yields too: its display's floor was tall enough to shove the whole
 	# column past the window's bottom on its own, and a shorter trace that shows is
 	# worth more than a taller one that pushed the piano off the screen.
 	if scope_probe != null and scope_probe.display != null:
-		scope_probe.display.custom_minimum_size.y = Design.scale(
+		scope_probe.display.custom_minimum_size.y = Design.furniture_scale(
 			52 if cramped else (90 if tight else 160))
 
 
@@ -8016,6 +8025,23 @@ func _build_keyboard_bar() -> Control:
 	return bar
 
 
+## The strip's buttons' height: the chrome's hit target less half its padding.
+const STRIP_TARGET := 34
+
+
+## GraphEdit's own minimap: an internal grandchild, inside the top layer that also holds
+## the scrollbars. Found by class rather than by path, because the path is Godot's.
+static func _minimap_of(graph: GraphEdit) -> CanvasItem:
+	var queue: Array = [graph]
+	while not queue.is_empty():
+		var node: Node = queue.pop_back()
+		for child in node.get_children(true):
+			if child.get_class() == "GraphEditMinimap":
+				return child as CanvasItem
+			queue.append(child)
+	return null
+
+
 ## The strip's own text, at the furniture size: every button, menu and field on it,
 ## walked after it is built and again whenever the interface size changes, because an
 ## override set once outlives the theme it was set against.
@@ -8028,6 +8054,10 @@ func _dress_furniture(strip: Control) -> void:
 		if node is Button:
 			(node as Control).add_theme_font_size_override("font_size",
 				Design.furniture_type(Design.SIZE_CONTROL))
+			# Half the padding the chrome's 44px floor gave these. The strip is one row
+			# of small verbs under the keys, not a toolbar somebody aims at from across
+			# the room, and the row was as tall as the roll's transport made it.
+			(node as Control).custom_minimum_size.y = Design.furniture_scale(STRIP_TARGET)
 		elif node is Label or node is LineEdit:
 			(node as Control).add_theme_font_size_override("font_size",
 				Design.furniture_type(Design.SIZE_NUMERIC))

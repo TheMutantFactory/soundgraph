@@ -1400,3 +1400,24 @@ Consequences:
 Overrides on the strip are re-dressed whenever the size changes, because an
 override set once outlives the theme it was set against. Nothing below XL
 changes.
+
+## 2026-09-09 — The dock's geometry stops at XL; the minimap stands on top
+
+Decision:
+`Design.furniture_scale()` beside `furniture_type()`: the dock's heights —
+keys, roll, bench — and the strip's button target go through it and stop at
+XL. The strip's target is 34 rather than the chrome's 44. GraphEdit's
+internal minimap gets a z-index of 200, above the glow overlay at 100, the
+cord layer and the seam cables.
+
+Reason:
+Full-screen at 4K the keys alone were 224px tall before the roll and the
+bench were counted, a quarter of the screen for the thing that is glanced
+at; half-screen the same window was fine, because the same pixels were a
+larger share of a smaller window. The strip's row was as tall as a toolbar
+for a row of small verbs. And the minimap was going under a cable that
+happened to cross its corner.
+
+Consequences:
+Below XL nothing changes. The chrome's toolbar keeps its 44px hit floor;
+only the strip under the keys trades it.

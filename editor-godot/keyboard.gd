@@ -104,7 +104,7 @@ var _mouse_note := -1
 
 
 func _ready() -> void:
-	custom_minimum_size.y = Design.scale(112)
+	custom_minimum_size.y = Design.furniture_scale(112)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	# Never takes focus. Taking it is the exact failure this exists to diagnose.
 	focus_mode = Control.FOCUS_NONE

@@ -3019,6 +3019,20 @@ func _initialize() -> void:
 	check((main._view_buttons[main.PatchView.GRAPH] as Button).get_theme_font_size("font_size")
 			== Design.type(Design.SIZE_APP_TITLE),
 		"and the lens band's doors wear the app-title size")
+	# The dock's geometry stops at XL too, and the strip's buttons stand at the strip's
+	# own target rather than the chrome's: the keys at 4K are XL's height, not double.
+	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(112)
+			and Design.furniture_scale(112) < Design.scale(112)
+			and is_equal_approx(strip_button.custom_minimum_size.y,
+				float(Design.furniture_scale(main.STRIP_TARGET))),
+		"the keys and the strip keep XL's height at 4K (%.0f keys, %.0f strip)"
+			% [main.keyboard.custom_minimum_size.y, strip_button.custom_minimum_size.y])
+	# And the minimap stands over every layer the graph draws.
+	var minimap_z := -1
+	var found_minimap: CanvasItem = main._minimap_of(main.graph_edit)
+	if found_minimap != null:
+		minimap_z = found_minimap.z_index
+	check(minimap_z > 100, "the minimap's z-index puts it over the glow and the cords (%d)" % minimap_z)
 	main._use_ui_scale(Design.Scale.XL)
 	await process_frame
 	# Fresh routes for what follows. The router keeps a route once made for as long as
@@ -8319,7 +8333,7 @@ func _initialize() -> void:
 	main._set_keyboard_mode("mini")
 	await process_frame
 	check(main.keyboard.visible and main.keyboard.custom_minimum_size.y
-			< Design.scale(112),
+			< Design.furniture_scale(112),
 		"mini keeps the keys playable at half height (%.0f)"
 			% main.keyboard.custom_minimum_size.y)
 	main._set_keyboard_mode("hide")
@@ -8528,7 +8542,7 @@ func _initialize() -> void:
 	main._set_keyboard_mode("full")
 	await process_frame
 	check(main.keyboard.visible and main.keyboard.custom_minimum_size.y
-			== Design.scale(112),
+			== Design.furniture_scale(112),
 		"and full is the whole piano again")
 
 	# ---- faceplates ---------------------------------------------------------------
@@ -9234,7 +9248,7 @@ func _initialize() -> void:
 	# full keyboard drops to mini on its own — the piano must never be the row that
 	# falls off the bottom while the roll above it renders on.
 	main._fit_keyboard_dock(500.0)
-	check(main.keyboard.custom_minimum_size.y == Design.scale(56)
+	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(56)
 			and main.piano_roll.custom_minimum_size.y == Design.scale(90)
 			and main.scope_probe.display.custom_minimum_size.y == Design.scale(52),
 		"a cramped window squeezes the roll, the bench and the keys, in that order "
@@ -9243,7 +9257,7 @@ func _initialize() -> void:
 				main.scope_probe.display.custom_minimum_size.y,
 				main.keyboard.custom_minimum_size.y])
 	main._fit_keyboard_dock(900.0)
-	check(main.keyboard.custom_minimum_size.y == Design.scale(112)
+	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(112)
 			and main.piano_roll.custom_minimum_size.y == Design.scale(150),
 		"and room given back is taken back")
 

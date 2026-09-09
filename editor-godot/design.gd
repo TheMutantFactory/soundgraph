@@ -386,6 +386,14 @@ static func furniture_type(value: float) -> int:
 	return maxi(int(roundf(value * factor)), TYPE_FLOOR)
 
 
+## scale() for the furniture's geometry — the dock's heights and the strip's targets —
+## capped at XL for the same reason its text is: the keys at 4K were 224px tall before
+## the roll and the bench were counted, a quarter of the screen given to the thing that
+## is glanced at.
+static func furniture_scale(value: float) -> int:
+	return int(roundf(value * minf(SCALE_FACTORS[ui_scale], SCALE_FACTORS[Scale.XL])))
+
+
 ## A screen minimum, after the reader's UI-scale preference.
 ##
 ## The floors are absolute — they never go below what the spec sets, so Compact cannot
