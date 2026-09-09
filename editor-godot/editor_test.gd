@@ -3021,12 +3021,15 @@ func _initialize() -> void:
 		"and the lens band's doors wear the app-title size")
 	# The dock's geometry stops at XL too, and the strip's buttons stand at the strip's
 	# own target rather than the chrome's: the keys at 4K are XL's height, not double.
-	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(112)
-			and Design.furniture_scale(112) < Design.scale(112)
+	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(56)
+			and main.piano_roll.custom_minimum_size.y == Design.furniture_scale(90)
 			and is_equal_approx(strip_button.custom_minimum_size.y,
-				float(Design.furniture_scale(main.STRIP_TARGET))),
-		"the keys and the strip keep XL's height at 4K (%.0f keys, %.0f strip)"
-			% [main.keyboard.custom_minimum_size.y, strip_button.custom_minimum_size.y])
+				float(Design.furniture_scale(main.STRIP_TARGET)))
+			and main.keyboard_bar.get_combined_minimum_size().y
+				< float(Design.scale(Design.HIT_TARGET)),
+		"4K takes the dock's short rungs whatever the window: keys %.0f, roll %.0f, strip %.0f"
+			% [main.keyboard.custom_minimum_size.y, main.piano_roll.custom_minimum_size.y,
+			main.keyboard_bar.get_combined_minimum_size().y])
 	# And the minimap stands over every layer the graph draws.
 	var minimap_z := -1
 	var found_minimap: CanvasItem = main._minimap_of(main.graph_edit)

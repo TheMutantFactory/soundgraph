@@ -2022,6 +2022,9 @@ class Knob extends Control:
 	## than the sliders it replaced, which is the opposite of the point. Same control,
 	## same keyboard, same signal path — one draws its own caption and one does not.
 	var compact := false
+	## On the dock's strip rather than on a panel or a node: sized with the furniture,
+	## which stops at XL, rather than with the canvas, which doubles at 4K.
+	var furniture := false
 	## Drawn as a diagram rather than as a piece of hardware.
 	##
 	## The rack's knob is a moulded part: collar, cap, moulding line, sheen, a shadow
@@ -2044,6 +2047,8 @@ class Knob extends Control:
 	var dial := 1.0
 
 	func _radius() -> float:
+		if furniture:
+			return float(Design.furniture_scale(Rack.KNOB_RADIUS)) * dial
 		return Rack.knob_radius() * dial
 
 	var _position := 0.0               # 0..1 along the parameter's own scaling
@@ -2107,7 +2112,9 @@ class Knob extends Control:
 			# Room for the printed scale, which sits nine px past the body — the old 17
 			# was measured against a value arc five px out and nothing beyond it.
 			var across := _radius() * 2.0 + 22.0
-			return Vector2(across, maxf(across, Design.scale(Design.HIT_TARGET)))
+			var floor_height := float(Design.furniture_scale(Design.HIT_TARGET) if furniture
+				else Design.scale(Design.HIT_TARGET))
+			return Vector2(across, maxf(across, floor_height))
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
 		var label_size := Design.canvas_type(Design.SIZE_SECONDARY)
 		var value_font: Font = Design.numeric_font()

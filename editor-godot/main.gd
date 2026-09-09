@@ -7589,7 +7589,8 @@ func _build_keyboard_dock() -> Control:
 	var keyboard_bar := _build_keyboard_bar()
 	keyboard_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	strip.add_child(keyboard_bar)
-	strip.custom_minimum_size.y = keyboard_bar.get_combined_minimum_size().y
+	# Not frozen at the bar's first minimum: that was measured before the strip was
+	# dressed, and an 88px row at 4K was the frozen number, not the buttons.
 	column.add_child(strip)
 
 	keyboard = Keyboard.new()
@@ -7745,8 +7746,13 @@ func _fit_keyboard_dock(height: float = -1.0) -> void:
 		available = view.get_visible_rect().size.y if view != null else 0.0
 	if available <= 0.0:
 		return
-	var tight := available < 700.0
-	var cramped := available < 560.0
+	# 4K takes the short rungs whatever the window's height: a big screen is for the
+	# canvas, and the dock at its roomy height was a quarter of it. The rungs are what
+	# a short window gets, which is also the height the same dock had in a half-screen
+	# window on the same monitor — the one that looked right.
+	var showy := Design.ui_scale == Design.Scale.FOUR_K
+	var tight := available < 700.0 or showy
+	var cramped := available < 560.0 or showy
 	if piano_roll != null:
 		piano_roll.custom_minimum_size.y = Design.furniture_scale(90 if tight else 150)
 	if keyboard_mode == "full":
@@ -7951,6 +7957,7 @@ func _build_keyboard_bar() -> Control:
 	master_knob = Rack.Knob.new()
 	master_knob.rack = rack
 	master_knob.compact = true
+	master_knob.furniture = true
 	# Sized to sit inside the strip with air around it, and centred in the row: a
 	# dial as tall as the row it lives in reads as jammed, not mounted.
 	master_knob.dial = 0.72
