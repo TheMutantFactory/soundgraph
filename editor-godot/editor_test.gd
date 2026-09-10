@@ -3272,6 +3272,16 @@ func _initialize() -> void:
 	check(shrunk < 28 and shrunk >= 9 and kept_size == 28,
 		"a rack legend shrinks to its plate before it is clipped (%d for the long name, "
 			+ "%d for the short)" % [shrunk, kept_size])
+	# The schematic's cards are fixed pixels, so their words fit both the width and
+	# the line: a 4K canvas size comes down to the header's line, and a long name comes
+	# down further to its width.
+	var card_font: Font = Design.font(Design.WEIGHT_SEMIBOLD)
+	var card_title: int = main.schematic.fitted_size(card_font, "Osc", 32, 250.0, 18)
+	var card_long: int = main.schematic.fitted_size(card_font,
+		"A very long module title indeed", 32, 120.0, 18)
+	check(card_title == 18 and card_long < 18 and card_long >= 9,
+		"a schematic card's title fits its line and its width (%d, %d)"
+			% [card_title, card_long])
 
 	# The rack can be panned beyond its frame, and has a map. The rackmap_holder is the case
 	# plus half a window of rack_slack on every side, the rack sits in the middle of it,
