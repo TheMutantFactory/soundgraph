@@ -67,9 +67,28 @@ class Status:
 
     def write(self):
         STATUS.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(self.data, indent=1)
         tmp = STATUS.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, indent=1))
-        os.replace(tmp, STATUS)
+        tmp.write_text(text)
+        # The editor reads this file while it is being written, and on Windows a file
+        # somebody has open cannot be replaced: the rename is refused for as long as
+        # the reader holds it, which is a few milliseconds a few times a second. So
+        # the rename is tried for a moment, and if it keeps being refused the text
+        # goes in place instead — not atomic, but a reader that catches a half-written
+        # file parses nothing and looks again.
+        for _attempt in range(40):
+            try:
+                os.replace(tmp, STATUS)
+                return
+            except PermissionError:
+                time.sleep(0.025)
+        try:
+            STATUS.write_text(text)
+        finally:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
 
 class Tee(io.TextIOBase):

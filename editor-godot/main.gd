@@ -3926,6 +3926,7 @@ var flash_dialog: ConfirmationDialog
 var bank_dialog: FileDialog
 var _hardware_action := ""
 var _last_scan: Dictionary = {}
+var _hardware_poll := 0.0
 
 
 func _open_hardware_panel() -> void:
@@ -4122,6 +4123,13 @@ func _start_flash() -> void:
 func _watch_hardware() -> void:
 	if _hardware_action == "":
 		return
+	# Five times a second, not every frame: the tool replaces the file by renaming over
+	# it, and on Windows that is refused while a reader has it open. Reading less often
+	# leaves the tool most of every second to land its rename.
+	_hardware_poll += get_process_delta_time()
+	if _hardware_poll < 0.2 and hardware.running():
+		return
+	_hardware_poll = 0.0
 	var status := hardware.status()
 	if hardware_panel != null and hardware_panel.visible:
 		hardware_panel.show_progress(status)
