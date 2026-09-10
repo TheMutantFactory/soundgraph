@@ -116,7 +116,9 @@ static float sgaxo_fifo_l[SGAXO_FRAMES], sgaxo_fifo_r[SGAXO_FRAMES];
 static float sgaxo_in_l[SGAXO_FRAMES], sgaxo_in_r[SGAXO_FRAMES];
 static uint32_t sgaxo_fifo_pos;   // runtime-inited to SGAXO_FRAMES (empty)
 static uint32_t sgaxo_position;   // absolute frame count of rendered blocks
-static int sgaxo_next_event;
+// Unsigned, like the count it is compared with: signed, a zero-event patch let the
+// compiler imagine the loop running at index -1 and warn about it on every build.
+static uint32_t sgaxo_next_event;
 
 static void sgaxo_render_block(void) {
   // Scheduled events land before the block containing their frame, exactly

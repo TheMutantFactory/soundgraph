@@ -154,6 +154,9 @@ at compile time — the subset is a tested claim, not a vibe.
 python3 sgaxo/codegen.py path/to/patch.json   # -> sgaxo/build/patch.bin
 ```
 
+Toolchain output is captured: a failure comes back as the compiler's own
+words, and warnings are counted and kept quiet unless `SGAXO_VERBOSE=1`.
+
 ## Shipping standalone: the SD bank
 
 `tools/bake-bank.py OUT_DIR patch1.json patch2.json ...` turns editor patches

@@ -874,7 +874,7 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
         L.append(f"  {{{frame}, {1 if on else 0}, {note}, {_lit(vel)}}},")
     L.append("  {0, 0, 0, 0.0f},  // terminator slot; count below is what rules")
     L.append("};")
-    L.append(f"static const int sg_event_count = {len(events)};")
+    L.append(f"static const uint32_t sg_event_count = {len(events)};")
     L.append("")
     if sd_bank_name is not None:
         L.append("#define SGAXO_BANK 1")
@@ -896,6 +896,26 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
 
 def patch_id_for(name):
     return 0x80000000 | (zlib.crc32(name.encode()) & 0x7FFFFFFF)
+
+
+def _tool(command, what):
+    """Runs a toolchain step with its output captured. A failure becomes an
+    Unsupported with the compiler's own words; a warning is counted and kept
+    out of the way — a bank of ten entries is not the place to read thirty
+    identical ones — unless SGAXO_VERBOSE is set, when it goes to stderr."""
+    import os
+    import sys
+    result = subprocess.run(command, capture_output=True, text=True)
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0:
+        raise Unsupported(f"{what} failed (exit {result.returncode}):" + chr(10) + output[-1500:])
+    if output:
+        warnings = sum(1 for line in output.splitlines() if "warning:" in line)
+        if os.environ.get("SGAXO_VERBOSE"):
+            sys.stderr.write(output + chr(10))
+        elif warnings:
+            print(f"  {what}: {warnings} compiler warning(s) kept quiet; "
+                  "SGAXO_VERBOSE=1 shows them")
 
 
 def build_patch(patch_path, frames=4800, name=None, events=(),
@@ -939,18 +959,20 @@ def build_patch(patch_path, frames=4800, name=None, events=(),
     cpp.write_text(source)
     obj, elf, binp = (BUILD / f"{name}.{ext}" for ext in ("o", "elf", "bin"))
     inc = ["-I", str(HERE), "-I", str(RIG / "patches"), "-I", str(DSP_CORE_SRC)]
-    subprocess.run([CXX, *CXXFLAGS, *inc, "-c", str(cpp), "-o", str(obj)],
-                   check=True)
+    _tool([CXX, *CXXFLAGS, *inc, "-c", str(cpp), "-o", str(obj)], "compile")
     libgcc = subprocess.run(
         [CXX.replace("g++", "gcc"), "-mcpu=cortex-m4", "-mfloat-abi=hard",
          "-mfpu=fpv4-sp-d16", "-mthumb", "-print-libgcc-file-name"],
         capture_output=True, text=True, check=True).stdout.strip()
-    subprocess.run(
+    # A patch linked into RAM has one segment that is read, written and run, by
+    # design; newer binutils warn about it on every link, and the warning says nothing.
+    _tool(
         [CXX, "-nostdlib", "-nostartfiles", f"-T{SDK}/ramlink.ld",
          "-mcpu=cortex-m4", "-mfloat-abi=hard", "-mfpu=fpv4-sp-d16", "-mthumb",
+         "-Wl,--no-warn-rwx-segments",
          f"-Wl,--just-symbols={SDK}/axoloti.elf", str(obj), libgcc,
          "-o", str(elf)],
-        check=True)
+        "link")
     # The patch .data section is NOLOAD: initialized statics would arrive as
     # garbage. Refuse to ship a binary that has one.
     nm = subprocess.run([NM, "-S", str(elf)], capture_output=True, text=True,
@@ -959,7 +981,7 @@ def build_patch(patch_path, frames=4800, name=None, events=(),
         parts = line.split()
         if len(parts) >= 4 and parts[2] in ("d", "D") and int(parts[1], 16) > 0:
             raise Unsupported(f"initialized .data would be lost on load: {line}")
-    subprocess.run([OBJCOPY, "-O", "binary", str(elf), str(binp)], check=True)
+    _tool([OBJCOPY, "-O", "binary", str(elf), str(binp)], "objcopy")
     buffer_uploads = [
         (addr, path.read_bytes(), sd_names[i] if sd_bank_name else None)
         for i, (addr, path) in enumerate(uploads)]
