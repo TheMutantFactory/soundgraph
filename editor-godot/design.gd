@@ -318,10 +318,23 @@ const SIZE_OCTAVE := 16
 const MIN_SCREEN_KEYCAP := 16
 const MIN_SCREEN_OCTAVE := 14
 
-enum Scale { COMPACT, COMFORTABLE, LARGE, XL }
+## 4K is the show preset: a 3840-wide screen at 100% is twice the pixels of the laptop
+## the other four were tuned on, and XL's 1.35 left the graph's words and the knobs'
+## values a third smaller on it than at a desk. 2.0 is the laptop's Comfortable at twice
+## the pixels — 1.75 was tried first and read as XL from the same chair, not the same
+## size from twice as far. Every floor, hit target and pinned text goes through the same
+## factor, so the graph's compact and summary bands move out with it as they do for XL.
+enum Scale { COMPACT, COMFORTABLE, LARGE, XL, FOUR_K }
 
-const SCALE_NAMES := ["Compact", "Comfortable", "Large", "XL"]
-const SCALE_FACTORS := [0.875, 1.0, 1.15, 1.35]
+const SCALE_NAMES := ["Compact", "Comfortable", "Large", "XL", "4K"]
+const SCALE_FACTORS := [0.875, 1.0, 1.15, 1.35, 2.0]
+## What the work area gets on top of the interface: the words on the nodes, the panels'
+## labels and values, the schematic's and the face's text, and the node cells that hold
+## them. 1 everywhere but 4K, where the chrome at 2.0 was right and the canvas was
+## still read from standing distance. Asked for as text alone; the cells follow because
+## a word twice as tall does not fit a row that did not grow, and a node in Godot grows
+## to its contents whether or not anybody declared it — better declared.
+const CANVAS_BOOST := [1.0, 1.0, 1.0, 1.0, 2.0]
 
 static var ui_scale: int = Scale.COMFORTABLE
 
@@ -349,6 +362,38 @@ static func type(value: float) -> int:
 	return maxi(scale(value), TYPE_FLOOR)
 
 
+## The interface factor with the canvas boost on it: what the work area is drawn at.
+static func canvas_factor() -> float:
+	return SCALE_FACTORS[ui_scale] * CANVAS_BOOST[ui_scale]
+
+
+## scale() and type() for the work area — the graph's nodes, the rack's panels, the
+## schematic and the face. Chrome keeps scale() and type().
+static func canvas_scale(value: float) -> int:
+	return int(roundf(value * canvas_factor()))
+
+
+static func canvas_type(value: float) -> int:
+	return maxi(canvas_scale(value), TYPE_FLOOR)
+
+
+## type() for the furniture: the keyboard dock's strip and keycaps, the probe scope.
+## These scale with the interface up to XL and no further. At 4K the canvas doubled and
+## the chrome doubled, and a strip of transport buttons doubled with them — furniture
+## that is glanced at, not read, taking a quarter of the screen. It stays XL-sized.
+static func furniture_type(value: float) -> int:
+	var factor: float = minf(SCALE_FACTORS[ui_scale], SCALE_FACTORS[Scale.XL])
+	return maxi(int(roundf(value * factor)), TYPE_FLOOR)
+
+
+## scale() for the furniture's geometry — the dock's heights and the strip's targets —
+## capped at XL for the same reason its text is: the keys at 4K were 224px tall before
+## the roll and the bench were counted, a quarter of the screen given to the thing that
+## is glanced at.
+static func furniture_scale(value: float) -> int:
+	return int(roundf(value * minf(SCALE_FACTORS[ui_scale], SCALE_FACTORS[Scale.XL])))
+
+
 ## A screen minimum, after the reader's UI-scale preference.
 ##
 ## The floors are absolute — they never go below what the spec sets, so Compact cannot
@@ -358,7 +403,9 @@ static func type(value: float) -> int:
 ## into one after all, just at the bottom of the range instead of the top — UI scale
 ## erased by graph zoom, which is the thing it is supposed to be independent of.
 static func screen_minimum(base: int) -> int:
-	return int(roundf(float(base) * maxf(1.0, SCALE_FACTORS[ui_scale])))
+	# The canvas factor, not the interface one: every caller is pinning a word on the
+	# canvas, and the canvas is what the boost is for.
+	return int(roundf(float(base) * maxf(1.0, canvas_factor())))
 
 
 ## True when `logical` px of type, once `zoom` has scaled it, lands under `minimum` real
@@ -489,7 +536,19 @@ static func padded_panel(level: int, horizontal: int, vertical: int,
 ## makes the reader parse all thirteen to find the one they want; giving the main verb a
 ## filled accent treatment means it is found without reading. Used sparingly — one per
 ## region, or it stops meaning anything.
-static func make_primary(button: Button) -> Button:
+## padded_panel() for the furniture: margins through the furniture scale, and the
+## vertical ones halved, because the furniture's whole complaint was height.
+static func furniture_box(level: int, horizontal: int, vertical: int,
+		radius: int = RADIUS_BUTTON, identifying: bool = true) -> StyleBoxFlat:
+	var box := control(level, radius) if identifying else panel(level, radius)
+	box.content_margin_left = furniture_scale(horizontal)
+	box.content_margin_right = furniture_scale(horizontal)
+	box.content_margin_top = maxi(1, furniture_scale(vertical) / 2)
+	box.content_margin_bottom = maxi(1, furniture_scale(vertical) / 2)
+	return box
+
+
+static func make_primary(button: Button, compact: bool = false) -> Button:
 	# Filled with the accent itself, not a darkened version of it.
 	#
 	# It used to be ACCENT.darkened(0.55), which is a different colour from the one
@@ -497,7 +556,8 @@ static func make_primary(button: Button) -> Button:
 	# had checked it against, and came out at 3.71:1 in every palette. A filled accent
 	# button should be filled with the accent; that is the pairing the token is for,
 	# and it is 11.6:1 in Lab.
-	var normal := padded_panel(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON)
+	var normal := furniture_box(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON, false) \
+		if compact else padded_panel(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON)
 	normal.bg_color = ACCENT
 	normal.border_color = ACCENT
 	button.add_theme_stylebox_override("normal", normal)

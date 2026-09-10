@@ -409,7 +409,7 @@ func _preset_strip() -> Control:
 		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name.custom_minimum_size.x = Design.scale(140)
 		name.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-		name.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
+		name.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_BODY))
 		name.add_theme_color_override("font_color", Design.INK_SECOND)
 		name.set_meta("preset_name", true)
 		strip.add_child(name)
@@ -553,7 +553,7 @@ func _bank_list() -> Control:
 		name.clip_text = true
 		name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		name.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-		name.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
+		name.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_BODY))
 		name.add_theme_color_override("font_color",
 			Design.ACCENT if index == preset_index else Design.INK_NORMAL)
 		name.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -603,7 +603,7 @@ func rename_showing() -> void:
 	field.text = str((presets[index] as Dictionary).get("name", ""))
 	field.max_length = 64
 	field.custom_minimum_size.x = Design.scale(140)
-	field.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
+	field.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_BODY))
 	field.tooltip_text = "Enter renames the preset; Escape leaves it alone."
 	field.set_meta("preset_rename", true)
 	_strip.add_child(field)
@@ -783,7 +783,7 @@ func rebuild() -> void:
 			var note := Label.new()
 			note.text = "Every knob in the patch. Drag one on to start a panel of your own."
 			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			note.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+			note.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_SECONDARY))
 			note.add_theme_color_override("font_color", Design.INK_SECOND)
 			add_child(note)
 	if controls.is_empty():
@@ -792,7 +792,7 @@ func rebuild() -> void:
 		var hint := Label.new()
 		hint.text = "Nothing to turn in this patch yet."
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hint.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+		hint.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_SECONDARY))
 		hint.add_theme_color_override("font_color", Design.INK_SECOND)
 		add_child(hint)
 
@@ -914,7 +914,7 @@ func rebuild() -> void:
 		badge.visible = title != ""
 		badge.custom_minimum_size.y = Design.scale(BAND)
 		badge.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-		badge.add_theme_font_size_override("font_size", Design.type(Design.SIZE_CONTROL))
+		badge.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_CONTROL))
 		badge.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1072,7 +1072,7 @@ func rebuild() -> void:
 			heading.custom_minimum_size.y = Design.scale(BAND)
 			heading.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
 			heading.add_theme_font_size_override("font_size",
-				Design.type(Design.SIZE_SECONDARY))
+				Design.canvas_type(Design.SIZE_SECONDARY))
 			heading.add_theme_color_override("font_color",
 				Design.INK_BRIGHT if heard else Design.INK_SECOND)
 			heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1257,7 +1257,7 @@ func rebuild() -> void:
 
 	var caption := Label.new()
 	caption.text = "%s — not on the panel" % offer_node
-	caption.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	caption.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_SECONDARY))
 	caption.add_theme_color_override("font_color", Design.INK_SECOND)
 	add_child(caption)
 
@@ -1393,8 +1393,8 @@ func _least_block_height() -> float:
 	probe.descriptor = {"name": "probe", "min": 0.0, "max": 1.0}
 	var fader: float = probe.get_combined_minimum_size().y
 	probe.queue_free()
-	return float(Design.type(Design.SIZE_SECONDARY)) + 6.0 \
-		+ Design.scale(Design.HIT_TARGET) + float(Design.type(Design.SIZE_BODY)) + 6.0 \
+	return float(Design.canvas_type(Design.SIZE_SECONDARY)) + 6.0 \
+		+ Design.scale(Design.HIT_TARGET) + float(Design.canvas_type(Design.SIZE_BODY)) + 6.0 \
 		+ fader + float(Design.SPACE_S)
 
 
@@ -1491,7 +1491,7 @@ func _port_plate(seams: Array, title: String, tint: Color, height: float) -> Con
 	heading.text = title
 	heading.custom_minimum_size.y = Design.scale(BAND)
 	heading.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-	heading.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	heading.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_SECONDARY))
 	heading.add_theme_color_override("font_color", Design.INK_BRIGHT)
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1516,7 +1516,7 @@ func _port_plate(seams: Array, title: String, tint: Color, height: float) -> Con
 		name_label.clip_text = true
 		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		name_label.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_CONTROL))
+			Design.canvas_type(Design.SIZE_CONTROL))
 		inside.add_child(name_label)
 
 		var where := Label.new()
@@ -1525,7 +1525,7 @@ func _port_plate(seams: Array, title: String, tint: Color, height: float) -> Con
 		# something now: a port nothing drives is one this patch offers to whatever uses it.
 		where.text = host if host != "" else "not plugged in"
 		where.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		where.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+		where.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_SECONDARY))
 		where.add_theme_color_override("font_color",
 			Design.INK_SECOND if host != "" else Design.INK_DISABLED)
 		inside.add_child(where)
@@ -1583,7 +1583,7 @@ func _port_plate(seams: Array, title: String, tint: Color, height: float) -> Con
 			line.clip_text = true
 			line.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			line.add_theme_font_size_override("font_size",
-				Design.type(Design.SIZE_SECONDARY))
+				Design.canvas_type(Design.SIZE_SECONDARY))
 			line.add_theme_color_override("font_color", ink)
 			line.tooltip_text = "%s — %s" % [signal_name, "in use" if lit else "free"]
 			row.add_child(line)
@@ -1640,7 +1640,7 @@ func _cell(control: Dictionary, descriptor: Dictionary) -> Control:
 	caption.clip_text = true
 	caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	caption.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-	caption.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
+	caption.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_BODY))
 	caption.add_theme_color_override("font_color", Design.INK_NORMAL)
 	# What it actually drives, in the tooltip rather than under the knob. It used to be a
 	# printed line — "op3.feedback" beneath every caption — which is a third of a cell's

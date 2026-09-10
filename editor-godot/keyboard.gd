@@ -104,7 +104,7 @@ var _mouse_note := -1
 
 
 func _ready() -> void:
-	custom_minimum_size.y = Design.scale(112)
+	custom_minimum_size.y = Design.furniture_scale(112)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	# Never takes focus. Taking it is the exact failure this exists to diagnose.
 	focus_mode = Control.FOCUS_NONE
@@ -208,11 +208,11 @@ func _notification(what: int) -> void:
 ## follow the UI-scale setting like everything else, and floored so that setting can
 ## never take them under what somebody has to read mid-performance.
 static func keycap_size() -> int:
-	return maxi(Design.type(Design.SIZE_KEYCAP), Design.MIN_SCREEN_KEYCAP)
+	return maxi(Design.furniture_type(Design.SIZE_KEYCAP), Design.MIN_SCREEN_KEYCAP)
 
 
 static func octave_size() -> int:
-	return maxi(Design.type(Design.SIZE_OCTAVE), Design.MIN_SCREEN_OCTAVE)
+	return maxi(Design.furniture_type(Design.SIZE_OCTAVE), Design.MIN_SCREEN_OCTAVE)
 
 
 ## A held key changes in two ways, not one.

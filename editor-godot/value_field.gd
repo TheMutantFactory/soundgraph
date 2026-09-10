@@ -83,11 +83,28 @@ const KEY_COARSE := 0.1
 ## painted straight across whatever sat below it, and on the node's last row it ran
 ## off the bottom of the node. The field is exactly one line of numerals tall, so
 ## that is what it declares.
+## On the furniture — the dock's strip, the probe — the field is drawn at the furniture
+## size, which stops at XL, rather than the interface's, which doubles at 4K.
+var furniture := false:
+	set(value):
+		furniture = value
+		if _label != null:
+			_label.add_theme_font_size_override("font_size", _numeral_size())
+		if _entry != null:
+			_entry.add_theme_font_size_override("font_size", _numeral_size())
+		update_minimum_size()
+
+
+func _numeral_size() -> int:
+	return Design.furniture_type(Design.SIZE_NUMERIC) if furniture \
+		else Design.type(Design.SIZE_NUMERIC)
+
+
 func _get_minimum_size() -> Vector2:
 	var font := Design.numeric_font()
 	if font == null:
 		return Vector2.ZERO
-	return Vector2(0.0, font.get_height(Design.type(Design.SIZE_NUMERIC)))
+	return Vector2(0.0, font.get_height(_numeral_size()))
 
 
 func _ready() -> void:

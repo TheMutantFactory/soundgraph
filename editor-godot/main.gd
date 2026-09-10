@@ -231,6 +231,7 @@ var face_edit_mode := false
 ## own vocabulary; none of them owns it.
 var selected_module := ""
 var rack_scroll: ScrollContainer
+var rack_minimap: RackMinimap
 var container_of_views: Control
 var view_switch: PanelContainer
 ## The segments inside the switches. The track is a frame around them; anything that
@@ -305,6 +306,9 @@ var face_anchor := Vector2.ZERO
 ## The file's own face: the knobs somebody plays. See patch_face.gd.
 var patch_face: PatchFace
 var views: TabContainer
+## The row the tab bar hosts — the document's name, its saved word, the zoom cluster —
+## kept so the furniture pass can re-dress it when the size changes.
+var _crumb_row: Control
 var rack: Rack
 var sandbox: Sandbox
 var outline: Outline
@@ -359,6 +363,16 @@ var view_popup: PopupMenu
 var keyboard_bar: Control
 var keyboard_dock: PanelContainer
 var keyboard_toggle: MenuButton
+## How the instrument is played: "keys" sounds what is held; "arp" holds the keys and
+## walks them one at a time at the roll's pace; "songs" runs the songs folder through
+## the roll. A setting of the machine, like the keyboard's size.
+var play_mode := "keys"
+const PLAY_MODES := ["keys", "arp", "songs"]
+## The keys held while arpeggiating, in the order they arrived; the one sounding now;
+## and the clock that walks them.
+var _arp_pool: Array = []
+var _arp_sounding := -1
+var _arp_clock := 0.0
 ## The instrument's own volume and mute; see _build_keyboard_bar.
 var master_knob
 var master_mute: Button
@@ -508,8 +522,17 @@ func _ready() -> void:
 	# A patch carried here from /soundgraph wins over the default example: somebody who
 	# pressed "open in the full editor" asked for their patch, and opening First Synth over
 	# it would throw away the thing they had just made.
+	# The interface size named on the command line, before the first patch is laid out:
+	# tools/run-demo.bat asks for 4K, so the show does not depend on what the last hand
+	# left in the settings.
+	var asked_size := _scale_from_args(OS.get_cmdline_user_args())
+	if asked_size >= 0 and asked_size != Design.ui_scale:
+		_use_ui_scale(asked_size)
+	var asked_case := _case_from_args(OS.get_cmdline_user_args())
+	if asked_case >= 0:
+		_use_case_width(asked_case)
 	if not _load_handed_off_patch():
-		_load_example("First Synth")
+		_load_example("Synth: poly-five")
 
 
 ## One theme on the root, inherited by everything — including the GraphNodes generated for
@@ -775,6 +798,7 @@ func _build_ui() -> void:
 	# docs/add-node-browser.md — the palette goes when the browser can do its job.
 	toolbar.add_node_requested.connect(_open_node_browser)
 	toolbar.feedback_requested.connect(_open_feedback)
+	toolbar.quit_requested.connect(_quit_by_hand)
 	toolbar.undo_requested.connect(_undo)
 	toolbar.redo_requested.connect(_redo)
 	toolbar.example_chosen.connect(_load_example)
@@ -858,6 +882,17 @@ func _build_ui() -> void:
 	graph_edit.zoom_min = 0.1
 	graph_edit.minimap_enabled = true
 	graph_edit.minimap_size = Vector2(220, 136)
+	# The minimap over everything the graph draws. The cord layer, the glow overlay
+	# (z 100) and the seam cables all stack above GraphEdit's own children, and the
+	# map in the corner was going under a cable that happened to run through it. It is
+	# an internal child, reachable but not reparented — a z-index is the whole fix.
+	var minimap := _minimap_of(graph_edit)
+	if minimap != null:
+		minimap.z_index = 200
+		# Lifted out of its layer's draw order, the map must clip its own drawing: the
+		# camera rectangle it draws reaches past its edge whenever the graph's camera
+		# is off the nodes, which the schematic lens does on purpose.
+		(minimap as Control).clip_contents = true
 	# Opaque, now that it is a surface rather than a grey box: it was faded to hide
 	# how out of place it looked, which is treating the symptom.
 	graph_edit.minimap_opacity = 0.9
@@ -923,6 +958,12 @@ func _build_ui() -> void:
 	if asked >= 0:
 		graph_edit.set_detail_mode(asked)
 		Settings.store("graph_detail", asked)
+	# And how far in the work area sits, for the session: a demo on a big screen wants
+	# the words on the nodes twice the size, and in 1:1 the words are the zoom. Every
+	# load fits the patch and then holds this, so switching examples on the floor does
+	# not quietly shrink the show back.
+	_demo_zoom = _zoom_from_args(OS.get_cmdline_user_args())
+	_demo_arrange = OS.get_cmdline_user_args().has("--arrange")
 	graph_edit.port_hovered.connect(_on_port_hovered)
 	graph_edit.ghost_port_picked.connect(_on_ghost_port_picked)
 	graph_edit.region_drawn.connect(_on_region_drawn)
@@ -1050,8 +1091,7 @@ func _build_ui() -> void:
 		segment.flat = false
 		segment.tooltip_text = "%s — %d" % [lens_names[lens], int(lens) + 1] \
 			if lens != PatchView.RACK else "Rack — 1"
-		segment.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_CONTROL))
+		# Dressed by _dress_lens_band once the band is built, and again at every size.
 		segment.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var chosen := int(lens)
 		segment.pressed.connect(func() -> void: _set_patch_view(chosen))
@@ -1098,7 +1138,8 @@ func _build_ui() -> void:
 	lens_bar.anchor_bottom = 0.0
 	lens_bar.offset_top = float(Design.scale(Design.SPACE_S))
 	lens_bar.offset_right = -float(Design.scale(Design.SPACE_M))
-	lens_bar.offset_bottom = float(Design.scale(44))
+	lens_bar.offset_bottom = float(Design.furniture_scale(44))
+	_dress_lens_band()
 	lens_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	lens_bar.add_theme_constant_override("separation", Design.scale(Design.SPACE_S))
 	lens_bar.add_child(view_switch)
@@ -1170,6 +1211,9 @@ func _build_ui() -> void:
 	for index in crumb_order.size():
 		crumb_row.move_child(crumb_order[index] as Node, index)
 	views.get_tab_bar().add_child(crumb_row)
+	_crumb_row = crumb_row
+	_dress_furniture(crumb_row)
+	_dress_tabs()
 	# One tab, one canvas, both sides of the container. The graph already owns zoom,
 	# pan and the grid, so the face is a tenant on that canvas rather than a rival
 	# view: flipping hides the wiring and mounts the face at the case's own spot, and
@@ -1247,7 +1291,10 @@ func _build_ui() -> void:
 
 	rack_scroll = ScrollContainer.new()
 	rack_scroll.name = "Rack"
-	rack_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# Scrolls both ways and shows no bars: the wheel, the middle button and the map
+	# are how the window moves over a case with slack on every side.
+	rack_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	rack_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	rack = Rack.new()
 	rack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rack.type_colours = TYPE_COLOURS
@@ -1281,7 +1328,29 @@ func _build_ui() -> void:
 	rack_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	rack_scroll.visible = false
 	container_tab.add_child(rack_scroll)
+	# The rack's map, bottom right like the graph's, over the rack and under the doors.
+	rack_minimap = RackMinimap.new()
+	rack_minimap.rack = rack
+	rack_minimap.scroll = rack_scroll
+	rack_minimap.anchor_left = 1.0
+	rack_minimap.anchor_right = 1.0
+	rack_minimap.anchor_top = 1.0
+	rack_minimap.anchor_bottom = 1.0
+	var map_size := Vector2(Design.furniture_scale(RackMinimap.MAP_SIZE.x),
+		Design.furniture_scale(RackMinimap.MAP_SIZE.y))
+	rack_minimap.offset_left = -map_size.x - float(Design.scale(Design.SPACE_M))
+	rack_minimap.offset_top = -map_size.y - float(Design.scale(Design.SPACE_M))
+	rack_minimap.offset_right = -float(Design.scale(Design.SPACE_M))
+	rack_minimap.offset_bottom = -float(Design.scale(Design.SPACE_M))
+	rack_minimap.z_index = 20
+	rack_minimap.visible = false
+	container_tab.add_child(rack_minimap)
 	container_tab.add_child(lens_bar)
+	# Over everything the lenses draw, always. It is the last child here, which puts it
+	# on top today; a z-index says so in a way a later add_child cannot undo, and the
+	# view switch re-fronts it besides. Rack, Graph, Schematic and Face are the four
+	# doors, and a door behind the furniture is not a door.
+	lens_bar.z_index = 32
 
 	# A third view, and a different kind of answer: not how a patch looks, but what it is
 	# for. Editing the jump patch in the Graph tab and hearing it change here, without a
@@ -1350,6 +1419,7 @@ func _build_ui() -> void:
 
 	_set_keyboard_mode(str(Settings.fetch("keyboard_mode", "full")))
 	_set_key_hints(bool(Settings.fetch("keyboard_hints", true)))
+	_set_play_mode(str(Settings.fetch("play_mode", "keys")), false)
 	_set_roll_orientation(str(Settings.fetch("roll_orientation", "vertical")))
 	for key in Settings.fetch("loved_nodes", []):
 		_loved_nodes[str(key)] = true
@@ -1460,6 +1530,8 @@ func _set_patch_view(view: int) -> void:
 	show_view("Patch")
 	patch_view = view
 	_sync_view_switch()
+	if lens_bar != null:
+		lens_bar.move_to_front()
 	# A short dissolve — same patch, different representation. Content-only and brief,
 	# so rapid switching never waits on a spectacle.
 	if container_of_views != null:
@@ -1562,8 +1634,8 @@ func _dress_anatomy(widget: GraphNode, lit: bool, health: int) -> void:
 	# Top and bottom differ, so they are set rather than passed: the space under the
 	# header's rule and the space above the body's foot are two measurements that happen
 	# to be equal today and are not the same thing.
-	body.content_margin_top = Design.scale(NodeGrid.INSET_TOP)
-	body.content_margin_bottom = Design.scale(NodeGrid.INSET_BOTTOM)
+	body.content_margin_top = Design.canvas_scale(NodeGrid.INSET_TOP)
+	body.content_margin_bottom = Design.canvas_scale(NodeGrid.INSET_BOTTOM)
 	body.corner_radius_top_left = 0
 	body.corner_radius_top_right = 0
 	body.border_width_top = 0
@@ -1651,7 +1723,7 @@ func _dress_anatomy(widget: GraphNode, lit: bool, health: int) -> void:
 	if title_label != null:
 		title_label.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
 		title_label.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_NODE_TITLE))
+			Design.canvas_type(Design.SIZE_NODE_TITLE))
 		title_label.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		# The name as it was written, at the left, in its own case.
@@ -1852,13 +1924,14 @@ func _sync_view_menu() -> void:
 	toolbar.tick_one_of(range(30, 30 + Design.PALETTE_NAMES.size()), 30 + Design.palette)
 	toolbar.tick(20, Design.reduced_motion)
 	toolbar.tick(104, toolbar_qr != null and toolbar_qr.visible)
+	toolbar.tick_one_of([106, 107, 108], 106 + int(Settings.fetch("qr_scale", 0)))
 	_sync_panels_menu()
 
 
 func _sync_panels_menu() -> void:
 	if toolbar == null:
 		return
-	var panels := toolbar.menu_named("PanelsMenu")
+	var panels := toolbar.menu_named("ThemeMenu")
 	if panels == null:
 		return
 	var current := str(patch.get("arrangement", {}).get("theme", ""))
@@ -2270,7 +2343,7 @@ func _view_zoom_span() -> Vector2:
 		"Graph":
 			return Vector2(graph_edit.zoom_min, graph_edit.zoom_max)
 		"Rack":
-			return Vector2(0.25, 1.0)
+			return Vector2(0.25, 2.0)
 	return Vector2(1.0, 1.0)
 
 
@@ -2385,6 +2458,9 @@ func _on_view_menu(id: int) -> void:
 	if id == 73:
 		graph_edit.zoom_actual()
 		return
+	if id >= 106 and id <= 108:
+		_use_qr_scale(id - 106)
+		return
 	if id >= 70:
 		_choose_detail_mode(id - 70)
 		return
@@ -2420,11 +2496,32 @@ func _on_view_menu(id: int) -> void:
 		graph_edit.cable_style = id
 		graph_edit.refresh_cables()
 		return
-	var choice := id - 10
-	toolbar.tick_one_of(range(10, 10 + EditorToolbar.CASE_LABELS.size()), id)
+	_use_case_width(id - 10)
+
+
+## The case, by index into the toolbar's widths: the menu's path and the launcher's.
+func _use_case_width(choice: int) -> void:
+	choice = clampi(choice, 0, EditorToolbar.CASE_WIDTHS.size() - 1)
+	toolbar.tick_one_of(range(10, 10 + EditorToolbar.CASE_LABELS.size()), 10 + choice)
 	rack.case_hp = EditorToolbar.CASE_WIDTHS[choice]
 	# Picking a case answers "does my patch fit it" — so show the whole case at once.
 	rack.fit_case()
+
+
+## A case named on the command line — `--case=168`, in HP, or `--case=fit` — or -1.
+static func _case_from_args(args: PackedStringArray) -> int:
+	for arg: String in args:
+		if not arg.begins_with("--case="):
+			continue
+		var wanted := arg.substr("--case=".length()).to_lower()
+		if wanted == "fit":
+			return 0
+		if wanted.is_valid_int():
+			var hp := wanted.to_int()
+			for index in EditorToolbar.CASE_WIDTHS.size():
+				if int(EditorToolbar.CASE_WIDTHS[index]) == hp:
+					return index
+	return -1
 
 
 ## One step of a face drag. The hidden widgets move — they are where positions live
@@ -2500,6 +2597,54 @@ func _modernize_stereo_outputs() -> void:
 		patch["connections"] = rewired
 
 
+## The zoom the work area holds for the session, or -1 for none: set from `--zoom=2`
+## on the command line and applied after every load's fit.
+var _demo_zoom := -1.0
+## Whether every load is auto-placed before it is framed: `--arrange` on the command
+## line. A show opens patches whose stored positions were laid out for a laptop.
+var _demo_arrange := false
+
+
+## An interface size named on the command line — `--size=4k`, or any of the size
+## names — or -1 when none was.
+static func _scale_from_args(args: PackedStringArray) -> int:
+	for arg: String in args:
+		if not arg.begins_with("--size="):
+			continue
+		var wanted := arg.substr("--size=".length()).to_lower()
+		for index in Design.SCALE_NAMES.size():
+			if str(Design.SCALE_NAMES[index]).to_lower() == wanted:
+				return index
+	return -1
+
+
+## A zoom named on the command line — `--zoom=2` — or -1 when none, or when the number
+## is not one the views could hold.
+static func _zoom_from_args(args: PackedStringArray) -> float:
+	for arg: String in args:
+		if not arg.begins_with("--zoom="):
+			continue
+		var text := arg.substr("--zoom=".length())
+		if text.is_valid_float():
+			var zoom := text.to_float()
+			if zoom >= 0.1 and zoom <= 4.0:
+				return zoom
+	return -1.0
+
+
+## Puts the work area at the session's demo zoom, when there is one, in both lenses
+## that zoom. Called after a load has fitted the patch; the fit stops at 100%, and
+## this is what says "and then twice that".
+func _hold_demo_zoom() -> void:
+	if _demo_zoom <= 0.0:
+		return
+	if graph_edit != null:
+		graph_edit.zoom = _demo_zoom
+	if rack != null:
+		rack.view_zoom = _demo_zoom
+	_refresh_view_zoom_slider()
+
+
 ## A detail mode named on the command line — `--detail=1:1` or `--detail=adaptive`,
 ## after Godot's own `--` — or -1 when none was. Separate from the reading so the suite
 ## can hand it a list; the launcher is the only caller that hands it the real one.
@@ -2513,6 +2658,16 @@ static func _detail_from_args(args: PackedStringArray) -> int:
 			"adaptive", "map":
 				return PatchGraph.DetailMode.ADAPTIVE
 	return -1
+
+
+## How big the wordmark's QR stands. Small is a mark beside the name; a phone across a
+## table wants Medium or Large to lock on. A machine setting, like the rest of View.
+func _use_qr_scale(index: int) -> void:
+	var chosen := clampi(index, 0, EditorToolbar.QR_SCALE_NAMES.size() - 1)
+	toolbar.set_qr_scale(chosen)
+	Settings.store("qr_scale", chosen)
+	toolbar.tick_one_of([106, 107, 108], 106 + chosen)
+	_say("QR: %s" % str(EditorToolbar.QR_SCALE_NAMES[chosen]).to_lower())
 
 
 ## One path for menu and key alike: the mode, the memory, the checkmarks, the word.
@@ -2552,6 +2707,16 @@ func _use_ui_scale(index: int) -> void:
 	_rebuild_view()
 	_refresh_context()
 	_refresh_keyboard_range()
+	if keyboard_bar != null:
+		_dress_furniture(keyboard_bar)
+	# The dock's heights were fitted at the old size and would stay there.
+	_fit_keyboard_dock()
+	_dress_lens_band()
+	_dress_tabs()
+	if _crumb_row != null:
+		_dress_furniture(_crumb_row)
+	if scope_probe != null:
+		_dress_furniture(scope_probe)
 	if rack != null:
 		rack.rebuild()
 	if outline != null:
@@ -2758,6 +2923,7 @@ func _build_side_panel() -> Control:
 	# of the menu — so the side column is the probe scope, with the health line and
 	# the problem list underneath, appearing only when there are problems to list.
 	scope_probe = ProbeScope.new()
+	scope_probe.ready.connect(func() -> void: _dress_furniture(scope_probe))
 	scope_probe.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	side_column.add_child(scope_probe)
 
@@ -3243,6 +3409,9 @@ func _show_schematic(on: bool) -> void:
 		schematic.type_colours = TYPE_COLOURS
 		schematic.rebuild()
 		schematic.visible = true
+		# The graph's map means nothing here: its nodes are hidden and the camera is
+		# parked on the schematic, so the map drew a frame around nothing over the cards.
+		graph_edit.minimap_enabled = false
 		# So the canvas keeps placing it. Without this the schematic is positioned once
 		# and then sits there while the camera moves underneath it - fixed on screen
 		# while everything else zooms, which is exactly as wrong as it sounds.
@@ -3260,11 +3429,13 @@ func _show_schematic(on: bool) -> void:
 		# is a different shape and usually a different size from the drawing it replaces
 		# - so without this it opens wherever the old layout happened to leave the camera,
 		# which at any zoom but the one you were on is off the side of the window.
-		graph_edit.fit_to(Rect2(face_anchor, schematic.content_size()))
+		graph_edit.fit_to(Rect2(face_anchor, schematic.content_size()),
+			Design.canvas_factor())
 		_place_face()
 		_say("schematic: %d nodes on the grid" % (patch.get("nodes", []) as Array).size())
 	else:
 		schematic.visible = false
+		graph_edit.minimap_enabled = true
 		graph_edit.mount_up = false
 		graph_edit.mount_box = Rect2()
 		await _rebuild_view()
@@ -3702,6 +3873,33 @@ func _watch_for_quit_request(delta: float) -> void:
 	get_tree().quit()
 
 
+## Quit, asked for from the menu or Ctrl+Q. Unsaved work gets a question; the tooling's
+## flag file above gets a rescue copy instead, because nobody is there to answer one.
+var quit_dialog: ConfirmationDialog
+
+
+func _quit_by_hand() -> void:
+	if quit_dialog != null and is_instance_valid(quit_dialog):
+		return
+	if not unsaved or patch.is_empty():
+		get_tree().quit()
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Quit without saving?"
+	dialog.dialog_text = "The patch has changes that have not been saved. Quit anyway?"
+	dialog.ok_button_text = "Quit"
+	dialog.confirmed.connect(func() -> void:
+		quit_dialog = null
+		dialog.queue_free()
+		get_tree().quit())
+	dialog.canceled.connect(func() -> void:
+		quit_dialog = null
+		dialog.queue_free())
+	quit_dialog = dialog
+	add_child(dialog)
+	dialog.popup_centered()
+
+
 func shutdown_audio() -> void:
 	set_process(false)
 	# Before the engine goes: the panel is drawn by a plugin the engine owns.
@@ -3803,6 +4001,7 @@ func _process(_delta: float) -> void:
 		engine.fill_playback(playback, playback.get_frames_available())
 	_update_port_levels(_delta)
 	_advance_roll(_delta)
+	_advance_arp(_delta)
 	if rack != null and rack.is_visible_in_tree():
 		rack.refresh_displays()
 	if message_label != null and message_label.text != "" \
@@ -3975,7 +4174,16 @@ func _rebuild_view() -> void:
 		for node in patch.get("nodes", []):
 			var node_id := str(node.get("id", ""))
 			for outlet: Dictionary in _port_list(node_id, "outputs"):
-				var entry := {"node": node_id, "port": str(outlet.get("name", ""))}
+				# The name the reader sees, and the name the engine answers to: an
+				# Output seam's host side is the terminal's own output in the engine,
+				# and a module's seam is a node inside it.
+				var tap := _engine_signal_source(node_id, str(outlet.get("name", "")))
+				var entry := {"node": node_id, "port": str(outlet.get("name", "")),
+					"tap_node": str(tap[0]), "tap_port": str(tap[1])}
+				# What leaves the graph is what a probe wants first: an Output seam's
+				# host side is the wire the scope points at until somebody picks another.
+				if str(outlet.get("name", "")) == Seams.HOST_PORT 						and str(node.get("type", "")) == "Output":
+					entry["preferred"] = true
 				probe_sources.append(entry)
 				if str(outlet.get("type", "")) != "audio":
 					probe_gates.append(entry)
@@ -4515,7 +4723,18 @@ func _engine_parameter_target(node_id: String, parameter: String) -> Array:
 ## Where an instance's declared port actually carries signal, for scopes and glow.
 func _engine_signal_source(node_id: String, port: String) -> Array:
 	for node in patch.get("nodes", []):
-		if node["id"] != node_id or str(node.get("type", "")) != "module":
+		if node["id"] != node_id:
+			continue
+		# The host side of an Output seam is what the machine hears. In the engine that
+		# node is the terminal it names, and the terminal's own first output is the
+		# signal leaving the graph — the VCA's out, through the output's level. Asked
+		# for "host" the engine found no such port and the probe drew nothing.
+		if port == Seams.HOST_PORT and str(node.get("type", "")) == "Output":
+			var terminal := Seams.terminal_for(node)
+			var outlets: Array = registry.get(terminal, {}).get("outputs", [])
+			if terminal != "" and not outlets.is_empty():
+				return [node_id, str(outlets[0].get("name", port))]
+		if str(node.get("type", "")) != "module":
 			continue
 		var definition: Dictionary = patch.get("modules", {}).get(str(node["module"]), {})
 		# Through the shared reader: a module's outputs are drawn as seams now, and a
@@ -4770,7 +4989,7 @@ func _create_widget(node: Dictionary) -> void:
 				# own contents and two rows of two read as four separate islands, which
 				# is exactly what the Lowpass looked like.
 				if gridded:
-					cell.custom_minimum_size.x = Design.scale(NodeGrid.COLUMN)
+					cell.custom_minimum_size.x = Design.canvas_scale(NodeGrid.COLUMN)
 				cells.add_child(cell)
 		line.add_child(cells)
 		line.set_meta("cells_box", cells)
@@ -4825,7 +5044,7 @@ func _create_widget(node: Dictionary) -> void:
 			# Capped. One long port name is allowed to widen its own gutter and not to
 			# set the width of the node system; past the ceiling it clips, and the node
 			# says so rather than growing quietly.
-			var ceiling := float(Design.scale(NodeGrid.PORT_GUTTER_MAX))
+			var ceiling := float(Design.canvas_scale(NodeGrid.PORT_GUTTER_MAX))
 			if widest > ceiling:
 				widget.set_meta("gutter_overflow", widest - ceiling)
 				widest = ceiling
@@ -5029,7 +5248,7 @@ func _add_ghost_ports(widget: GraphNode, node_id: String, descriptor: Dictionary
 		# Where it comes from, not just what it is called. Two inner nodes may both have a
 		# "gain", and the name this port would end up with is the document's to choose.
 		label.text = "%s.%s" % [str(binding.get("node", "")), str(binding.get("port", ""))]
-		label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+		label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_SECONDARY))
 		label.add_theme_color_override("font_color", Design.INK_SECOND)
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		line.add_child(label)
@@ -5052,7 +5271,7 @@ func _style_node_title(widget: GraphNode, descriptor: Dictionary) -> void:
 		if label == null:
 			continue
 		label.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
-		label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_NODE_TITLE))
+		label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_NODE_TITLE))
 		label.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		# Centred and in capitals, as on the module. A left title with a tag pushed to the
 		# right is a software header; a centred legend is a panel, and the whole point of
@@ -5271,7 +5490,7 @@ func _port_label(port: Dictionary, align_right: bool, roles: bool = false) -> Co
 	else:
 		name_label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
 		name_label.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_BODY))
+			Design.canvas_type(Design.SIZE_BODY))
 		name_label.add_theme_color_override("font_color", Design.INK_NORMAL)
 	name_label.set_meta("port_label", true)
 	# Operational: what is plugged in here is not guessable from the colour alone, so
@@ -5304,7 +5523,7 @@ func _unit_label(unit: String) -> Label:
 	# down from the value, which is the whole of its styling: rank carried by type, not
 	# by dimming the ink further.
 	label.add_theme_font_override("font", Design.unit_font())
-	label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_UNIT))
+	label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_UNIT))
 	label.add_theme_color_override("font_color", Design.INK_SECOND)
 	label.set_meta("port_label", true)
 	label.set_meta("screen_min", Design.MIN_SCREEN_UNIT)
@@ -5680,7 +5899,7 @@ func _size_cell_columns(widget: GraphNode) -> void:
 ## One line of numerals, the height every cell's value slot shares.
 func _numeric_line_height() -> float:
 	var font := Design.numeric_font()
-	return font.get_height(Design.type(Design.SIZE_NUMERIC)) if font != null else 0.0
+	return font.get_height(Design.canvas_type(Design.SIZE_NUMERIC)) if font != null else 0.0
 
 
 ## The top slot of every parameter cell: a fixed-height box with the control centred
@@ -5723,7 +5942,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 	# dropdown was flat and square. One key.
 	var roles := NodeIdentity.migrated(_type_key(node))
 	row.add_theme_constant_override("separation",
-		Design.scale(NodeGrid.LABEL_GAP) if roles else 0)
+		Design.canvas_scale(NodeGrid.LABEL_GAP) if roles else 0)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.set_meta("cell", "parameter")
@@ -5755,7 +5974,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		NodeText.dress(label, NodeText.Role.PARAM_LABEL)
 	else:
 		label.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
-		label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_BODY))
+		label.add_theme_font_size_override("font_size", Design.canvas_type(Design.SIZE_BODY))
 		label.add_theme_color_override("font_color", Design.INK_NORMAL)
 	label.set_meta("screen_min", Design.MIN_SCREEN_LABEL)
 	label.set_meta("screen_kind", "parameter")
@@ -5799,7 +6018,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		# under the pointer that had just clicked it — the same reflow the knob's readout
 		# avoids by reserving room for the widest value it could ever show.
 		var option_font := Design.font(Design.WEIGHT_MEDIUM)
-		var option_size := Design.type(Design.SIZE_CONTROL)
+		var option_size := Design.canvas_type(Design.SIZE_CONTROL)
 		var widest := 0.0
 		for entry in parameter["enum"]:
 			widest = maxf(widest, option_font.get_string_size(str(entry),
@@ -5831,7 +6050,7 @@ func _build_parameter_row(node: Dictionary, parameter: Dictionary) -> Control:
 		else:
 			chosen.add_theme_font_override("font", Design.font(Design.WEIGHT_MEDIUM))
 			chosen.add_theme_font_size_override("font_size",
-				Design.type(Design.SIZE_NUMERIC))
+				Design.canvas_type(Design.SIZE_NUMERIC))
 			chosen.add_theme_color_override("font_color", Design.INK_BRIGHT)
 		chosen.set_meta("screen_min", Design.MIN_SCREEN_LABEL)
 		chosen.set_meta("screen_kind", "value")
@@ -6775,11 +6994,20 @@ func _on_midi(event: InputEventMIDI) -> void:
 ## Every note goes through these two, whether a mouse or a computer key started it. The
 ## on-screen keyboard lights up from held_notes rather than from its own clicks, so what
 ## you see is what the engine was actually told.
-func _hold_note(note: int, velocity: float = 0.9) -> void:
+## `through_arp` is what the keys and MIDI say; the roll says false, because a tune
+## drawn on the grid is already an arrangement and is not for arpeggiating.
+func _hold_note(note: int, velocity: float = 0.9, through_arp: bool = true) -> void:
 	if engine == null or held_notes.has(note):
 		return
 	held_notes[note] = true
-	engine.note_on(note, velocity)
+	if through_arp and play_mode == "arp":
+		# Held, shown, not sounded: the arpeggiator speaks it in its turn. From empty,
+		# primed so the first key answers on the next frame rather than a step later.
+		if _arp_pool.is_empty():
+			_arp_clock = _roll_step_seconds()
+		_arp_pool.append(note)
+	else:
+		engine.note_on(note, velocity)
 	if keyboard != null:
 		keyboard.set_held_notes(held_notes)
 	if roll_pitch != null:
@@ -6790,11 +7018,83 @@ func _let_go_note(note: int) -> void:
 	if engine == null or not held_notes.has(note):
 		return
 	held_notes.erase(note)
-	engine.note_off(note)
+	if _arp_pool.has(note):
+		_arp_pool.erase(note)
+		if _arp_sounding == note:
+			engine.note_off(note)
+			_arp_sounding = -1
+	else:
+		engine.note_off(note)
 	if keyboard != null:
 		keyboard.set_held_notes(held_notes)
 	if roll_pitch != null:
 		roll_pitch.queue_redraw()
+
+
+## The arpeggiator's clock: one held key per step of the roll's pace, lowest to
+## highest, round and round while anything is held. Letting everything go silences it.
+func _advance_arp(delta: float) -> void:
+	if play_mode != "arp" or engine == null:
+		return
+	if _arp_pool.is_empty():
+		if _arp_sounding >= 0:
+			engine.note_off(_arp_sounding)
+			_arp_sounding = -1
+		_arp_clock = 0.0
+		return
+	_arp_clock += delta
+	var step := _roll_step_seconds()
+	if _arp_clock < step:
+		return
+	_arp_clock = fmod(_arp_clock, step)
+	var order: Array = _arp_pool.duplicate()
+	order.sort()
+	var next_index := 0
+	if _arp_sounding >= 0:
+		var at: int = order.find(_arp_sounding)
+		next_index = (at + 1) % order.size() if at >= 0 else 0
+		engine.note_off(_arp_sounding)
+	_arp_sounding = int(order[next_index])
+	engine.note_on(_arp_sounding, 0.9)
+
+
+## Keys, arpeggiator or songs. Leaving the arpeggiator lets its note go; leaving the
+## songs stops the roll; entering the songs turns play-through on and starts the first
+## song if none was chosen. `remember` is false only while restoring the setting.
+func _set_play_mode(mode: String, remember: bool = true) -> void:
+	if not PLAY_MODES.has(mode):
+		mode = "keys"
+	var was := play_mode
+	play_mode = mode
+	if was == "arp" and mode != "arp":
+		if _arp_sounding >= 0 and engine != null:
+			engine.note_off(_arp_sounding)
+		_arp_sounding = -1
+		for note in _arp_pool:
+			held_notes.erase(int(note))
+		_arp_pool.clear()
+		if keyboard != null:
+			keyboard.set_held_notes(held_notes)
+	if was == "songs" and mode != "songs" and roll_play != null and roll_play.button_pressed:
+		roll_play.button_pressed = false
+	if mode == "songs" and remember:
+		Settings.store("songs_play_through", true)
+		_refresh_songs_menu()
+		if _song_index < 0 and not _songs.is_empty():
+			_choose_song(0)
+		if roll_play != null and not _songs.is_empty():
+			roll_play.button_pressed = true
+	if remember:
+		Settings.store("play_mode", mode)
+	if keyboard_toggle != null:
+		var menu := keyboard_toggle.get_popup()
+		for index in PLAY_MODES.size():
+			var item := menu.get_item_index(10 + index)
+			if item >= 0:
+				menu.set_item_checked(item, PLAY_MODES[index] == mode)
+	if remember:
+		_say({"keys": "playing the keys", "arp": "arpeggiating whatever you hold",
+			"songs": "playing the songs folder through the roll"}[mode])
 
 
 ## ---- the piano roll ----------------------------------------------------------------
@@ -7360,7 +7660,7 @@ func _roll_tick() -> void:
 			continue
 		var note := int(entry.get("note", -1))
 		if note >= 0 and not _roll_sounding.has(note):
-			_hold_note(note)
+			_hold_note(note, 0.9, false)
 			_roll_sounding[note] = maxi(1, int(entry.get("length", 1)))
 	piano_roll.playing_step = _roll_step
 
@@ -7399,7 +7699,8 @@ func _build_keyboard_dock() -> Control:
 	var keyboard_bar := _build_keyboard_bar()
 	keyboard_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	strip.add_child(keyboard_bar)
-	strip.custom_minimum_size.y = keyboard_bar.get_combined_minimum_size().y
+	# Not frozen at the bar's first minimum: that was measured before the strip was
+	# dressed, and an 88px row at 4K was the frozen number, not the buttons.
 	column.add_child(strip)
 
 	keyboard = Keyboard.new()
@@ -7524,7 +7825,7 @@ func _set_keyboard_mode(mode: String) -> void:
 		# of slivers that still take clicks. Mini stays a keyboard — half the height,
 		# every key still a target a finger can mean.
 		keyboard.visible = keyboard_expanded
-		keyboard.custom_minimum_size.y = Design.scale(112 if mode == "full" else 56)
+		keyboard.custom_minimum_size.y = Design.furniture_scale(112 if mode == "full" else 56)
 		if not keyboard_expanded:
 			_release_all_notes()
 	if keyboard_toggle != null:
@@ -7555,17 +7856,22 @@ func _fit_keyboard_dock(height: float = -1.0) -> void:
 		available = view.get_visible_rect().size.y if view != null else 0.0
 	if available <= 0.0:
 		return
-	var tight := available < 700.0
-	var cramped := available < 560.0
+	# 4K takes the short rungs whatever the window's height: a big screen is for the
+	# canvas, and the dock at its roomy height was a quarter of it. The rungs are what
+	# a short window gets, which is also the height the same dock had in a half-screen
+	# window on the same monitor — the one that looked right.
+	var showy := Design.ui_scale == Design.Scale.FOUR_K
+	var tight := available < 700.0 or showy
+	var cramped := available < 560.0 or showy
 	if piano_roll != null:
-		piano_roll.custom_minimum_size.y = Design.scale(90 if tight else 150)
+		piano_roll.custom_minimum_size.y = Design.furniture_scale(90 if tight else 150)
 	if keyboard_mode == "full":
-		keyboard.custom_minimum_size.y = Design.scale(56 if cramped else 112)
+		keyboard.custom_minimum_size.y = Design.furniture_scale(56 if cramped else 112)
 	# The bench yields too: its display's floor was tall enough to shove the whole
 	# column past the window's bottom on its own, and a shorter trace that shows is
 	# worth more than a taller one that pushed the piano off the screen.
 	if scope_probe != null and scope_probe.display != null:
-		scope_probe.display.custom_minimum_size.y = Design.scale(
+		scope_probe.display.custom_minimum_size.y = Design.furniture_scale(
 			52 if cramped else (90 if tight else 160))
 
 
@@ -7601,11 +7907,24 @@ func _build_keyboard_bar() -> Control:
 	# way, and somebody who knows where D is by now can have the piano back.
 	size_menu.add_check_item("Key hints", 3)
 	size_menu.set_item_checked(size_menu.get_item_index(3), true)
+	# The jukebox. Three ways to make the patch play, on the menu that is already about
+	# the instrument: the keys as they are, the keys arpeggiated, or the songs folder.
+	size_menu.add_separator("Play")
+	size_menu.add_radio_check_item("Keys", 10)
+	size_menu.add_radio_check_item("Arpeggiate held keys", 11)
+	size_menu.add_radio_check_item("Play the songs folder", 12)
+	size_menu.set_item_tooltip(size_menu.get_item_index(11),
+		"Hold a chord and the keys take turns, one per step of the roll's clock.")
+	size_menu.set_item_tooltip(size_menu.get_item_index(12),
+		"Every MIDI file in the songs folder, one after another, through the roll.")
+	size_menu.set_item_checked(size_menu.get_item_index(10), true)
 	size_menu.id_pressed.connect(func(id: int) -> void:
 		if id <= 2:
 			_set_keyboard_mode(["full", "mini", "hide"][id])
-		else:
-			_set_key_hints(not size_menu.is_item_checked(size_menu.get_item_index(3))))
+		elif id == 3:
+			_set_key_hints(not size_menu.is_item_checked(size_menu.get_item_index(3)))
+		elif id >= 10 and id - 10 < PLAY_MODES.size():
+			_set_play_mode(PLAY_MODES[id - 10]))
 	bar.add_child(_defocus(keyboard_toggle))
 
 	# The roll's fold and transport: Roll opens the grid, Play runs it, and the
@@ -7748,9 +8067,10 @@ func _build_keyboard_bar() -> Control:
 	master_knob = Rack.Knob.new()
 	master_knob.rack = rack
 	master_knob.compact = true
+	master_knob.furniture = true
+	master_knob.dial = 0.36
 	# Sized to sit inside the strip with air around it, and centred in the row: a
 	# dial as tall as the row it lives in reads as jammed, not mounted.
-	master_knob.dial = 0.72
 	master_knob.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	# A stand-in descriptor before the tree sees it: Knob reads its name and its doc in
 	# _ready to build a tooltip, so it cannot be added holding nothing. _refresh_master
@@ -7818,7 +8138,103 @@ func _build_keyboard_bar() -> Control:
 		func() -> void: _show_octaves(keyboard_octaves + 1)))
 
 	keyboard_bar = bar
+	_dress_furniture(bar)
 	return bar
+
+
+## The tab list — Patch, Sandbox, Outline — as furniture: the tabs size through the
+## furniture scale in half-height boxes, so the row over the work area is a row.
+func _dress_tabs() -> void:
+	if views == null:
+		return
+	var tabs := views.get_tab_bar()
+	tabs.add_theme_font_size_override("font_size", Design.furniture_type(Design.SIZE_TABS))
+	var selected := Design.furniture_box(Design.Surface.NODE, Design.SPACE_M, Design.SPACE_XS,
+		Design.RADIUS_BUTTON, false)
+	selected.corner_radius_bottom_left = 0
+	selected.corner_radius_bottom_right = 0
+	tabs.add_theme_stylebox_override("tab_selected", selected)
+	var quiet := selected.duplicate() as StyleBoxFlat
+	quiet.bg_color = Design.SURFACES[Design.Surface.CANVAS]
+	quiet.border_color = Design.SURFACES[Design.Surface.CANVAS]
+	tabs.add_theme_stylebox_override("tab_unselected", quiet)
+	var hovered := quiet.duplicate() as StyleBoxFlat
+	hovered.bg_color = Design.SURFACES[Design.Surface.RAISED]
+	tabs.add_theme_stylebox_override("tab_hovered", hovered)
+
+
+## The four doors: the app-title size through the furniture scale — a step above every
+## other button, because which lens you are looking through is the first thing a
+## visitor asks — in half-height boxes, so the band is a row and not a block.
+func _dress_lens_band() -> void:
+	for lens: int in _view_buttons:
+		var segment := _view_buttons[lens] as Button
+		segment.add_theme_font_size_override("font_size",
+			Design.furniture_type(Design.SIZE_APP_TITLE))
+		segment.custom_minimum_size.y = Design.furniture_scale(STRIP_TARGET)
+	if lens_bar != null:
+		lens_bar.offset_bottom = float(Design.furniture_scale(44))
+
+
+## The furniture's buttons' height: half the chrome's hit target, through the
+## furniture scale.
+const STRIP_TARGET := 18
+
+
+## GraphEdit's own minimap: an internal grandchild, inside the top layer that also holds
+## the scrollbars. Found by class rather than by path, because the path is Godot's.
+static func _minimap_of(graph: GraphEdit) -> CanvasItem:
+	var queue: Array = [graph]
+	while not queue.is_empty():
+		var node: Node = queue.pop_back()
+		for child in node.get_children(true):
+			if child.get_class() == "GraphEditMinimap":
+				return child as CanvasItem
+			queue.append(child)
+	return null
+
+
+## The strip's own text, at the furniture size: every button, menu and field on it,
+## walked after it is built and again whenever the interface size changes, because an
+## override set once outlives the theme it was set against.
+func _dress_furniture(strip: Control) -> void:
+	var queue: Array = [strip]
+	while not queue.is_empty():
+		var node: Node = queue.pop_back()
+		for child in node.get_children():
+			queue.append(child)
+		if node is ValueField:
+			(node as ValueField).furniture = true
+		elif node is Button:
+			var button := node as Button
+			button.add_theme_font_size_override("font_size",
+				Design.furniture_type(Design.SIZE_SECONDARY))
+			# Half the padding the chrome's 44px floor gave these. The furniture is rows
+			# of small verbs, not a toolbar somebody aims at from across the room.
+			button.custom_minimum_size.y = Design.furniture_scale(STRIP_TARGET)
+			# A menu's chevron and a transport's glyph were drawn at the chrome's icon
+			# size, which is taller than the row; the icon follows the text now.
+			button.add_theme_constant_override("icon_max_width",
+				Design.furniture_type(Design.SIZE_SECONDARY))
+			button.add_theme_stylebox_override("normal",
+				Design.furniture_box(Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_XS))
+			button.add_theme_stylebox_override("hover",
+				Design.furniture_box(Design.Surface.ACTIVE, Design.SPACE_S, Design.SPACE_XS))
+			var pressed := Design.furniture_box(Design.Surface.ACTIVE, Design.SPACE_S,
+				Design.SPACE_XS)
+			pressed.border_color = Design.ACCENT
+			button.add_theme_stylebox_override("pressed", pressed)
+			button.add_theme_stylebox_override("disabled",
+				Design.furniture_box(Design.Surface.NODE, Design.SPACE_S, Design.SPACE_XS,
+					Design.RADIUS_BUTTON, false))
+		elif node is Label:
+			(node as Control).add_theme_font_size_override("font_size",
+				Design.furniture_type(Design.SIZE_SECONDARY))
+		elif node is LineEdit:
+			(node as Control).add_theme_font_size_override("font_size",
+				Design.furniture_type(Design.SIZE_SECONDARY))
+			(node as Control).add_theme_stylebox_override("normal",
+				Design.furniture_box(Design.Surface.CANVAS, Design.SPACE_S, Design.SPACE_XS))
 
 
 ## Moves the keyboard, letting go first.
@@ -8773,6 +9189,8 @@ func _add_device(label: String, at_position: Vector2) -> String:
 		await _rebuild_view()
 		_apply()
 		_commit_edit("add %s" % instance_id)
+		if _demo_arrange:
+			_auto_place()
 		if not rewired.is_empty():
 			_say("added %s — wired %s" % [instance_id, ", ".join(rewired)])
 		return instance_id
@@ -8794,6 +9212,8 @@ func _add_device(label: String, at_position: Vector2) -> String:
 	await _rebuild_view()
 	_apply()
 	_commit_edit("add %s" % result.instance_id)
+	if _demo_arrange:
+		_auto_place()
 	if not wired.is_empty():
 		_say("added %s — wired %s" % [result.instance_id, ", ".join(wired)])
 	return result.instance_id
@@ -8864,6 +9284,10 @@ func _add_node(type_name: String, at_position: Vector2) -> String:
 	await _rebuild_view()
 	_apply()
 	_commit_edit("add %s" % registry.get(type_name, {}).get("display_name", type_name))
+	# In demo mode every addition is placed as it lands: a node dropped where the
+	# pointer was is a node the wall reads as dropped.
+	if _demo_arrange:
+		_auto_place()
 	return node_id
 
 
@@ -12120,7 +12544,11 @@ func _load_text(text: String) -> void:
 	# scrollbars and minimap that rectangle subtracts do not exist until the nodes it is
 	# being asked to frame have been laid out.
 	await get_tree().process_frame
+	if _demo_arrange:
+		await _auto_place()
+		await get_tree().process_frame
 	graph_edit.fit_graph()
+	_hold_demo_zoom()
 
 	# A document that arrives carrying notes shows them. The roll's fold is a stored
 	# preference that starts closed, so a patch shipping a tune opened onto silence and

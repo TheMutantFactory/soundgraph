@@ -1270,3 +1270,274 @@ Consequences:
 The tour now presses a key. Silent mode is unchanged. install-patches.sh
 installs the sfxr shelf in their place. docs/sampler-design.md still
 describes the chopper as it was designed; that is history, not a promise.
+
+## 2026-09-09 — The face-lift: doors on top, themes in one place, Poly Five, a jukebox
+
+Decision:
+Six small things for the show, on one branch. The lens band (Rack, Graph,
+Schematic, Face) carries a z-index and re-fronts itself on every switch, so
+nothing a lens draws can cover the four doors. The Theme menu holds both
+registers — the panel themes first, then the interface palettes — and the
+Panels door is gone; the QR gets a door of its own with Show and three sizes.
+The editor opens on Poly Five. The Add node rail leads with Examples and the
+banks, gains a Drum bank row, and its rows are two pixels shorter so fifteen
+still fit the budget. The keyboard menu grows a Play section: Keys,
+Arpeggiate held keys (one held key per roll step, lowest to highest, round
+and round), and Play the songs folder (play-through on, the roll running).
+
+Reason:
+Each is a thing a visitor reaches for in the first minute. Examples above the
+wiring because the first click is "give me something that plays". Panel
+themes under Theme because that is the word people look for. A QR a phone
+can read from across a table. A jukebox because a patch that only sounds
+when somebody plays it well is a patch nobody hears at a show.
+
+Alternatives:
+A Play button of its own — the keyboard menu is already the instrument's.
+An arpeggiator node — exists, in the graph; this one is the host's, over the
+keys a person holds, and touches no document.
+
+Consequences:
+The suite's boot assumptions moved with the default patch. Play mode,
+QR size and theme are machine settings. The roll bypasses the arpeggiator:
+a drawn tune is already an arrangement.
+
+## 2026-09-09 — A 4K interface size above XL
+
+Decision:
+A fifth interface size, "4K", at 2.0 — above XL's 1.35; 1.75 was tried and
+read as XL from the same chair. It goes through the
+same factor everything else does: type, spacing, hit targets, the graph's
+pinned screen minimums and its compact and summary floors.
+
+Reason:
+A 3840-wide screen at 100% is twice the pixels of the laptop the four
+presets were tuned on, and at XL the graph's words and the knobs' values
+were a third smaller on it than at a desk. A show is read from standing
+distance.
+
+Alternatives:
+OS-level scaling — changes every other window on the machine and blurs a
+Godot window that was not told. A graph-only zoom — makes the patch smaller
+while making the text bigger, the opposite of the ask, which the suite
+already says.
+
+Consequences:
+The graph's compact band starts further out at 4K, as it does at XL: the
+same trade, one step more. Anything that listed the four names by hand now
+lists five.
+
+## 2026-09-09 — The work area's text doubles by zoom, and the demo asks for it
+
+Decision:
+`--size=<name>` and `--zoom=<n>` on the command line, beside `--detail=`.
+The size is applied before the first patch is laid out; the zoom is held for
+the session and applied in both zooming lenses after every load's fit. The
+rack's zoom now runs to 2.0. tools/run-demo.bat passes 4K and 2.
+
+Reason:
+At 4K the words on the nodes were still too small from standing distance,
+and "twice the text" cannot be done to the text alone: a node's width is
+sized from its words through the layout classes, and the suite's per-scale
+pass refuses the first row that no longer fits. In 1:1 the words on the
+canvas are the font times the zoom, so twice the words is twice the zoom —
+of the nodes and the cables too, which on a big screen is the point. Held
+after every load because a demo switches examples, and a fit that quietly
+shrank the show back would be a bug found on stage.
+
+Alternatives:
+A canvas-only text factor — misfits inside every node at that size. A
+bigger 4K factor — doubles the menus and the browser as well, which were
+already right.
+
+Consequences:
+At 200% a whole patch does not fit the window; Fit is one key away and the
+zoom returns on the next load. The rack draws at up to twice real size.
+
+## 2026-09-09 — The canvas boost: 4K draws the work area's text at twice the chrome
+
+Decision:
+A canvas factor above the interface factor, `Design.canvas_factor()`, which
+is the interface factor times a per-size boost — 1 everywhere but 4K, where
+it is 2. The work area goes through it: the words on the nodes, the rack's
+labels and values, the schematic, the face, the pinned screen minimums, and
+the node cells and gaps that hold the words (NodeGrid.scaled). Chrome — the
+menus, the browser, the toolbar — keeps the interface factor. run-demo.bat
+no longer passes a zoom; 4K alone doubles the words.
+
+Reason:
+Asked for, twice: the work area's text bigger without the nodes growing by
+zoom. Doubling the zoom doubled the cables, the spacing and the patch's
+footprint with it; the boost doubles the words and the cells around them
+and nothing else.
+
+Alternatives:
+Text alone, cells untouched — a word twice as tall does not fit a row that
+did not grow, and a GraphNode grows to its contents whether or not the
+layout classes say so; the classes would then describe nodes the editor
+does not draw, which is what the per-scale pass exists to catch.
+
+Consequences:
+Nodes at 4K are wider and taller than at XL by the boost, as their words
+are. Everything measured by the layout harnesses goes through the same
+factor, so the classes stay honest at every size.
+
+## 2026-09-09 — Furniture stops at XL; the four doors grow
+
+Decision:
+`Design.furniture_type()`: text that scales with the interface up to XL and
+no further. The keyboard dock's strip — every button, menu and field on it —
+its keycaps and octave marks, and the probe scope's labels use it. The lens
+band's four doors (Rack, Graph, Schematic, Face) wear the app-title size.
+
+Reason:
+At 4K the chrome doubled and the canvas doubled, and a strip of transport
+buttons doubled with them: furniture that is glanced at, not read, taking a
+quarter of the screen. The doors are the opposite case — the first thing a
+visitor asks is which lens they are looking through.
+
+Consequences:
+Overrides on the strip are re-dressed whenever the size changes, because an
+override set once outlives the theme it was set against. Nothing below XL
+changes.
+
+## 2026-09-09 — The dock's geometry stops at XL; the minimap stands on top
+
+Decision:
+`Design.furniture_scale()` beside `furniture_type()`: the dock's heights —
+keys, roll, bench — and the strip's button target go through it and stop at
+XL. The strip's target is 34 rather than the chrome's 44. GraphEdit's
+internal minimap gets a z-index of 200, above the glow overlay at 100, the
+cord layer and the seam cables.
+
+Reason:
+Full-screen at 4K the keys alone were 224px tall before the roll and the
+bench were counted, a quarter of the screen for the thing that is glanced
+at; half-screen the same window was fine, because the same pixels were a
+larger share of a smaller window. The strip's row was as tall as a toolbar
+for a row of small verbs. And the minimap was going under a cable that
+happened to cross its corner.
+
+Consequences:
+Below XL nothing changes. The chrome's toolbar keeps its 44px hit floor;
+only the strip under the keys trades it.
+
+## 2026-09-09 — Half-height furniture, and a toolbar that condenses at 4K
+
+Decision:
+The furniture pass now dresses three things — the dock's strip, the probe
+scope and the lens band — with the furniture type size, half-height boxes
+(`Design.furniture_box`) and a 24-unit target; value fields carry a
+`furniture` flag for the same. The toolbar, at 4K only, condenses to half
+its height whenever the pointer is off it and comes back whole when the
+pointer arrives: the wordmark, the QR at its full size, the verb at the
+chrome's hit target.
+
+Reason:
+On the show screen the strip, the probe and the lens band each stood at
+twice the height their contents asked for, and the top row was a fifth of
+the screen for a wordmark and one verb. The QR is why the toolbar comes
+back rather than staying small: a phone is pointed at a full-size code.
+
+Consequences:
+Below 4K the toolbar never condenses, so the chrome's hit-target floor
+holds everywhere the suite measures it. The furniture stops at XL as
+before; the halving is in the boxes, not the type.
+
+## 2026-09-09 — The toolbar's half height is fixed at 4K; the QR alone answers the pointer
+
+Decision:
+At 4K the toolbar stands at half its height, always. The hover-to-expand of
+the previous entry is withdrawn. The small QR grows a hover: over it a large
+code pops up in its own panel, sized to most of the window's height, and it
+goes when the pointer is on neither the QR nor the code. A click still opens
+the sticky dialog.
+
+Reason:
+A row that changes height as the hand passes moves the thing under the
+hand. The one reason the row came back was the QR, and the QR can answer
+for itself.
+
+## 2026-09-09 — Three rows at half a hit target, and the demo auto-places
+
+Decision:
+At 4K the toolbar, the tab list and the dock's strip each stand under half
+the chrome's hit target plus their air. What held them up was not the text:
+the toolbar's icon buttons wore the chrome's boxes and 32px icons, the
+strip's master knob kept 22px of room for a printed scale it does not print,
+and the tab bar wore the theme's boxes. All three are furniture now — boxes,
+icons, targets and air through the furniture scale, halved. The demo
+launcher passes `--arrange`, which auto-places every load before it is
+framed, and again after every node or device added.
+
+Reason:
+The rows over and under the work area were still a third of the screen's
+height between them, and every one of them was air around something small.
+The show opens patches whose stored positions were laid out for a laptop;
+auto-placing on load is what makes them read on a wall.
+
+Consequences:
+Below 4K nothing about the toolbar changes; the strip and the tabs are
+shorter everywhere, as furniture is. A file's stored positions are
+untouched by `--arrange` until somebody saves.
+
+## 2026-09-09 — The rack prints its legends to fit; the demo's case is 168 HP
+
+Decision:
+`Rack.fitted()`: the largest size at or under the asked one at which a text
+fits its room, to a floor of 9, after which the caller elides as before.
+The knob's name and value, the fader's letter, the jack's label and the
+panel's title go through it. `--case=<HP>` joins the launcher's arguments,
+applied through the case menu's own path; run-demo.bat asks for 168.
+
+Reason:
+The rack is not the graph. The graph pins words to a screen minimum and
+drops the controls around them, because it is a diagram read at any zoom;
+a panel is a fixed plate with a legend printed on it, and a legend is
+printed as large as the plate allows. At 4K, with the canvas doubled, a
+knob's name was an ellipsis on every narrow panel.
+
+Consequences:
+Legends on narrow panels are smaller than on wide ones, as on hardware.
+Nothing below the floor changes; eliding still catches the rest.
+
+## 2026-09-09 — The rack has a map, and slack to pan into
+
+Decision:
+The rack's holder is the case plus half a window of slack on every side,
+with the rack in the middle; the scroll container scrolls both ways and
+shows no bars; fitting the case scrolls to the case; the middle button
+drags the window; and a RackMinimap in the corner of the rack lens draws
+the case, its modules in their tints and the window over them, and puts
+the window where it is clicked or dragged.
+
+Reason:
+At 168 HP on a show screen the case is wider than the window, and the rack
+was pinned to its top-left with no way to move the window but the wheel,
+vertically. The graph had a map because GraphEdit ships one; the rack is a
+plain Control and had none, so "where am I on the case" had no answer.
+
+Consequences:
+A rack lens opens on the case, not on the slack. Module positions are
+unchanged — the rack node moved, not its contents — so cables, hit tests
+and the layout harnesses read as before.
+
+## 2026-09-10 — Quit is on the hamburger; the demo launcher clears the terminal
+
+Decision:
+The hamburger ends with a rule and Quit, on Ctrl+Q. With unsaved work it
+asks first; otherwise it quits the way the tooling's flag file does.
+run-demo.bat launches the plain Godot binary when it sits beside the
+configured console one, and minimises the window it was typed into before
+the editor comes up.
+
+Reason:
+Full screen has no title bar, and a show floor should not need Alt+F4. The
+console flavour of Godot is a wrapper that starts the real editor as a
+child; the grandchild is not owed the foreground, so the editor opened
+behind the terminal it was launched from.
+
+Consequences:
+The gate keeps the console binary, which is where its output comes from.
+The launcher's minimise is best effort through user32 and does nothing
+when it cannot; the editor launches either way.

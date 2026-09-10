@@ -570,6 +570,12 @@ func _initialize() -> void:
 	main._toggle_loved("Comb")
 	check(not main._loved_nodes.has("Comb"), "and a second tap takes the love back")
 
+	# First Synth, by hand: the editor opens on Poly Five now, and this section is about
+	# First Synth's seven nodes.
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
+
 	# ---- the graph's topology, which a visual pass may not touch --------------------
 	# Step 1 of the node redesign freezes this: First Synth is seven nodes, seven wires,
 	# and a known set of ports. Everything the pass is about — surfaces, type, icons,
@@ -631,10 +637,11 @@ func _initialize() -> void:
 	var rail_listed: Array = []
 	for row: Button in main.node_browser._rows:
 		rail_listed.append(str(row.get_meta("category")))
-	check(rail_listed == ["All", "Sources", "Filters", "Envelopes", "Modulation",
-			"Utilities", "Mixing", "Effects", "MIDI & IO", "Sequencers", "Examples",
-			"Node bank", "FM bank", "DX7 bank"],
-		"the rail carries the fourteen categories in order (%d)" % rail_listed.size())
+	check(rail_listed == ["All", "Examples", "Node bank", "FM bank", "DX7 bank",
+			"Drum bank", "Sources", "Filters", "Envelopes", "Modulation", "Utilities",
+			"Mixing", "Effects", "MIDI & IO", "Sequencers"],
+		"the rail carries the fifteen categories in order: what plays first, then the "
+			+ "wiring (%d)" % rail_listed.size())
 	# Against the rail's budget rather than against its scrollbar: a popup that is never
 	# drawn has no size, so headless there is nothing for a scrollbar to be wrong about.
 	# The figure is the rail's real height at the tightest supported window and scale,
@@ -646,11 +653,11 @@ func _initialize() -> void:
 	check(main.node_browser.selected_category == "All", "All is lit to begin with")
 
 	# Pressed through the button's own signal, which is the route a click takes.
-	(main.node_browser._rows[2] as Button).pressed.emit()
+	(main.node_browser._rows[7] as Button).pressed.emit()
 	await process_frame
 	check(main.node_browser.selected_category == "Filters",
 		"pressing a row lights it (%s)" % main.node_browser.selected_category)
-	var rail_row: Button = main.node_browser._rows[2]
+	var rail_row: Button = main.node_browser._rows[7]
 	var rail_next: Button = main.node_browser._rows[3]
 	var rail_lit: StyleBoxFlat = rail_row.get_theme_stylebox("normal")
 	var rail_unlit: StyleBoxFlat = rail_next.get_theme_stylebox("normal")
@@ -670,15 +677,15 @@ func _initialize() -> void:
 	# the two is step eight.
 	main.node_browser.search_field.release_focus()
 	main.node_browser.select_category("All")
-	for i in 13:
+	for i in 14:
 		_press(KEY_DOWN)
 		await process_frame
-	check(main.node_browser.selected_category == "DX7 bank",
-		"down walks from All to the last bank (%s)"
+	check(main.node_browser.selected_category == "Sequencers",
+		"down walks from All to the last row, the wiring's end (%s)"
 			% main.node_browser.selected_category)
 	_press(KEY_DOWN)
 	await process_frame
-	check(main.node_browser.selected_category == "DX7 bank",
+	check(main.node_browser.selected_category == "Sequencers",
 		"and stops there rather than wrapping")
 	for i in 20:
 		_press(KEY_UP)
@@ -851,7 +858,7 @@ func _initialize() -> void:
 		"and reaches the devices a browse would not have shown (%s)" % str(shown))
 
 	main.node_browser.select_category("Examples")
-	main.node_browser.search_field.text = "kit"
+	main.node_browser.search_field.text = "pluck"
 	main.node_browser.refresh_results()
 	await process_frame
 	shown = []
@@ -861,7 +868,7 @@ func _initialize() -> void:
 		shown.append(id)
 		if not id.begins_with("device:"):
 			strays += 1
-	check(shown.has("device:808: kit") and strays == 0,
+	check(shown.has("device:Plucked String") and strays == 0,
 		"a search inside Examples stays inside Examples (%d rows, %d strays)"
 			% [shown.size(), strays])
 
@@ -937,6 +944,11 @@ func _initialize() -> void:
 	# Something other than the patch already open, or the check passes without the button
 	# doing anything at all. It was written against First Synth, which the suite loaded
 	# on the way in.
+	# First Synth first, by hand: the editor opens on Poly Five now, and this check
+	# wants to see the name change.
+	await main._load_example("First Synth")
+	for i in 6:
+		await process_frame
 	main.node_browser.select_item("device:Plucked String")
 	await process_frame
 	var document_before: String = main.document_name
@@ -1021,6 +1033,30 @@ func _initialize() -> void:
 	await process_frame
 	await process_frame
 	check(not main.node_browser.visible, "and so does Esc")
+
+	# ---- Quit is on the hamburger --------------------------------------------------------
+	# Last, behind a rule, on Ctrl+Q; and with unsaved work it asks before it goes. The
+	# other branch quits the program, which is not something this suite gets to watch.
+	var burger_menu: PopupMenu = main.toolbar.toolbar_menu_popup
+	var quit_index: int = burger_menu.get_item_index(EditorToolbar.QUIT_ID)
+	check(quit_index == burger_menu.item_count - 1
+			and burger_menu.get_item_text(quit_index) == "Quit"
+			and burger_menu.is_item_separator(quit_index - 1)
+			and burger_menu.get_item_accelerator(quit_index) == (KEY_MASK_CTRL | KEY_Q),
+		"the hamburger ends with Quit, behind a rule, on Ctrl+Q")
+	check(main.toolbar.quit_requested.is_connected(main._quit_by_hand),
+		"and the item reaches the editor")
+	var unsaved_before_quit: bool = main.unsaved
+	main.unsaved = true
+	main._quit_by_hand()
+	await process_frame
+	check(main.quit_dialog != null and main.quit_dialog.visible
+			and main.quit_dialog.ok_button_text == "Quit",
+		"quitting with unsaved work asks first")
+	main.quit_dialog.canceled.emit()
+	await process_frame
+	check(main.quit_dialog == null, "and No keeps the editor open")
+	main.unsaved = unsaved_before_quit
 
 	# ---- feedback leaves through an outbox --------------------------------------------
 	# The outbox is the deliverable and the only thing tested: the network belongs to
@@ -2684,7 +2720,7 @@ func _initialize() -> void:
 			over += 1
 			print("  over %s stands %.0f in a %s class of %d at %s" % [sized.title,
 				sized.size.x, NodeGrid.width_class_name(str(sized.get_meta("type", ""))),
-				declared, ["Compact", "Comfortable", "Large", "XL"][Design.ui_scale]])
+				declared, ["Compact", "Comfortable", "Large", "XL", "4K"][Design.ui_scale]])
 		check(sized.size.x >= float(declared) - 0.5,
 			"%s is never narrower than its %s class (%.0f of %d)" % [sized.title,
 				NodeGrid.width_class_name(str(sized.get_meta("type", ""))),
@@ -2966,6 +3002,143 @@ func _initialize() -> void:
 	check(Design.type(Design.SIZE_BODY) > body_at_comfortable,
 		"XL makes the text bigger (%d from %d)"
 			% [Design.type(Design.SIZE_BODY), body_at_comfortable])
+	# And 4K above it: the show preset. The type, the hit targets and the graph's own
+	# pinned floors all move, so the compact band starts further out than at XL — the
+	# same trade XL already makes, one step more.
+	var body_at_xl := Design.type(Design.SIZE_BODY)
+	var compact_floor_at_xl: float = main.PatchGraph.compact_floor()
+	main._use_ui_scale(Design.Scale.FOUR_K)
+	await process_frame
+	await process_frame
+	check(Design.SCALE_NAMES[Design.ui_scale] == "4K"
+			and Design.type(Design.SIZE_BODY) > body_at_xl
+			and main.PatchGraph.compact_floor() > compact_floor_at_xl
+			and int(Settings.fetch("ui_scale", 0)) == Design.Scale.FOUR_K,
+		"4K is bigger than XL again, in the type and in the graph's floors (%d from %d)"
+			% [Design.type(Design.SIZE_BODY), body_at_xl])
+	# And the work area twice that again: the words on the nodes, not the chrome. A
+	# node title at 4K is drawn at twice the interface's own body size, and the cells
+	# that hold it grew with it — declared, so the layout classes still describe the
+	# nodes the editor draws.
+	check(Design.canvas_type(Design.SIZE_BODY) == Design.type(Design.SIZE_BODY) * 2
+			and Design.canvas_scale(10) == Design.scale(10) * 2
+			and NodeGrid.scaled(100) == Design.canvas_scale(100),
+		"the canvas boost doubles the work area's text and its cells at 4K (%d vs %d)"
+			% [Design.canvas_type(Design.SIZE_BODY), Design.type(Design.SIZE_BODY)])
+	# The furniture does not follow: the keycaps and the strip stay at XL's size, and
+	# the four doors of the lens band wear the app-title size at every scale.
+	var keycap_at_4k: int = Keyboard.keycap_size()
+	var strip_button: Button = null
+	for strip_child in main.keyboard_bar.get_children():
+		if strip_child is Button and strip_button == null:
+			strip_button = strip_child
+	check(Design.furniture_type(Design.SIZE_KEYCAP) == int(roundf(Design.SIZE_KEYCAP * 1.35))
+			and keycap_at_4k == Design.furniture_type(Design.SIZE_KEYCAP)
+			and strip_button != null
+			and strip_button.get_theme_font_size("font_size")
+				== Design.furniture_type(Design.SIZE_SECONDARY)
+			and Design.furniture_type(Design.SIZE_SECONDARY) < Design.type(Design.SIZE_CONTROL),
+		"the keycaps and the strip stop at XL's size while the chrome doubles (%d vs %d)"
+			% [Design.furniture_type(Design.SIZE_SECONDARY), Design.type(Design.SIZE_CONTROL)])
+	check((main._view_buttons[main.PatchView.GRAPH] as Button).get_theme_font_size("font_size")
+			== Design.furniture_type(Design.SIZE_APP_TITLE)
+			and (main._view_buttons[main.PatchView.GRAPH] as Button).custom_minimum_size.y
+				== float(Design.furniture_scale(main.STRIP_TARGET)),
+		"and the lens band's doors wear the app-title size at the furniture's height")
+	# The probe is furniture too: its pickers and fields stop at XL and stand at the
+	# furniture's height rather than the chrome's.
+	check(main.scope_probe.source_pick.get_theme_font_size("font_size")
+			== Design.furniture_type(Design.SIZE_SECONDARY)
+			and main.scope_probe.base_field.furniture,
+		"the probe's pickers and fields are dressed as furniture")
+	# The toolbar stands at half its height at 4K whatever the pointer does. The QR
+	# alone answers the pointer: over it a large code pops up, and it goes when the
+	# pointer is on neither.
+	await process_frame
+	var condensed_verb: float = main.toolbar.toolbar_add_button.custom_minimum_size.y
+	check(main.toolbar.condensed
+			and condensed_verb < float(Design.scale(Design.HIT_TARGET)) * 0.5 + 0.5,
+		"the toolbar stands at half height at 4K (%.0f of %d)"
+			% [condensed_verb, Design.scale(Design.HIT_TARGET)])
+	main.toolbar._show_qr_hover()
+	var hover_shown: bool = main.toolbar._qr_hover != null and main.toolbar._qr_hover.visible
+	main.toolbar._hide_qr_hover()
+	check(hover_shown and not main.toolbar._qr_hover.visible,
+		"hovering the QR pops a large code up, and leaving it takes it down")
+	# Half again: the three rows over and under the work area — the toolbar, the tab
+	# list and the strip — each under half the chrome's hit target plus its air.
+	var row_ceiling: float = float(Design.scale(Design.HIT_TARGET)) * 0.5 + 8.0
+	check(main.toolbar._bar.get_combined_minimum_size().y <= row_ceiling
+			and main.views.get_tab_bar().get_combined_minimum_size().y <= row_ceiling
+			and main.keyboard_bar.get_combined_minimum_size().y <= row_ceiling,
+		"the toolbar, the tab list and the strip are each half a hit target tall at 4K "
+			+ "(%.0f, %.0f, %.0f of %.0f)" % [main.toolbar._bar.get_combined_minimum_size().y,
+			main.views.get_tab_bar().get_combined_minimum_size().y,
+			main.keyboard_bar.get_combined_minimum_size().y, row_ceiling])
+	# The dock's geometry stops at XL too, and the strip's buttons stand at the strip's
+	# own target rather than the chrome's: the keys at 4K are XL's height, not double.
+	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(56)
+			and main.piano_roll.custom_minimum_size.y == Design.furniture_scale(90)
+			and is_equal_approx(strip_button.custom_minimum_size.y,
+				float(Design.furniture_scale(main.STRIP_TARGET)))
+			and main.keyboard_bar.get_combined_minimum_size().y
+				< float(Design.scale(Design.HIT_TARGET)),
+		"4K takes the dock's short rungs whatever the window: keys %.0f, roll %.0f, strip %.0f"
+			% [main.keyboard.custom_minimum_size.y, main.piano_roll.custom_minimum_size.y,
+			main.keyboard_bar.get_combined_minimum_size().y])
+	# And the minimap stands over every layer the graph draws.
+	var minimap_z := -1
+	var found_minimap: CanvasItem = main._minimap_of(main.graph_edit)
+	if found_minimap != null:
+		minimap_z = found_minimap.z_index
+	check(minimap_z > 100, "the minimap's z-index puts it over the glow and the cords (%d)" % minimap_z)
+	main._use_ui_scale(Design.Scale.XL)
+	await process_frame
+	await process_frame
+	check(not main.toolbar.condensed and main.toolbar.toolbar_add_button.custom_minimum_size.y
+			== float(Design.scale(Design.HIT_TARGET)),
+		"and at XL the toolbar is whole again, the verb at the chrome's hit target")
+	# The probe on the Output's host side reads the signal leaving the graph: the
+	# terminal's own first output, which is the VCA's out through the level. "host" is
+	# a port the engine does not have, and the probe was drawing nothing for it.
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
+	var host_tap: Array = main._engine_signal_source("out", Seams.HOST_PORT)
+	check(host_tap.size() == 2 and str(host_tap[0]) == "out" and str(host_tap[1]) == "left",
+		"the Output's host side probes as the terminal's left out (%s)" % str(host_tap))
+	# Through the scope's own dropdown, and into the engine: picking out.host must set
+	# a tap the engine accepts, which it did not - "host" is not a port it has.
+	var host_index := -1
+	for probe_source_index in main.scope_probe._sources.size():
+		var probe_source: Dictionary = main.scope_probe._sources[probe_source_index]
+		if str(probe_source["node"]) == "out" and str(probe_source["port"]) == Seams.HOST_PORT:
+			host_index = probe_source_index + 1
+	main.scope_probe._on_source_picked(host_index)
+	var host_picked: Dictionary = main.scope_probe.probe
+	check(host_index > 0 and str(host_picked.get("tap_port", "")) == "left"
+			and main.engine.set_scope_tap(str(host_picked.get("tap_node", "")),
+				str(host_picked.get("tap_port", ""))),
+		"picking out.host in the scope taps out.left, which the engine accepts (%s)"
+			% str(host_picked))
+	main.scope_probe._on_source_picked(0)
+	# And it is the default: a patch opening with nothing picked points the scope at
+	# its own output.
+	await main._load_example("Plucked String")
+	for i in 8:
+		await process_frame
+	check(str(main.scope_probe.probe.get("port", "")) == Seams.HOST_PORT
+			and main.scope_probe.source_pick.selected > 0,
+		"a freshly opened patch probes its output's host side by default (%s)"
+			% str(main.scope_probe.probe.get("node", "")))
+	# Fresh routes for what follows. The router keeps a route once made for as long as
+	# it stays legal, and a route made around nodes four times the size is legal and
+	# strange at a desk size — a crossing site left sitting on a port. A real reader
+	# who changes size and back gets the same until the next load, which is the
+	# router's own contract; the suite reloads so its later measurements are its own.
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
 
 	# The whole interface, not only the type — padding, ports and hit areas move with it,
 	# which is the difference between a scale setting and a font-size setting.
@@ -3095,6 +3268,173 @@ func _initialize() -> void:
 			and main._detail_from_args(PackedStringArray(["--detail=sideways"])) == -1
 			and main._detail_from_args(PackedStringArray([])) == -1,
 		"--detail=1:1 on the command line names the photograph, and nonsense names nothing")
+	check(main._scale_from_args(PackedStringArray(["--size=4k"])) == Design.Scale.FOUR_K
+			and main._scale_from_args(PackedStringArray(["--size=Comfortable"]))
+				== Design.Scale.COMFORTABLE
+			and main._scale_from_args(PackedStringArray(["--size=huge"])) == -1
+			and is_equal_approx(main._zoom_from_args(PackedStringArray(["--zoom=2"])), 2.0)
+			and main._zoom_from_args(PackedStringArray(["--zoom=9"])) < 0.0
+			and main._zoom_from_args(PackedStringArray([])) < 0.0,
+		"--size names an interface size and --zoom a zoom the views can hold")
+	check(main._case_from_args(PackedStringArray(["--case=168"])) == 3
+			and main._case_from_args(PackedStringArray(["--case=84"])) == 1
+			and main._case_from_args(PackedStringArray(["--case=fit"])) == 0
+			and main._case_from_args(PackedStringArray(["--case=99"])) == -1,
+		"--case names a case by its width in HP")
+	main._use_case_width(3)
+	await process_frame
+	check(main.rack.case_hp == 168 and view_item_checked(main, 13),
+		"and the launcher's case goes through the menu's own path (%d HP)" % main.rack.case_hp)
+	main._use_case_width(0)
+	await process_frame
+	# The rack prints a legend as large as its plate allows and no larger: a long name
+	# on a narrow panel shrinks to fit before it is clipped, and a short one keeps its
+	# size. The graph does the opposite on purpose, and this is not the graph.
+	var legend_font: Font = Design.font(Design.WEIGHT_MEDIUM)
+	var shrunk: int = Rack.fitted(legend_font, "Filter cutoff frequency", 28, 60.0)
+	var kept_size: int = Rack.fitted(legend_font, "Cut", 28, 600.0)
+	check(shrunk < 28 and shrunk >= 9 and kept_size == 28,
+		"a rack legend shrinks to its plate before it is clipped (%d for the long name, "
+			+ "%d for the short)" % [shrunk, kept_size])
+	# The schematic's cards are fixed pixels, so their words fit both the width and
+	# the line: a 4K canvas size comes down to the header's line, and a long name comes
+	# down further to its width.
+	var card_font: Font = Design.font(Design.WEIGHT_SEMIBOLD)
+	var card_title: int = main.schematic.fitted_size(card_font, "Osc", 32, 250.0,
+		main.schematic.TITLE_SIZE, main.schematic.KIND_SIZE)
+	var card_long: int = main.schematic.fitted_size(card_font,
+		"A very long module title indeed", 32, 120.0, main.schematic.TITLE_SIZE,
+		main.schematic.KIND_SIZE)
+	check(card_title == main.schematic.TITLE_SIZE and card_long == main.schematic.KIND_SIZE
+			and main.schematic.TITLE_SIZE > main.schematic.KIND_SIZE,
+		"a schematic card's title is its biggest word: %d at most, never under the kind "
+			+ "line's %d, elided past that (%d, %d)" % [main.schematic.TITLE_SIZE,
+			main.schematic.KIND_SIZE, card_title, card_long])
+	# The graph's map goes away with the schematic and comes back with the graph: its
+	# nodes are hidden there and its camera is parked on the cards, so the map drew a
+	# frame around nothing over them.
+	await main._set_patch_view(main.PatchView.SCHEMATIC)
+	for i in 6:
+		await process_frame
+	var map_in_schematic: bool = main.graph_edit.minimap_enabled
+	await main._set_patch_view(main.PatchView.GRAPH)
+	for i in 6:
+		await process_frame
+	check(not map_in_schematic and main.graph_edit.minimap_enabled,
+		"the graph's map is put away in the schematic lens and comes back in the graph")
+	# The schematic's fit may go past real size, up to the canvas factor; the graph's
+	# own fit still stops at 100%. Asked directly with a small box, so the window's
+	# size does not decide the answer.
+	var small_box := Rect2(Vector2.ZERO, Vector2(200.0, 100.0))
+	main.graph_edit.fit_to(small_box, 3.0)
+	var fit_up: float = main.graph_edit.zoom
+	main.graph_edit.fit_to(small_box)
+	var fit_flat: float = main.graph_edit.zoom
+	check(fit_up > 1.0 and fit_up <= 3.0 and is_equal_approx(fit_flat, 1.0),
+		"a fit with a ceiling goes past real size, and without one stops there "
+			+ "(%.2f, %.2f)" % [fit_up, fit_flat])
+	main.graph_edit.fit_graph()
+
+	# The rack can be panned beyond its frame, and has a map. The rackmap_holder is the case
+	# plus half a window of rack_slack on every side, the rack sits in the middle of it,
+	# fitting the case scrolls to the case rather than to the rack_slack, the middle button
+	# drags the window, and the map shows the case with the window over it and puts
+	# the window where it is clicked.
+	main._set_patch_view(main.PatchView.RACK)
+	for i in 8:
+		await process_frame
+	main.rack.fit_case()
+	for i in 4:
+		await process_frame
+	var rack_slack: Vector2 = main.rack.pan_slack
+	var rackmap_holder: Control = main.rack.get_parent()
+	check(rack_slack.x > 0.0 and rack_slack.y > 0.0
+			and main.rack.position.is_equal_approx(rack_slack * main.rack.view_zoom)
+			and rackmap_holder.custom_minimum_size.x
+				> main.rack.content_size().x * main.rack.view_zoom + 1.0,
+		"the rack sits in a rackmap_holder with rack_slack to pan into on every side (%s)" % str(rack_slack))
+	check(main.rack_scroll.scroll_horizontal == int(rack_slack.x * main.rack.view_zoom)
+			and main.rack_scroll.scroll_vertical == int(rack_slack.y * main.rack.view_zoom),
+		"and fitting the case scrolls to the case, not to the rack_slack (%d, %d)"
+			% [main.rack_scroll.scroll_horizontal, main.rack_scroll.scroll_vertical])
+	var rackmap_before_pan: int = main.rack_scroll.scroll_horizontal
+	var rackmap_grab := InputEventMouseButton.new()
+	rackmap_grab.button_index = MOUSE_BUTTON_MIDDLE
+	rackmap_grab.pressed = true
+	rackmap_grab.position = Vector2(100.0, 100.0)
+	main.rack._gui_input(rackmap_grab)
+	var rackmap_pull := InputEventMouseMotion.new()
+	rackmap_pull.position = Vector2(60.0, 100.0)
+	rackmap_pull.relative = Vector2(-40.0, 0.0)
+	rackmap_pull.button_mask = MOUSE_BUTTON_MASK_MIDDLE
+	main.rack._gui_input(rackmap_pull)
+	rackmap_grab.pressed = false
+	main.rack._gui_input(rackmap_grab)
+	check(main.rack_scroll.scroll_horizontal > rackmap_before_pan,
+		"the middle button drags the window over the case (%d from %d)"
+			% [main.rack_scroll.scroll_horizontal, rackmap_before_pan])
+	check(main.rack_minimap != null and main.rack_minimap.visible
+			and main.rack_minimap.map_scale() > 0.0,
+		"the rack lens shows a map of the case (scale %.3f)" % main.rack_minimap.map_scale())
+	var rackmap_window_before: Rect2 = main.rack_minimap.window_in_rack()
+	main.rack_minimap.look_at_map_point(main.rack_minimap.size)
+	var rackmap_window_after: Rect2 = main.rack_minimap.window_in_rack()
+	check(rackmap_window_after.position.x > rackmap_window_before.position.x
+			and rackmap_window_after.position.y > rackmap_window_before.position.y,
+		"and clicking the map's far corner moves the window that way (%s -> %s)"
+			% [str(rackmap_window_before.position.round()), str(rackmap_window_after.position.round())])
+	main.rack.centre_case()
+	main._set_patch_view(main.PatchView.GRAPH)
+	for i in 6:
+		await process_frame
+	check(not main.rack_minimap.visible, "the map goes with the rack lens")
+	# The demo zoom holds through a load: the fit frames the patch, and then the work
+	# area goes to the session's zoom in both lenses, so the words on the nodes are the
+	# size the show asked for whatever example is opened.
+	main._demo_zoom = 2.0
+	await main._load_example("Plucked String")
+	for i in 8:
+		await process_frame
+	check(is_equal_approx(main.graph_edit.zoom, 2.0) and is_equal_approx(main.rack.view_zoom, 2.0),
+		"a demo zoom of 2 holds after a load, in the graph and the rack (%.2f, %.2f)"
+			% [main.graph_edit.zoom, main.rack.view_zoom])
+	# --arrange auto-places every load before it is framed: the positions the file
+	# carried are not the positions on screen.
+	main._demo_arrange = true
+	var stored_first: Dictionary = {}
+	for node in main.patch["nodes"]:
+		stored_first[str(node["id"])] = Vector2(node.get("position", {}).get("x", 0.0),
+			node.get("position", {}).get("y", 0.0))
+	await main._load_example("Plucked String")
+	for i in 10:
+		await process_frame
+	var moved_by_arrange := 0
+	for node in main.patch["nodes"]:
+		var was: Vector2 = stored_first.get(str(node["id"]), Vector2(-1, -1))
+		var now := Vector2(node.get("position", {}).get("x", 0.0),
+			node.get("position", {}).get("y", 0.0))
+		if was != now:
+			moved_by_arrange += 1
+	check(moved_by_arrange > 0 or main.patch["nodes"].size() < 2,
+		"--arrange auto-places a load before it is framed (%d nodes moved)" % moved_by_arrange)
+	# And every addition: a node dropped far from the patch is placed with the rest.
+	var far_node: String = await main._add_node("SineOscillator", Vector2(9000.0, 9000.0))
+	for i in 12:
+		await process_frame
+	var far_now := Vector2(9000.0, 9000.0)
+	for node in main.patch["nodes"]:
+		if str(node["id"]) == far_node:
+			far_now = Vector2(node.get("position", {}).get("x", 0.0),
+				node.get("position", {}).get("y", 0.0))
+	main._demo_arrange = false
+	check(far_node != "" and far_now != Vector2(9000.0, 9000.0),
+		"and auto-places every node added (%s landed at %s)" % [far_node, str(far_now)])
+	main._demo_zoom = -1.0
+	main.rack.view_zoom = 1.0
+	await main._load_example("First Synth")
+	for i in 8:
+		await process_frame
+	check(main.graph_edit.zoom <= 1.0, "and without one, a load fits as it always did")
 
 	# The map from here down, chosen through the same path a hand would choose it.
 	main._choose_detail_mode(main.PatchGraph.DetailMode.ADAPTIVE)
@@ -4104,6 +4444,72 @@ func _initialize() -> void:
 			+ "(song %d, step %d)" % [main._song_index, main.piano_roll.playing_step])
 	Settings.store("songs_play_through", false)
 	main._refresh_songs_menu()
+
+	# The jukebox, on the keyboard's own menu. Arpeggiate: held keys are shown and not
+	# sounded, and the clock speaks them lowest to highest, one per step, round and
+	# round; letting go of everything silences it. Songs: play-through comes on, a song
+	# is chosen if none was, and the roll runs. Keys: back to the instrument as it was.
+	var play_menu: PopupMenu = main.keyboard_toggle.get_popup()
+	play_menu.id_pressed.emit(11)
+	for i in 2:
+		await process_frame
+	main._hold_note(67)
+	main._hold_note(60)
+	main._hold_note(64)
+	check(main.play_mode == "arp" and main.held_notes.size() == 3
+			and main._arp_sounding == -1,
+		"arpeggiate holds three keys and sounds none of them yet")
+	var arp_walked: Array = []
+	for step in 4:
+		main._advance_arp(main._roll_step_seconds())
+		arp_walked.append(main._arp_sounding)
+	check(arp_walked == [60, 64, 67, 60],
+		"and the clock walks them lowest to highest, round and round (%s)" % str(arp_walked))
+	main._let_go_note(64)
+	main._advance_arp(main._roll_step_seconds())
+	check(main._arp_sounding == 67 and not main.held_notes.has(64),
+		"a key let go leaves the round (%d)" % main._arp_sounding)
+	main._let_go_note(60)
+	main._let_go_note(67)
+	main._advance_arp(0.001)
+	check(main._arp_sounding == -1 and main.held_notes.is_empty(),
+		"and letting everything go silences it")
+	check(str(Settings.fetch("play_mode", "")) == "arp", "the play mode is remembered")
+	play_menu.id_pressed.emit(12)
+	for i in 6:
+		await process_frame
+	check(main.play_mode == "songs" and bool(Settings.fetch("songs_play_through", false))
+			and main._song_index >= 0 and main.roll_playing,
+		"the songs mode turns play-through on and runs the folder (song %d, playing %s)"
+			% [main._song_index, str(main.roll_playing)])
+	play_menu.id_pressed.emit(10)
+	for i in 3:
+		await process_frame
+	check(main.play_mode == "keys" and not main.roll_playing,
+		"and keys stops the roll and hands the instrument back")
+	main._hold_note(60)
+	check(main.held_notes.has(60) and main._arp_pool.is_empty(), "the keys sound directly again")
+	main._let_go_note(60)
+	Settings.store("songs_play_through", false)
+	main._refresh_songs_menu()
+
+	# The QR's size is a menu choice: Medium is half again the mark, and the choice is
+	# remembered. Small is what it always was.
+	main.view_popup.id_pressed.emit(107)
+	for i in 2:
+		await process_frame
+	var qr_medium: float = main.toolbar_qr.custom_minimum_size.x
+	check(is_equal_approx(qr_medium, float(Design.scale(Design.HIT_TARGET)) * 1.5)
+			and int(Settings.fetch("qr_scale", 0)) == 1 and view_item_checked(main, 107),
+		"QR code → Medium grows the mark by half and is remembered (%.0f px)" % qr_medium)
+	main.view_popup.id_pressed.emit(106)
+	for i in 2:
+		await process_frame
+	check(is_equal_approx(main.toolbar_qr.custom_minimum_size.x,
+			float(Design.scale(Design.HIT_TARGET))),
+		"and Small is the mark it always was")
+	check(view_item_checked(main, 200) or view_item_checked(main, 201),
+		"the Theme menu carries the panel themes, and one of them is lit")
 
 	main._import_midi_file(tune_path)
 	for i in 6:
@@ -8166,7 +8572,7 @@ func _initialize() -> void:
 	main._set_keyboard_mode("mini")
 	await process_frame
 	check(main.keyboard.visible and main.keyboard.custom_minimum_size.y
-			< Design.scale(112),
+			< Design.furniture_scale(112),
 		"mini keeps the keys playable at half height (%.0f)"
 			% main.keyboard.custom_minimum_size.y)
 	main._set_keyboard_mode("hide")
@@ -8375,7 +8781,7 @@ func _initialize() -> void:
 	main._set_keyboard_mode("full")
 	await process_frame
 	check(main.keyboard.visible and main.keyboard.custom_minimum_size.y
-			== Design.scale(112),
+			== Design.furniture_scale(112),
 		"and full is the whole piano again")
 
 	# ---- faceplates ---------------------------------------------------------------
@@ -9081,7 +9487,7 @@ func _initialize() -> void:
 	# full keyboard drops to mini on its own — the piano must never be the row that
 	# falls off the bottom while the roll above it renders on.
 	main._fit_keyboard_dock(500.0)
-	check(main.keyboard.custom_minimum_size.y == Design.scale(56)
+	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(56)
 			and main.piano_roll.custom_minimum_size.y == Design.scale(90)
 			and main.scope_probe.display.custom_minimum_size.y == Design.scale(52),
 		"a cramped window squeezes the roll, the bench and the keys, in that order "
@@ -9090,7 +9496,7 @@ func _initialize() -> void:
 				main.scope_probe.display.custom_minimum_size.y,
 				main.keyboard.custom_minimum_size.y])
 	main._fit_keyboard_dock(900.0)
-	check(main.keyboard.custom_minimum_size.y == Design.scale(112)
+	check(main.keyboard.custom_minimum_size.y == Design.furniture_scale(112)
 			and main.piano_roll.custom_minimum_size.y == Design.scale(150),
 		"and room given back is taken back")
 
@@ -11400,7 +11806,12 @@ func _initialize() -> void:
 									continue
 								if piece is BaseButton or piece is Range:
 									ghosts += 1
-		Design.ui_scale = Design.Scale.COMFORTABLE
+		# Through the setter, so the widgets are rebuilt at Comfortable: setting the
+		# variable alone left the last scale's nodes on the canvas - four times their
+		# size after 4K - for every measurement that follows.
+		main._use_ui_scale(Design.Scale.COMFORTABLE)
+		for _restoring in 8:
+			await process_frame
 		check(elided == 0,
 			"no migrated title in the dense graph is ever cut (%d)" % elided)
 		check(over_class == 0,

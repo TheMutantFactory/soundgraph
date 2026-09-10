@@ -21,7 +21,7 @@ extends SceneTree
 ## From NodeGrid, so this cannot drift from the ladder it reports on.
 const HarnessExit := preload("res://harness_exit.gd")
 const CLASS_NAMES := NodeGrid.CLASS_NAMES
-const SCALE_NAMES := ["Compact", "Comfortable", "Large", "XL"]
+const SCALE_NAMES := ["Compact", "Comfortable", "Large", "XL", "4K"]
 
 ## The search window for a minimum valid width, in base units, and how fine it goes. Eight
 ## is the grid everything else in the node is built on, so a figure between two multiples

@@ -31,7 +31,11 @@ const CARD_WIDTH := 286.0
 ## The header: two lines now, name and kind. The id lost its permanent line — it is
 ## revealed on the selected card instead, because at overview scale the diagram should
 ## privilege signal understanding over file bookkeeping.
-const HEADER_HEIGHT := 58.0
+## Tall enough for a 26px title over a 16px kind line: the title is the card's one
+## word read from across the room, and it was capped at 18 in a 58px header.
+const HEADER_HEIGHT := 68.0
+const TITLE_SIZE := 26
+const KIND_SIZE := 16
 const PORT_PITCH := 21.0
 const CARD_PAD_BOTTOM := 14.0
 const MIN_CARD_HEIGHT := 96.0
@@ -344,9 +348,14 @@ func _draw_card(id: String, box: Rect2, font: Font, small: Font, mono: Font) -> 
 	var left := box.position.x + 18.0
 	var room := box.size.x - 36.0
 
-	draw_string(font, Vector2(left, box.position.y + 26.0),
-		_elided(font, title, Design.type(Design.SIZE_BODY), room),
-		HORIZONTAL_ALIGNMENT_LEFT, room, Design.type(Design.SIZE_BODY),
+	# The title never comes out smaller than the kind line under it: it shrinks to its
+	# width down to that size and is elided past it, so a long name is still the
+	# biggest word on the card.
+	var title_size := fitted_size(font, title, maxi(Design.canvas_type(Design.SIZE_BODY),
+		TITLE_SIZE), room, TITLE_SIZE, KIND_SIZE)
+	draw_string(font, Vector2(left, box.position.y + 32.0),
+		_elided(font, title, title_size, room),
+		HORIZONTAL_ALIGNMENT_LEFT, room, title_size,
 		Design.INK_BRIGHT)
 
 	# Two lines, not three. The kind-line earns its place; the id spent years on the
@@ -356,15 +365,17 @@ func _draw_card(id: String, box: Rect2, font: Font, small: Font, mono: Font) -> 
 	if small != null:
 		var kind := beneath if selected_id != id or mono == null \
 			else "%s · %s" % [beneath, id]
-		draw_string(small, Vector2(left, box.position.y + 46.0),
-			_elided(small, kind, Design.type(Design.SIZE_SECONDARY), room),
-			HORIZONTAL_ALIGNMENT_LEFT, room, Design.type(Design.SIZE_SECONDARY),
+		var kind_size := fitted_size(small, kind, maxi(Design.canvas_type(Design.SIZE_SECONDARY),
+			KIND_SIZE), room, KIND_SIZE)
+		draw_string(small, Vector2(left, box.position.y + 56.0),
+			_elided(small, kind, kind_size, room),
+			HORIZONTAL_ALIGNMENT_LEFT, room, kind_size,
 			Design.INK_SECOND)
 
 	# A modulator wears a thread of its tint under the name — the one class whose
 	# difference is what it does rather than where it sits.
 	if reading == "modulator":
-		draw_rect(Rect2(left, box.position.y + 32.0, 42.0, 1.5),
+		draw_rect(Rect2(left, box.position.y + 38.0, 42.0, 1.5),
 			Color(RackView.category_tint(category), 0.7))
 
 	_draw_ports(id, box, small)
@@ -375,7 +386,9 @@ func _draw_card(id: String, box: Rect2, font: Font, small: Font, mono: Font) -> 
 ## ends at the dot, which is what makes this a schematic and not a diagram of cards.
 func _draw_ports(id: String, box: Rect2, small: Font) -> void:
 	var descriptor := _descriptor_of(id)
-	var label_size := maxi(Design.type(Design.SIZE_SECONDARY) - 1, 9)
+	# A port's row is PORT_PITCH tall and its name has half the card, less the socket.
+	var label_room := box.size.x * 0.5 - PORT_RADIUS - 10.0
+	var wanted_label := maxi(Design.canvas_type(Design.SIZE_SECONDARY) - 1, 9)
 	for side in 2:
 		var is_input: bool = side == 0
 		var ports: Array = descriptor.get("inputs" if is_input else "outputs", [])
@@ -392,6 +405,8 @@ func _draw_ports(id: String, box: Rect2, small: Font) -> void:
 			if small == null:
 				continue
 			var text := RackView.face_text(port)
+			var label_size := fitted_size(small, text, wanted_label, label_room,
+				int(PORT_PITCH * 0.62))
 			var measured := small.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT,
 				-1.0, label_size)
 			var text_at := Vector2(at.x + PORT_RADIUS + 6.0, at.y + measured.y * 0.32) \
@@ -399,6 +414,15 @@ func _draw_ports(id: String, box: Rect2, small: Font) -> void:
 				Vector2(at.x - PORT_RADIUS - 6.0 - measured.x, at.y + measured.y * 0.32)
 			draw_string(small, text_at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 				label_size, Design.INK_SECOND)
+
+
+## The size a card's text is drawn at: the canvas size, brought down to what the card
+## can hold — its width, and the height of the line it sits on. The card is drawn in
+## fixed pixels, a 58px header and 21px port rows, and at 4K the canvas doubled while
+## the cards did not; a schematic is a reading, and its words fit their boxes.
+static func fitted_size(font: Font, text: String, wanted: int, room: float,
+		line_height: int, floor_size: int = 9) -> int:
+	return RackView.fitted(font, text, mini(wanted, line_height), room, floor_size)
 
 
 func _elided(font: Font, text: String, at_size: int, room: float) -> String:

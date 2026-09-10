@@ -24,6 +24,7 @@ signal arrange_action(id: int)
 signal make_module_requested
 ## Somebody wants to tell the workbench something. Main owns the dialog.
 signal feedback_requested
+signal quit_requested
 signal mute_toggled
 
 enum Rung {
@@ -43,6 +44,8 @@ const PatchGraph := preload("res://patch_graph.gd")
 
 ## Where section labels' ids start, well clear of every setting's.
 const SECTION_ID := 900
+## The one plain command on the hamburger itself; every other row there is a door.
+const QUIT_ID := 1
 
 ## The optical cell the seven door marks are drawn in — one figure, so that a wide glyph
 ## and a tall one occupy the same square and the column of them reads as a column.
@@ -58,7 +61,32 @@ var toolbar_menu_button: MenuButton
 var toolbar_identity_margin: MarginContainer
 var toolbar_menu_popup: PopupMenu
 var toolbar_qr: TextureRect
+## How big the QR stands beside the name, as multiples of a hit target. Small is the
+## mark it always was; Medium and Large are what a phone needs from across a table.
+const QR_SCALE_NAMES := ["Small", "Medium", "Large"]
+const QR_SCALES := [1.0, 1.5, 2.0]
+
+
+func set_qr_scale(index: int) -> void:
+	if toolbar_qr == null:
+		return
+	var factor: float = QR_SCALES[clampi(index, 0, QR_SCALES.size() - 1)]
+	# Condensed, the small code is a mark the size of the row — the large one is a
+	# hover away, which is what makes the mark enough.
+	var side := float(Design.furniture_scale(22)) if condensed \
+		else float(Design.scale(Design.HIT_TARGET))
+	toolbar_qr.custom_minimum_size = Vector2.ONE * side * factor
 var toolbar_add_button: Button
+## Half its height at 4K, always. The top row was a fifth of the screen at the show
+## size — the wordmark, its QR and one verb. A first cut brought the row back to full
+## height under the pointer; a row that changes height as the hand passes is a row
+## that moves the thing under the hand. The QR alone answers the pointer now, with a
+## large code of its own that pops up over it and goes when the pointer leaves.
+var condensed := false
+var _bar: HBoxContainer
+var _qr_hover: PopupPanel
+## Which icon each icon button wears, so the condensed row can redraw it smaller.
+var _icon_kinds: Dictionary = {}
 var toolbar_rung := Rung.FULL
 var undo_button: Button
 var redo_button: Button
@@ -127,6 +155,7 @@ func _toolbar_group(bar: HBoxContainer, first: bool = false) -> HBoxContainer:
 
 func _build() -> void:
 	var bar := HBoxContainer.new()
+	_bar = bar
 	bar.custom_minimum_size.y = Design.scale(52)
 	bar.add_theme_constant_override("separation", Design.SPACE_S)
 
@@ -187,10 +216,10 @@ func _build() -> void:
 	qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	# Nearest, or the modules smear into grey and the phone gives up.
 	qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	qr.custom_minimum_size = Vector2(Design.scale(Design.HIT_TARGET),
-		Design.scale(Design.HIT_TARGET))
+	set_qr_scale(int(Settings.fetch("qr_scale", 0)))
 	qr.tooltip_text = "mutantfactory.net/soundgraph — click for a scannable size"
 	qr.mouse_filter = Control.MOUSE_FILTER_STOP
+	qr.mouse_entered.connect(_show_qr_hover)
 	qr.gui_input.connect(func(event: InputEvent) -> void:
 		var click := event as InputEventMouseButton
 		if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
@@ -309,12 +338,14 @@ func _build() -> void:
 	toolbar_edit_group = edit_group
 	undo_button = Button.new()
 	undo_button.icon = _icon(Icons.Kind.UNDO, Design.INK_NORMAL)
+	_icon_kinds[undo_button] = Icons.Kind.UNDO
 	undo_button.disabled = true
 	undo_button.pressed.connect(func() -> void: undo_requested.emit())
 	edit_group.add_child(_defocus(undo_button))
 
 	redo_button = Button.new()
 	redo_button.icon = _icon(Icons.Kind.REDO, Design.INK_NORMAL)
+	_icon_kinds[redo_button] = Icons.Kind.REDO
 	redo_button.disabled = true
 	redo_button.pressed.connect(func() -> void: redo_requested.emit())
 	edit_group.add_child(_defocus(redo_button))
@@ -450,41 +481,6 @@ func _build() -> void:
 		rack_menu.add_radio_check_item(Rack.DENSITY_NAMES[index], 40 + index)
 	rack_menu.id_pressed.connect(func(id: int) -> void: view_action.emit(id))
 
-	# What the panels are painted in. A whole-rack default, because a rack that is one
-	# family reads as a rack; individual panels are repainted by right-clicking them,
-	# which is where somebody is already pointing when they want to change one.
-	#
-	# Its own door rather than a room inside Rack display: width and presentation
-	# describe the rack, and a panel is a panel in every view that draws one.
-	var panels_popup := _submenu(view_popup, "PanelsMenu", "Panels")
-	panels_popup.add_radio_check_item("Category colours", 200)
-	panels_popup.set_item_tooltip(0,
-		"One graphite panel each, with a stripe saying what the module is.")
-	panels_popup.add_separator()
-	for index in ModuleThemes.ORDER.size():
-		var key: String = ModuleThemes.ORDER[index]
-		panels_popup.add_radio_check_item(ModuleThemes.display_name(key), 201 + index)
-		panels_popup.set_item_tooltip(panels_popup.get_item_index(201 + index),
-			str(ModuleThemes.THEMES[key].get("blurb", "")))
-	# The wordmark's QR, with the panels rather than alone at the foot of View. It is a
-	# thing drawn on the interface, which is what this door holds; on its own it was a
-	# checkbox nobody had decided the kind of.
-	panels_popup.add_separator()
-	panels_popup.add_check_item("Show QR code", 104)
-	panels_popup.set_item_tooltip(panels_popup.get_item_index(104),
-		"The door into the program: mutantfactory.net/soundgraph, beside the "
-		+ "wordmark. Untick to work without it watching.")
-	panels_popup.about_to_popup.connect(func() -> void:
-		panels_popup.set_item_checked(panels_popup.get_item_index(104),
-			toolbar_qr != null and toolbar_qr.visible))
-	panels_popup.id_pressed.connect(func(id: int) -> void:
-		if id == 104:
-			if toolbar_qr != null:
-				toolbar_qr.visible = not toolbar_qr.visible
-				Settings.store("qr_visible", toolbar_qr.visible)
-			return
-		view_action.emit(id))
-
 	var zoom_menu := _submenu(view_popup, "ZoomMenu", "Zoom")
 	zoom_menu.add_item("Fit to screen", 72)
 	zoom_menu.set_item_tooltip(zoom_menu.get_item_index(72),
@@ -510,10 +506,49 @@ func _build() -> void:
 		size_menu.add_radio_check_item(Design.SCALE_NAMES[index], 50 + index)
 	size_menu.id_pressed.connect(func(id: int) -> void: view_action.emit(id))
 
+	# Theme, in two registers. The panels come first because they are what a patch looks
+	# like — the newer family, one name each, a whole-rack default; a single panel is
+	# repainted by right-clicking it. The interface palettes below recolour the chrome
+	# around them. Both used to be doors of their own, and "Panels" was the door nobody
+	# opened looking for a theme.
 	var theme_menu := _submenu(view_popup, "ThemeMenu", "Theme")
+	_section(theme_menu, "Panels")
+	theme_menu.add_radio_check_item("Category colours", 200)
+	theme_menu.set_item_tooltip(theme_menu.get_item_index(200),
+		"One graphite panel each, with a stripe saying what the module is.")
+	for index in ModuleThemes.ORDER.size():
+		var key: String = ModuleThemes.ORDER[index]
+		theme_menu.add_radio_check_item(ModuleThemes.display_name(key), 201 + index)
+		theme_menu.set_item_tooltip(theme_menu.get_item_index(201 + index),
+			str(ModuleThemes.THEMES[key].get("blurb", "")))
+	theme_menu.add_separator()
+	_section(theme_menu, "Interface")
 	for index in Design.PALETTE_NAMES.size():
 		theme_menu.add_radio_check_item(Design.PALETTE_NAMES[index], 30 + index)
 	theme_menu.id_pressed.connect(func(id: int) -> void: view_action.emit(id))
+
+	# The wordmark's QR: whether it stands beside the name, and how big. Twenty-four
+	# pixels is a mark, not a code — a phone across a table wants a little more to lock
+	# on to, and a show is a table with a queue at it.
+	var qr_menu := _submenu(view_popup, "QrMenu", "QR code")
+	qr_menu.add_check_item("Show beside the name", 104)
+	qr_menu.set_item_tooltip(qr_menu.get_item_index(104),
+		"The door into the program: mutantfactory.net/soundgraph, beside the "
+		+ "wordmark. Untick to work without it watching.")
+	qr_menu.add_separator()
+	_section(qr_menu, "Size")
+	for index in QR_SCALE_NAMES.size():
+		qr_menu.add_radio_check_item(QR_SCALE_NAMES[index], 106 + index)
+	qr_menu.about_to_popup.connect(func() -> void:
+		qr_menu.set_item_checked(qr_menu.get_item_index(104),
+			toolbar_qr != null and toolbar_qr.visible))
+	qr_menu.id_pressed.connect(func(id: int) -> void:
+		if id == 104:
+			if toolbar_qr != null:
+				toolbar_qr.visible = not toolbar_qr.visible
+				Settings.store("qr_visible", toolbar_qr.visible)
+			return
+		view_action.emit(id))
 
 	# An accessibility switch that only exists as a hope is not one. Everything that
 	# moves on its own in this editor is off behind this: the signal glow and the grid
@@ -632,6 +667,7 @@ func _build() -> void:
 	var burger := MenuButton.new()
 	toolbar_menu_button = burger
 	burger.icon = _icon(Icons.Kind.HAMBURGER, Design.INK_NORMAL)
+	_icon_kinds[burger] = Icons.Kind.HAMBURGER
 	# A bounded square, the size of undo and redo. It was borderless on the argument
 	# that the glyph is the button, which is true of a glyph nobody has to find: this
 	# one is the way into every command in the program and it sits in the corner with
@@ -665,6 +701,17 @@ func _build() -> void:
 		burger_popup.set_item_icon(burger_popup.item_count - 1,
 			_icon(int(door[2]), Design.INK_SECOND.lerp(Design.INK_NORMAL, 0.4),
 				DOOR_ICON))
+	# Quit, last, behind a rule, on the menu itself rather than under File: it is the one
+	# command that is about the program and not the patch, and a show floor full screen
+	# has no title bar to close from. Ctrl+Q, the way every program that has a quit spells
+	# it. The editor decides whether to ask first; the menu only asks.
+	burger_popup.add_separator()
+	burger_popup.add_item("Quit", QUIT_ID)
+	burger_popup.set_item_accelerator(burger_popup.get_item_index(QUIT_ID),
+		KEY_MASK_CTRL | KEY_Q)
+	burger_popup.id_pressed.connect(func(id: int) -> void:
+		if id == QUIT_ID:
+			quit_requested.emit())
 	toolbar_menu_popup = burger_popup
 	bar.add_child(_defocus(burger))
 
@@ -833,6 +880,107 @@ func _apply_toolbar_rung(rung: int) -> void:
 ## that steps by one has to be run repeatedly to settle.
 ## A width can be passed in, so a test can ask what a 1280px window would look like
 ## without owning a 1280px window. Left at -1 it measures the bar it has.
+
+
+## The row's height follows the interface size, asked every frame because the size
+## changes elsewhere; and the QR's hover code goes when the pointer is on neither the
+## QR nor the code, asked the same way, because a popup does not see the pointer leave.
+func _process(_delta: float) -> void:
+	var half := Design.ui_scale == Design.Scale.FOUR_K
+	if half != condensed:
+		set_condensed(half)
+	if _qr_hover != null and _qr_hover.visible:
+		var at := get_global_mouse_position()
+		var over_qr := toolbar_qr != null and toolbar_qr.get_global_rect().has_point(at)
+		var over_code := Rect2(Vector2(_qr_hover.position), Vector2(_qr_hover.size)).has_point(
+			at + Vector2(get_window().position))
+		if not over_qr and not over_code:
+			_hide_qr_hover()
+
+
+## The large code, over everything, while the pointer is on the small one. Built once.
+func _show_qr_hover() -> void:
+	if _qr_hover == null:
+		_qr_hover = PopupPanel.new()
+		var big := TextureRect.new()
+		var large_texture: Texture2D = load("res://soundgraph_qr.png")
+		if large_texture != null:
+			big.texture = large_texture
+		big.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		big.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		big.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		# Giant: most of the window's height, or the code's own comfortable size,
+		# whichever is smaller — a phone across a table wants the former.
+		var side := minf(float(Design.scale(600)),
+			get_viewport().get_visible_rect().size.y * 0.8)
+		big.custom_minimum_size = Vector2(side, side)
+		_qr_hover.add_child(big)
+		add_child(_qr_hover)
+	if not _qr_hover.visible:
+		_qr_hover.popup_centered()
+
+
+func _hide_qr_hover() -> void:
+	if _qr_hover != null and _qr_hover.visible:
+		_qr_hover.hide()
+
+
+func set_condensed(on: bool) -> void:
+	condensed = on
+	if _bar == null:
+		return
+	_bar.custom_minimum_size.y = Design.furniture_scale(14) if on else Design.scale(52)
+	# The row's own air, top and bottom, goes with it.
+	add_theme_constant_override("margin_top", 2 if on else Design.SPACE_S)
+	add_theme_constant_override("margin_bottom", 2 if on else Design.SPACE_S)
+	if toolbar_title != null:
+		toolbar_title.add_theme_font_size_override("font_size",
+			Design.furniture_type(Design.SIZE_HEADING) if on
+			else Design.type(Design.SIZE_APP_TITLE))
+	set_qr_scale(int(Settings.fetch("qr_scale", 0)))
+	if toolbar_identity_margin != null:
+		var air := Design.furniture_scale(Design.SPACE_M) if on \
+			else Design.type(Design.SIZE_APP_TITLE)
+		toolbar_identity_margin.add_theme_constant_override("margin_left", air)
+		toolbar_identity_margin.add_theme_constant_override("margin_right", air)
+	if toolbar_menu_button != null:
+		var burger_side := Design.furniture_scale(22) if on else Design.scale(40)
+		toolbar_menu_button.custom_minimum_size = Vector2(burger_side, burger_side)
+	var queue: Array = [_bar]
+	while not queue.is_empty():
+		var node: Node = queue.pop_back()
+		for child in node.get_children():
+			queue.append(child)
+		if node is Button:
+			var button := node as Button
+			button.custom_minimum_size.y = Design.furniture_scale(20) if on \
+				else Design.scale(Design.HIT_TARGET)
+			# The text, the box and the icon all go: a box with the chrome's padding
+			# around a small word is still the chrome's height.
+			if on:
+				button.add_theme_font_size_override("font_size",
+					Design.furniture_type(Design.SIZE_SECONDARY))
+				for state in ["normal", "hover", "pressed", "disabled"]:
+					button.add_theme_stylebox_override(state, Design.furniture_box(
+						Design.Surface.ACTIVE if state in ["hover", "pressed"]
+						else Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_XS))
+				if _icon_kinds.has(button):
+					button.icon = Icons.get_icon(int(_icon_kinds[button]),
+						Design.furniture_scale(14), Design.INK_NORMAL)
+			else:
+				button.remove_theme_font_size_override("font_size")
+				for state in ["normal", "hover", "pressed", "disabled"]:
+					button.remove_theme_stylebox_override(state)
+				if _icon_kinds.has(button):
+					button.icon = _icon(int(_icon_kinds[button]), Design.INK_NORMAL)
+			if _primary_buttons.has(button):
+				Design.make_primary(button, on)
+		elif node is Label and node != toolbar_title:
+			if on:
+				(node as Control).add_theme_font_size_override("font_size",
+					Design.furniture_type(Design.SIZE_SECONDARY))
+			else:
+				(node as Control).remove_theme_font_size_override("font_size")
 
 
 func _fit_toolbar(width: float = -1.0) -> void:

@@ -46,7 +46,7 @@ class Jacks extends Control:
 			return
 		var at := (event as InputEventMouseButton).position
 		for i in ports.size():
-			if at.distance_to(_slot(i)) <= Design.scale(GRAB):
+			if at.distance_to(_slot(i)) <= Design.furniture_scale(GRAB):
 				lifted = i
 				queue_redraw()
 				jack_grabbed.emit(ports[i])
@@ -64,7 +64,7 @@ class Jacks extends Control:
 		return Design.font(Design.WEIGHT_MEDIUM)
 
 	func _size() -> int:
-		return Design.type(Design.SIZE_SECONDARY)
+		return Design.furniture_type(Design.SIZE_SECONDARY)
 
 	## Ring beside name, one text line tall: the first cut of this stacked the name
 	## under the ring, which stood two storeys high in a row of one-storey buttons
@@ -75,11 +75,11 @@ class Jacks extends Control:
 		var font := _font()
 		var size := _size()
 		var width := 0.0
-		var tallest := Design.scale(SOCKET) * 2.0
+		var tallest := Design.furniture_scale(SOCKET) * 2.0
 		for port: Dictionary in ports:
 			var measured := font.get_string_size(str(port.get("label", port["port"])),
 				HORIZONTAL_ALIGNMENT_LEFT, -1.0, size)
-			width += Design.scale(SOCKET) * 2.0 + Design.scale(LABEL_GAP) 				+ measured.x + Design.scale(Design.SPACE_M)
+			width += Design.furniture_scale(SOCKET) * 2.0 + Design.furniture_scale(LABEL_GAP) 				+ measured.x + Design.furniture_scale(Design.SPACE_M)
 			tallest = maxf(tallest, measured.y)
 		return Vector2(width, tallest)
 
@@ -93,8 +93,8 @@ class Jacks extends Control:
 			var measured := font.get_string_size(str(ports[i].get("label", ports[i]["port"])),
 				HORIZONTAL_ALIGNMENT_LEFT, -1.0, size_px)
 			if i == index:
-				return Vector2(x + Design.scale(SOCKET), size.y * 0.5)
-			x += Design.scale(SOCKET) * 2.0 + Design.scale(LABEL_GAP) 				+ measured.x + Design.scale(Design.SPACE_M)
+				return Vector2(x + Design.furniture_scale(SOCKET), size.y * 0.5)
+			x += Design.furniture_scale(SOCKET) * 2.0 + Design.furniture_scale(LABEL_GAP) 				+ measured.x + Design.furniture_scale(Design.SPACE_M)
 		return Vector2.ZERO
 
 	## The same point in viewport space, which is what draws a cable to it. Matched on the
@@ -118,12 +118,12 @@ class Jacks extends Control:
 			var live: bool = str(ports[i].get("node", "")) != "" and i != lifted
 			# A ring and a dark centre, the same socket the rack draws, so a jack looks
 			# like a jack wherever it turns up.
-			draw_circle(at, Design.scale(SOCKET), Color(0.055, 0.06, 0.07))
-			draw_arc(at, Design.scale(SOCKET), 0.0, TAU, 24,
+			draw_circle(at, Design.furniture_scale(SOCKET), Color(0.055, 0.06, 0.07))
+			draw_arc(at, Design.furniture_scale(SOCKET), 0.0, TAU, 24,
 				colour if live else Color(colour, 0.35), 2.0, true)
 			var text := str(ports[i].get("label", ports[i]["port"]))
 			var measured := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size)
-			draw_string(font, Vector2(at.x + Design.scale(SOCKET) + Design.scale(LABEL_GAP),
+			draw_string(font, Vector2(at.x + Design.furniture_scale(SOCKET) + Design.furniture_scale(LABEL_GAP),
 				at.y + measured.y * 0.32),
 				text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size,
 				ink if live else Color(ink, 0.45))

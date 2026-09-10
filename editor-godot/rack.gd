@@ -400,9 +400,11 @@ var case_hp: int = 0:
 ## How far away the viewer stands. 1.0 is workbench distance; a 168 HP case on a
 ## laptop needs the room. Purely visual — layout happens in unscaled units and the
 ## wrap width is the case's, not the window's.
+## Up to 2.0, not 1.0: a rack is drawn at real size for a desk, and a show on a 4K
+## screen wants the same panels twice as big, which is a zoom and not a redesign.
 var view_zoom := 1.0:
 	set(value):
-		view_zoom = clampf(value, 0.25, 1.0)
+		view_zoom = clampf(value, 0.25, 2.0)
 		scale = Vector2(view_zoom, view_zoom)
 		_relayout()
 
@@ -412,6 +414,7 @@ var view_zoom := 1.0:
 func fit_case() -> void:
 	if case_hp <= 0:
 		view_zoom = 1.0
+		centre_case.call_deferred()
 		return
 	# The window is the scroll container, not this control: once a case is set the
 	# rack is exactly as wide as the case, and measuring yourself answers 1.0 forever.
@@ -420,6 +423,31 @@ func fit_case() -> void:
 		scroll = scroll.get_parent()
 	var window := maxf(scroll.size.x if scroll != null else size.x, 200.0)
 	view_zoom = window / (case_hp * HP + CASE_MARGIN * 2.0)
+	centre_case.call_deferred()
+
+
+## The scroll container two levels up, when there is one.
+func _scroller() -> ScrollContainer:
+	var holder := get_parent()
+	return holder.get_parent() as ScrollContainer if holder != null else null
+
+
+## Scrolls so the case, not the slack around it, is what the window shows first.
+func centre_case() -> void:
+	var scroll := _scroller()
+	if scroll == null:
+		return
+	scroll.scroll_horizontal = int(pan_slack.x * view_zoom)
+	scroll.scroll_vertical = int(pan_slack.y * view_zoom)
+
+
+## One step of a middle-button pan: the window follows the hand, in screen pixels.
+func pan_by(screen_delta: Vector2) -> void:
+	var scroll := _scroller()
+	if scroll == null:
+		return
+	scroll.scroll_horizontal = int(scroll.scroll_horizontal - screen_delta.x)
+	scroll.scroll_vertical = int(scroll.scroll_vertical - screen_delta.y)
 
 var selected_id := ""
 
@@ -490,6 +518,16 @@ var _modules: Dictionary = {}          # node id -> RackModule
 var _knobs: Dictionary = {}            # node id -> {parameter name -> Knob}
 var _cables: CableLayer
 var _content_size := Vector2.ZERO
+## Room around the case to pan into: half the window on every side, so the case can be
+## put anywhere on the screen rather than pinned to its top-left. The rack sits at
+## `pan_slack` inside its holder; the holder is the case plus the slack.
+var pan_slack := Vector2.ZERO
+var _pan_from := Vector2.INF
+
+
+## The case's own extent, for the map.
+func content_size() -> Vector2:
+	return _content_size
 
 
 func _ready() -> void:
@@ -671,11 +709,14 @@ func _relayout() -> void:
 	# window silently answered a different question. The window catches up through
 	# view_zoom instead. The span comes from the holder — this control sizes itself.
 	var host := get_parent() as Control
-	var span: float = host.size.x if host != null else size.x
-	# A hidden tab's holder may not have been laid out yet; walk up to whatever has
-	# real width rather than wrapping the whole rack at the 200px floor.
-	if span <= 1.0 and host != null and host.get_parent() is Control:
+	# The window's width, from the scroll container, not the holder's: the holder is
+	# the case plus the pan slack, so measuring it would feed the slack back into the
+	# case and the case back into the slack, without end.
+	var span: float = size.x
+	if host != null and host.get_parent() is Control:
 		span = (host.get_parent() as Control).size.x
+	elif host != null:
+		span = host.size.x
 	if span <= 1.0:
 		span = maxf(size.x, get_viewport_rect().size.x if is_inside_tree() else 0.0)
 	var available := maxf(span / maxf(view_zoom, 0.01) - CASE_MARGIN * 2.0, 200.0)
@@ -705,10 +746,19 @@ func _relayout() -> void:
 	# Outside a container, this control sizes itself; the holder carries the scaled
 	# footprint into the scroll area's arithmetic.
 	size = Vector2(maxf(_content_size.x, span / maxf(view_zoom, 0.01)), _content_size.y)
+	# The slack, in rack units, from the window the scroll container has: half of it on
+	# every side. The holder grows by the slack and the rack moves into the middle.
+	var window := Vector2(span, 0.0)
+	if host != null and host.get_parent() is Control:
+		window = (host.get_parent() as Control).size
+	pan_slack = window * 0.5 / maxf(view_zoom, 0.01)
+	# The slack is in rack units; the position is in the holder's pixels, which is the
+	# rack scaled. Mixing the two put the map's window off by exactly the zoom.
+	position = pan_slack * view_zoom
 	if host != null:
 		host.custom_minimum_size = Vector2(
-			_content_size.x * view_zoom if case_hp > 0 else 0.0,
-			_content_size.y * view_zoom)
+			(_content_size.x if case_hp > 0 else size.x) + pan_slack.x * 2.0,
+			_content_size.y + pan_slack.y * 2.0) * view_zoom
 	queue_redraw()
 	redraw_cables()
 
@@ -813,7 +863,7 @@ func _draw() -> void:
 ## read as a measurement instead of a mood — the same reason a real rail has holes.
 func _draw_hp_ruler(rows: int, row_pitch: float) -> void:
 	var font := Design.numeric_font()
-	var font_size := Design.scale(11)
+	var font_size := Design.canvas_scale(11)
 	var end_x := CASE_MARGIN + case_hp * HP
 	for row in maxi(rows, 1):
 		var top := CASE_MARGIN + row * row_pitch
@@ -866,9 +916,20 @@ func _gui_input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion != null:
 		_update_cable_hover(motion.position)
+		# The middle button drags the window over the case, the gesture every canvas
+		# already answers to. Relative motion is in the rack's own units, so it is
+		# scaled back to the screen the scroll container moves in.
+		if _pan_from != Vector2.INF and (motion.button_mask & MOUSE_BUTTON_MASK_MIDDLE) != 0:
+			pan_by(motion.relative * view_zoom)
+			accept_event()
+			return
 	# A click on the case selects the cable under it, or clears the selection when there
 	# is none. Selection is persistent hover, so it is picked up the same way.
 	var click := event as InputEventMouseButton
+	if click != null and click.button_index == MOUSE_BUTTON_MIDDLE:
+		_pan_from = click.position if click.pressed else Vector2.INF
+		accept_event()
+		return
 	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT \
 			and not click.ctrl_pressed:
 		selected_cable = cable_at(click.position)
@@ -1861,12 +1922,16 @@ class RackModule extends Control:
 
 		if font != null:
 			var label := title.to_upper()
-			var width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-			# A long user-given name is clipped rather than shrunk, so every module's title
-			# sits on the same baseline at the same size, as a row of panels does.
+			# The title is printed as large as the plate allows, to a floor, and only
+			# clipped past that: every module's title sits on the same baseline, and
+			# a long user-given name reads whole on a narrow panel rather than losing
+			# its tail.
+			var title_size := Rack.fitted(font, label, 14, size.x - 12.0, 9)
+			var width := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				title_size).x
 			var legend: Color = paint.get("legend", Color(0, 0, 0, 0))
 			draw_string(font, Vector2((size.x - width) * 0.5, 26.0), label,
-				HORIZONTAL_ALIGNMENT_LEFT, size.x - 12.0, 14,
+				HORIZONTAL_ALIGNMENT_LEFT, size.x - 12.0, title_size,
 				rack.ink if legend.a <= 0.0 else legend)
 
 		_draw_analysis()
@@ -1928,7 +1993,7 @@ class Jack extends Control:
 		return Design.font(Design.WEIGHT_MEDIUM)
 
 	func _label_size() -> int:
-		return Design.type(Design.SIZE_SECONDARY)
+		return Design.canvas_type(Design.SIZE_SECONDARY)
 
 	func _text_width() -> float:
 		var font := _label_font()
@@ -1959,13 +2024,14 @@ class Jack extends Control:
 		var room := size.x - Rack.jack_radius() * 2.0 - 6.0
 		if room <= 4.0:
 			return
-		var text := Rack.elided(font, face_label if face_label != "" else port_name,
-			_label_size(), room)
-		var baseline := size.y * 0.5 + float(_label_size()) * 0.36
+		var wanted := face_label if face_label != "" else port_name
+		var fitted_size := Rack.fitted(font, wanted, _label_size(), room)
+		var text := Rack.elided(font, wanted, fitted_size, room)
+		var baseline := size.y * 0.5 + float(fitted_size) * 0.36
 		draw_string(font,
 			Vector2(Rack.jack_radius() * 2.0 + 6.0 if is_input else 0.0, baseline), text,
 			HORIZONTAL_ALIGNMENT_LEFT if is_input else HORIZONTAL_ALIGNMENT_RIGHT,
-			room, _label_size(),
+			room, fitted_size,
 			rack.ink_dim if _legend().a <= 0.0 else _legend())
 
 	## The panel's lettering colour, at full strength - see the note on Knob._legend for
@@ -2020,6 +2086,9 @@ class Knob extends Control:
 	## than the sliders it replaced, which is the opposite of the point. Same control,
 	## same keyboard, same signal path — one draws its own caption and one does not.
 	var compact := false
+	## On the dock's strip rather than on a panel or a node: sized with the furniture,
+	## which stops at XL, rather than with the canvas, which doubles at 4K.
+	var furniture := false
 	## Drawn as a diagram rather than as a piece of hardware.
 	##
 	## The rack's knob is a moulded part: collar, cap, moulding line, sheen, a shadow
@@ -2042,6 +2111,8 @@ class Knob extends Control:
 	var dial := 1.0
 
 	func _radius() -> float:
+		if furniture:
+			return float(Design.furniture_scale(Rack.KNOB_RADIUS)) * dial
 		return Rack.knob_radius() * dial
 
 	var _position := 0.0               # 0..1 along the parameter's own scaling
@@ -2104,12 +2175,18 @@ class Knob extends Control:
 			# The hit area still has to clear the rule every other control obeys.
 			# Room for the printed scale, which sits nine px past the body — the old 17
 			# was measured against a value arc five px out and nothing beyond it.
-			var across := _radius() * 2.0 + 22.0
-			return Vector2(across, maxf(across, Design.scale(Design.HIT_TARGET)))
+			# Room for the printed scale — unless this is furniture, where the scale is
+			# not printed and the room was most of the strip's height.
+			var across := _radius() * 2.0 + (6.0 if furniture else 22.0)
+			# Furniture takes the strip's target, not the chrome's: the floor was the
+			# whole reason the strip stood at 59px with 26px of knob in it.
+			var floor_height := float(Design.furniture_scale(24) if furniture
+				else Design.scale(Design.HIT_TARGET))
+			return Vector2(across, maxf(across, floor_height))
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
-		var label_size := Design.type(Design.SIZE_SECONDARY)
+		var label_size := Design.canvas_type(Design.SIZE_SECONDARY)
 		var value_font: Font = Design.numeric_font()
-		var value_size := Design.type(Design.SIZE_NUMERIC)
+		var value_size := Design.canvas_type(Design.SIZE_NUMERIC)
 		var widest := Rack.knob_radius() * 2.0 + 12.0
 		if label_font != null:
 			widest = maxf(widest, minf(label_font.get_string_size(_name_text(),
@@ -2397,10 +2474,12 @@ class Knob extends Control:
 		# measured half-width from the middle: the old version had no bound at all, so a
 		# name wider than its cell simply printed over the knob beside it.
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
-		var label_size := Design.type(Design.SIZE_SECONDARY)
 		var room := size.x - Rack.KNOB_PAD * 2.0
+		var label_size := Rack.fitted(label_font, _name_text(),
+			Design.canvas_type(Design.SIZE_SECONDARY), room)
 		var value_font: Font = Design.numeric_font()
-		var value_size := Design.type(Design.SIZE_NUMERIC)
+		var value_size := Rack.fitted(value_font, _value_text(),
+			Design.canvas_type(Design.SIZE_NUMERIC), room)
 		var value_baseline := size.y - Rack.KNOB_PAD * 0.5
 		var name_baseline := value_baseline - float(value_size) - 4.0
 		draw_string(label_font, Vector2(Rack.KNOB_PAD, name_baseline),
@@ -2499,7 +2578,7 @@ class Fader extends Knob:
 		# at all, which is the only reason it is this low — a fader is read as a height
 		# against its three neighbours, and four of them say the same shape small.
 		return Vector2(Design.scale(26),
-			Design.scale(26) + float(Design.type(Design.SIZE_SECONDARY)))
+			Design.scale(26) + float(Design.canvas_type(Design.SIZE_SECONDARY)))
 
 	## Where the thumb may sit, as (top, bottom) in local coordinates.
 	##
@@ -2509,7 +2588,7 @@ class Fader extends Knob:
 	## the plainest possible way to break a fader.
 	func _track() -> Vector2:
 		var foot := size.y - Rack.KNOB_PAD * 0.4 \
-			- float(Design.type(Design.SIZE_SECONDARY)) - 6.0
+			- float(Design.canvas_type(Design.SIZE_SECONDARY)) - 6.0
 		return Vector2(Rack.KNOB_PAD * 0.5, foot)
 
 	## The track's own length: on a fader the travel is visible, so the thumb follows the
@@ -2523,7 +2602,7 @@ class Fader extends Knob:
 
 	func _draw() -> void:
 		var label_font: Font = Design.font(Design.WEIGHT_MEDIUM)
-		var label_size := Design.type(Design.SIZE_SECONDARY)
+		var label_size := Design.canvas_type(Design.SIZE_SECONDARY)
 		var label_baseline := size.y - Rack.KNOB_PAD * 0.4
 		var track := _track()
 		var track_top := track.x
@@ -2546,8 +2625,9 @@ class Fader extends Knob:
 				false, 2.0)
 
 		if label_font != null and label != "":
+			var fitted_size := Rack.fitted(label_font, label, label_size, size.x)
 			draw_string(label_font, Vector2(0.0, label_baseline), label,
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, label_size, _legend(true))
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, fitted_size, _legend(true))
 
 
 ## A module's aluminium: the plate, its edges, and the category stripe under the title.
@@ -2755,6 +2835,22 @@ static func draw_screw(canvas: CanvasItem, centre: Vector2, radius: float,
 ##
 ## An ellipsis rather than a hard cut, because "cutoff_mo" and "cutoff_mod" are two
 ## plausible port names and the reader cannot tell which one they are looking at.
+## The largest size at or under `size` at which `text` fits `room`, down to `floor_size`.
+## The rack's answer to a word wider than its panel, and a different answer from the
+## graph's: the graph pins words to a screen minimum and drops the controls around them,
+## because it is a diagram read at any zoom; a panel is a fixed thing with a legend
+## printed on it, and a legend is printed as large as the plate allows. Below the floor
+## the caller elides, as before.
+static func fitted(font: Font, text: String, size: int, room: float, floor_size: int = 9) -> int:
+	if font == null or room <= 0.0 or text == "":
+		return size
+	var chosen := size
+	while chosen > floor_size \
+			and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, chosen).x > room:
+		chosen -= 1
+	return chosen
+
+
 static func elided(font: Font, text: String, size: int, room: float) -> String:
 	if font == null or room <= 0.0:
 		return ""

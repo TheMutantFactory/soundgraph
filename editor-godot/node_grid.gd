@@ -319,7 +319,7 @@ static func width_for(type_name: String) -> int:
 ## A class figure in real pixels: up with the interface scale, never down. Shared with
 ## `width_sheet.gd` so the harness tests the widths the editor actually uses.
 static func scaled(base: int) -> int:
-	return int(roundf(float(base) * maxf(1.0, Design.SCALE_FACTORS[Design.ui_scale])))
+	return int(roundf(float(base) * maxf(1.0, Design.canvas_factor())))
 
 
 ## What a class is called, for the record and for anything that reports on it.
@@ -376,13 +376,13 @@ const SPAN_OVER := 1.5
 
 ## The gap between rows, scaled. Godot wants these as ints in theme constants.
 static func row_gap() -> int:
-	return Design.scale(ROW_GAP)
+	return Design.canvas_scale(ROW_GAP)
 
 
 static func column_gap() -> int:
-	return Design.scale(COLUMN_GAP)
+	return Design.canvas_scale(COLUMN_GAP)
 
 
 ## The height a row should stand at, by what it is carrying.
 static func row_height(carries_controls: bool) -> int:
-	return Design.scale(CELL_ROW if carries_controls else PORT_ROW)
+	return Design.canvas_scale(CELL_ROW if carries_controls else PORT_ROW)

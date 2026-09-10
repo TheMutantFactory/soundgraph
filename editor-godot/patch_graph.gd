@@ -1740,7 +1740,7 @@ func _draw_case() -> void:
 	var font := Design.font(Design.WEIGHT_SEMIBOLD)
 	if font == null:
 		return
-	var text_size := int(maxf(float(Design.type(Design.SIZE_CONTROL)) * scale, 8.0))
+	var text_size := int(maxf(float(Design.canvas_type(Design.SIZE_CONTROL)) * scale, 8.0))
 
 	# The mounted face draws its own case, and two cases in one spot is one too many —
 	# so the aluminium and the title are skipped while it is up. The chips are not: they
@@ -2314,7 +2314,7 @@ class WandOverlay extends Control:
 		_dive_hits_out.clear()
 		var scale: float = graph.zoom if graph.zoom > 0.0 else 1.0
 		var font := Design.font(Design.WEIGHT_SEMIBOLD)
-		var size := Design.type(Design.SIZE_CONTROL)
+		var size := Design.canvas_type(Design.SIZE_CONTROL)
 		var pad: float = float(Design.scale(Design.SPACE_M))
 
 		for module_name in graph.groups:
@@ -2928,7 +2928,11 @@ func fit_graph() -> void:
 ## Split out of fit_graph so that something which is not a node can be framed too - the
 ## schematic is a single mounted control, so "fit the visible nodes" has nothing to
 ## measure while it is up.
-func fit_to(bounds: Rect2) -> void:
+## `ceiling` is how far past 100% the fit may go. The graph's own fit stops at real
+## size — a photograph is not enlarged to fill a wall — but the schematic is a
+## reading drawn in fixed pixels, and on a 4K screen a ten-card reading at 100% is a
+## corner of the window with 18px words in it. Its fit goes up to the canvas factor.
+func fit_to(bounds: Rect2, ceiling: float = 1.0) -> void:
 	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		return
 	var view := usable_rect()
@@ -2940,7 +2944,7 @@ func fit_to(bounds: Rect2) -> void:
 	# Never magnifies. Fitting a two-node patch to the window would blow it up to 200% and
 	# call that framing; the request is to see the whole graph, and once you can, there is
 	# nothing further to satisfy.
-	zoom = clampf(wanted, zoom_min, minf(zoom_max, 1.0))
+	zoom = clampf(wanted, zoom_min, minf(zoom_max, maxf(1.0, ceiling)))
 	centre_on(bounds)
 
 
@@ -3471,7 +3475,7 @@ class ScreenText extends Control:
 	## is GraphNode's own furniture: its height is what the port rows are measured from,
 	## so it is the one place where a grown label would cost the most.
 	func _draw_title(node: GraphNode) -> void:
-		var size := Design.type(Design.SIZE_NODE_TITLE)
+		var size := Design.canvas_type(Design.SIZE_NODE_TITLE)
 		var active := Design.below_screen_minimum(size, graph.zoom,
 			Design.screen_minimum(Design.MIN_SCREEN_NODE_TITLE))
 		var label: Label = node.get_meta("title_label") if node.has_meta("title_label") else null
