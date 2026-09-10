@@ -54,6 +54,26 @@ make -C patches             # -> patches/build/*.bin
 `sdk/` holds GPL-3.0 upstream artifacts (firmware elf/bin, linker script) and
 is fetched, not committed.
 
+### Windows
+
+The same, with three substitutions. The board's bulk interface is already
+bound to WinUSB by the Axoloti installer, so no Zadig step:
+
+```sh
+python -m venv .venv && .venv/Scripts/pip install -r requirements.txt libusb-package
+tools/fetch-sdk.sh          # opens the pinned dmg with 7-Zip instead of hdiutil
+winget install Arm.GnuArmEmbeddedToolchain   # arm-none-eabi-g++; codegen finds it
+```
+
+## From the editor
+
+Scan and Flash sit beside Add node in the Godot editor. Scan runs
+`tools/hw.py scan`; Flash runs `tools/hw.py flash BANK.json`, which bakes
+the bank (below) with `bake-bank.py` and writes it to the mounted card.
+Both report through `run/axoloti-status.json`, which the editor's hardware
+panel follows. A bank is `schema/bank.schema.json`: a name and an ordered
+list of `{"name", "patch"}` entries, patch paths relative to the bank file.
+
 ## Run
 
 ```sh

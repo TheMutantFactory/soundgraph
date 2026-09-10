@@ -28,6 +28,8 @@ const CableArtScript := preload("res://cable_art.gd")
 const NodeBrowserScript := preload("res://node_browser.gd")
 ## The third way of looking at a patch.
 const Schematic := preload("res://schematic.gd")
+const PatchBank := preload("res://patch_bank.gd")
+const AxolotiLink := preload("res://axoloti_link.gd")
 const HarnessExit := preload("res://harness_exit.gd")
 ## Headless checks on the editor itself.
 ##
@@ -1057,6 +1059,89 @@ func _initialize() -> void:
 	await process_frame
 	check(main.quit_dialog == null, "and No keeps the editor open")
 	main.unsaved = unsaved_before_quit
+
+	# ---- hardware: Scan and Flash, and the bank they write -----------------------------
+	# The bank is a file the editor keeps in order; the board is a process the editor
+	# starts and reads back through a status file. The suite stands in for the process
+	# with a Callable that writes the file, so the whole path runs with no board, no
+	# compiler and no Python.
+	check(main.toolbar.scan_requested.is_connected(main._scan_hardware)
+			and main.toolbar.flash_requested.is_connected(main._flash_hardware)
+			and main.toolbar.toolbar_hardware_group != null
+			and main.toolbar.toolbar_hardware_group.get_child_count() == 2,
+		"Scan and Flash sit beside Add node and reach the editor")
+	var test_bank := PatchBank.new()
+	var bank_file := ProjectSettings.globalize_path("user://test-bank.json")
+	test_bank.path = bank_file
+	test_bank.name = "Test set"
+	var first_entry := test_bank.add(main._example_path("first-synth.json"))
+	var second_entry := test_bank.add(main._example_path("first-synth.json"))
+	check(first_entry == 0 and second_entry == 1
+			and str(test_bank.entries[0]["name"]) == "first-synth"
+			and str(test_bank.entries[1]["name"]) == "first-synth-2",
+		"a bank numbers its entries in order and keeps their names unique (%s, %s)"
+			% [str(test_bank.entries[0]["name"]), str(test_bank.entries[1]["name"])])
+	check(test_bank.move(1, -1) == 0 and str(test_bank.entries[0]["name"]) == "first-synth-2"
+			and test_bank.move(0, -1) == 0,
+		"and an entry moves up in Program Change order, and no further than the top")
+	test_bank.remove(0)
+	check(test_bank.entries.size() == 1 and test_bank.save() == "",
+		"removed, and saved to %s" % bank_file.get_file())
+	var reread := PatchBank.new()
+	check(reread.load_file(bank_file) == "" and reread.name == "Test set"
+			and reread.entries.size() == 1 and FileAccess.file_exists(reread.resolve(0))
+			and reread.missing().is_empty(),
+		"and it comes back from the file with its patch where it said")
+	check(PatchBank.sanitize("Poly Five (live)!") == "Poly-Five--live--",
+		"entry names follow the baker's rule, so the card gets the same directory")
+	main._use_bank(bank_file)
+	check(str(Settings.fetch("hardware_bank", "")) == bank_file and main.bank != null
+			and main.bank.entries.size() == 1,
+		"choosing a bank makes it what Flash writes, and it is remembered")
+	main.document_path = ""
+	main._add_current_to_bank()
+	check(main.bank.entries.size() == 1 and main.message_label.text.contains("save"),
+		"an unsaved patch cannot join a bank, and the message says why")
+	main.document_path = main._example_path("plucked-string.json")
+	main._add_current_to_bank()
+	check(main.bank.entries.size() == 2
+			and str(main.bank.entries[1]["patch"]).ends_with("plucked-string.json"),
+		"the open patch joins the bank as its next entry (%s)" % str(main.bank.entries[1]["patch"]))
+	var status_file := AxolotiLink.status_path()
+	main.hardware.runner = func(args: Array) -> void:
+		var report := {"action": str(args[0]), "state": "done", "step": "", "log": ["pretend"],
+			"found": true, "firmware": "1.0.0.1", "fwid_ok": true, "sd_ready": true,
+			"dsp_load": 3, "toolchain": {"compiler": "g++", "sdk": true, "sg_validate": true}}
+		if str(args[0]) == "flash":
+			report["entries"] = 2
+			report["written"] = true
+		var out := FileAccess.open(status_file, FileAccess.WRITE)
+		out.store_string(JSON.stringify(report))
+		out.close()
+	main._scan_hardware()
+	for i in 4:
+		await process_frame
+	check(main.message_label.text.contains("Axoloti Core") and main.message_label.text.contains("card mounted")
+			and main._hardware_action == "",
+		"a scan reads the board back in a sentence (%s)" % main.message_label.text)
+	main._flash_hardware()
+	await process_frame
+	check(main.flash_dialog != null and main.flash_dialog.visible
+			and main.flash_dialog.ok_button_text == "Flash",
+		"Flash asks before it replaces the card")
+	main.flash_dialog.confirmed.emit()
+	for i in 4:
+		await process_frame
+	check(main.message_label.text.contains("wrote 2 entries") and main._hardware_action == ""
+			and main.hardware_panel != null and not main.hardware_panel.busy
+			and main.hardware_panel.progress_label.text.contains("2 entries"),
+		"and the panel and the message both say what was written (%s)" % main.message_label.text)
+	main.hardware_panel.hide()
+	main.hardware.runner = Callable()
+	main._use_bank("")
+	DirAccess.remove_absolute(bank_file)
+	if FileAccess.file_exists(status_file):
+		DirAccess.remove_absolute(status_file)
 
 	# ---- feedback leaves through an outbox --------------------------------------------
 	# The outbox is the deliverable and the only thing tested: the network belongs to

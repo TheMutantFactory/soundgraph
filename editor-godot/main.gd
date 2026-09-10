@@ -33,6 +33,9 @@ const Faceplate := preload("res://faceplate.gd")
 ## The edges, the grain and the screws — everything about a faceplate that a stylebox
 ## cannot draw.
 const PanelHardware := preload("res://panel_hardware.gd")
+const PatchBank := preload("res://patch_bank.gd")
+const AxolotiLink := preload("res://axoloti_link.gd")
+const HardwarePanel := preload("res://hardware_panel.gd")
 
 ## A panel's own geometry, which is not the editor's.
 ##
@@ -391,6 +394,9 @@ var keyboard_mode := "full"
 ## What is open, shown so "which patch am I looking at" is never a guess.
 var document_label: RichTextLabel
 var document_name := "untitled"
+## Where the document came from, when it came from a file: what "Add current patch"
+## puts in a bank. Empty for a new, handed-over or downloaded patch.
+var document_path := ""
 var diagnostics_list: VBoxContainer
 ## Node id -> NodeState.Health, for the nodes the last validation had something to say
 ## about. Absent means well, which is the overwhelmingly normal case and the reason this
@@ -799,6 +805,9 @@ func _build_ui() -> void:
 	toolbar.add_node_requested.connect(_open_node_browser)
 	toolbar.feedback_requested.connect(_open_feedback)
 	toolbar.quit_requested.connect(_quit_by_hand)
+	toolbar.scan_requested.connect(_scan_hardware)
+	toolbar.flash_requested.connect(_flash_hardware)
+	_use_bank(str(Settings.fetch("hardware_bank", "")), true)
 	toolbar.undo_requested.connect(_undo)
 	toolbar.redo_requested.connect(_redo)
 	toolbar.example_chosen.connect(_load_example)
@@ -3900,6 +3909,241 @@ func _quit_by_hand() -> void:
 	dialog.popup_centered()
 
 
+# ---- hardware: the board on USB, and the bank Flash writes -----------------------------
+# The work is embedded/axoloti/tools/hw.py, run as its own process through AxolotiLink
+# and read back from its status file every frame while it runs. The editor never talks
+# USB itself: the driver, the codegen and the baker already exist and are hardware-
+# verified, and a second copy of any of them in GDScript would be the copy that drifts.
+var hardware := AxolotiLink.new()
+var bank: PatchBank
+var hardware_panel: HardwarePanel
+var flash_dialog: ConfirmationDialog
+var bank_dialog: FileDialog
+var _hardware_action := ""
+var _last_scan: Dictionary = {}
+
+
+func _open_hardware_panel() -> void:
+	if hardware_panel == null:
+		hardware_panel = HardwarePanel.new()
+		hardware_panel.scan_requested.connect(_scan_hardware)
+		hardware_panel.flash_requested.connect(_flash_hardware)
+		hardware_panel.new_bank_requested.connect(func() -> void: _pick_bank(true))
+		hardware_panel.open_bank_requested.connect(func() -> void: _pick_bank(false))
+		hardware_panel.add_current_requested.connect(_add_current_to_bank)
+		hardware_panel.add_file_requested.connect(_pick_patch_for_bank)
+		hardware_panel.bank_edited.connect(_save_bank)
+		add_child(hardware_panel)
+	hardware_panel.bank = bank
+	hardware_panel.show_board(_last_scan)
+	hardware_panel.show_bank()
+	hardware_panel.show_progress(hardware.status() if _hardware_action != "" else {})
+	if not hardware_panel.visible:
+		hardware_panel.popup_centered()
+
+
+## Loads the bank at `path` and makes it the one Flash writes. Quiet at boot, when a
+## bank that has gone missing is not news worth a message.
+func _use_bank(path: String, quiet := false) -> void:
+	if path == "":
+		bank = null
+		Settings.store("hardware_bank", "")
+	else:
+		var loaded := PatchBank.new()
+		var problem := loaded.load_file(path)
+		if problem != "":
+			if not quiet:
+				_say(problem)
+			return
+		bank = loaded
+		Settings.store("hardware_bank", path)
+	if hardware_panel != null:
+		hardware_panel.bank = bank
+		hardware_panel.show_bank()
+
+
+func _save_bank() -> void:
+	if bank == null:
+		return
+	var problem := bank.save()
+	if problem != "":
+		_say(problem)
+	if hardware_panel != null:
+		hardware_panel.show_bank()
+
+
+## A new bank (save dialog) or an existing one (open dialog). One FileDialog, remade
+## each time: its mode is the difference, and a dialog that outlives its question
+## answers the wrong one.
+func _pick_bank(fresh: bool) -> void:
+	if bank_dialog != null:
+		bank_dialog.queue_free()
+	bank_dialog = FileDialog.new()
+	bank_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	bank_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE if fresh else FileDialog.FILE_MODE_OPEN_FILE
+	bank_dialog.title = "New bank" if fresh else "Open bank"
+	bank_dialog.filters = PackedStringArray(["*.json ; Patch banks"])
+	bank_dialog.size = Vector2i(Design.scale(720), Design.scale(480))
+	if bank != null and bank.path != "":
+		bank_dialog.current_dir = bank.path.get_base_dir()
+	elif document_path != "":
+		bank_dialog.current_dir = document_path.get_base_dir()
+	bank_dialog.file_selected.connect(func(path: String) -> void:
+		if fresh:
+			var made := PatchBank.new()
+			made.path = path
+			made.name = path.get_file().get_basename().replace("-", " ").replace("_", " ")
+			var problem := made.save()
+			if problem != "":
+				_say(problem)
+				return
+		_use_bank(path)
+		if bank != null:
+			_say("%s is what Flash writes" % bank.name))
+	add_child(bank_dialog)
+	bank_dialog.popup_centered()
+
+
+func _pick_patch_for_bank() -> void:
+	if bank == null:
+		return
+	if bank_dialog != null:
+		bank_dialog.queue_free()
+	bank_dialog = FileDialog.new()
+	bank_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	bank_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILES
+	bank_dialog.title = "Add patches to %s" % bank.name
+	bank_dialog.filters = PackedStringArray(["*.json ; Patches"])
+	bank_dialog.size = Vector2i(Design.scale(720), Design.scale(480))
+	bank_dialog.current_dir = bank.path.get_base_dir()
+	bank_dialog.files_selected.connect(func(paths: PackedStringArray) -> void:
+		for path in paths:
+			bank.add(path)
+		_save_bank()
+		_say("added %d to %s" % [paths.size(), bank.name]))
+	add_child(bank_dialog)
+	bank_dialog.popup_centered()
+
+
+## The open document, as the bank's next entry. A bank lists files, so an unsaved patch
+## has to be saved first; the message says so rather than inventing a file.
+func _add_current_to_bank() -> void:
+	if bank == null:
+		_say("make or open a bank first")
+		_open_hardware_panel()
+		return
+	if document_path == "" or not FileAccess.file_exists(document_path):
+		_say("save the patch first: a bank lists files")
+		return
+	var index := bank.add(document_path)
+	_save_bank()
+	_say("%s is entry %d of %s" % [str(bank.entries[index]["name"]), index, bank.name])
+
+
+func _scan_hardware() -> void:
+	if _hardware_action != "":
+		_say("still %s" % ("scanning" if _hardware_action == "scan" else "flashing"))
+		return
+	if not hardware.start(["scan"]):
+		_say("could not start the hardware tool (%s)" % AxolotiLink.python_path())
+		return
+	_hardware_action = "scan"
+	_say("looking for an Axoloti on USB…")
+	if hardware_panel != null:
+		hardware_panel.set_busy(true)
+		hardware_panel.show_progress({})
+
+
+## Flash asks first. It replaces the whole bank on the board's card, and a card is a
+## thing somebody may have set up by hand.
+func _flash_hardware() -> void:
+	if _hardware_action != "":
+		_say("still %s" % ("scanning" if _hardware_action == "scan" else "flashing"))
+		return
+	if bank == null or bank.entries.is_empty():
+		_say("choose a bank with something in it first")
+		_open_hardware_panel()
+		return
+	var lost := bank.missing()
+	if not lost.is_empty():
+		_say("the bank points at files that are not there: %s" % ", ".join(lost))
+		_open_hardware_panel()
+		return
+	if flash_dialog != null and is_instance_valid(flash_dialog):
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Flash the board?"
+	dialog.dialog_text = "Bake the %d entries of %s and write them to the board's card. " 		% [bank.entries.size(), bank.name] 		+ "Whatever bank is on the card now is replaced."
+	dialog.ok_button_text = "Flash"
+	dialog.confirmed.connect(func() -> void:
+		flash_dialog = null
+		dialog.queue_free()
+		_start_flash())
+	dialog.canceled.connect(func() -> void:
+		flash_dialog = null
+		dialog.queue_free())
+	flash_dialog = dialog
+	add_child(dialog)
+	dialog.popup_centered()
+
+
+func _start_flash() -> void:
+	if bank == null:
+		return
+	if not hardware.start(["flash", bank.path]):
+		_say("could not start the hardware tool (%s)" % AxolotiLink.python_path())
+		return
+	_hardware_action = "flash"
+	_say("flashing %s…" % bank.name)
+	_open_hardware_panel()
+	hardware_panel.set_busy(true)
+	hardware_panel.show_progress({})
+
+
+## Every frame while the tool runs: the panel follows the status file, and the moment
+## the file says done or failed and the process has gone, the result is read out.
+func _watch_hardware() -> void:
+	if _hardware_action == "":
+		return
+	var status := hardware.status()
+	if hardware_panel != null and hardware_panel.visible:
+		hardware_panel.show_progress(status)
+	var state := str(status.get("state", ""))
+	if state != "done" and state != "failed":
+		if not hardware.running() and not status.is_empty():
+			# The process is gone and the file still says running: it died without
+			# writing its ending, which the tool never does on purpose.
+			status["state"] = "failed"
+			status["error"] = str(status.get("error", "the hardware tool stopped without a result"))
+			state = "failed"
+		elif not hardware.running() and status.is_empty() and not hardware.runner.is_valid():
+			state = "failed"
+			status = {"state": "failed", "action": _hardware_action,
+				"error": "the hardware tool wrote nothing (is Python and the venv there?)"}
+		else:
+			return
+	if hardware.running():
+		return
+	var action := _hardware_action
+	_hardware_action = ""
+	if action == "scan":
+		_last_scan = status
+		if hardware_panel != null:
+			hardware_panel.show_board(status)
+		_say(HardwarePanel.describe_board(status))
+	else:
+		if state == "failed":
+			_say("flash failed: %s" % str(status.get("error", "see the hardware panel")))
+		elif bool(status.get("written", false)):
+			_say("wrote %d entries to the card; power the board from the card to try them"
+				% int(status.get("entries", 0)))
+		else:
+			_say("baked %d entries into %s" % [int(status.get("entries", 0)), str(status.get("out_dir", ""))])
+	if hardware_panel != null:
+		hardware_panel.set_busy(false)
+		hardware_panel.show_progress(status)
+
+
 func shutdown_audio() -> void:
 	set_process(false)
 	# Before the engine goes: the panel is drawn by a plugin the engine owns.
@@ -3968,6 +4212,7 @@ func _notification(what: int) -> void:
 
 func _process(_delta: float) -> void:
 	_watch_for_quit_request(_delta)
+	_watch_hardware()
 	# The roll's scrollbar follows the roll however the roll moved — wheel, page
 	# turn, a menu changing the window. Guarded, because resizing the range can
 	# clamp the value and echo back as a user gesture.
@@ -12180,6 +12425,7 @@ func _load_example(name: String) -> void:
 	if file == null:
 		_say("could not open %s" % path)
 		return
+	document_path = path
 	_set_document_name(path.get_file())
 	_load_text(file.get_as_text())
 
@@ -12199,6 +12445,7 @@ func _on_file_selected(path: String) -> void:
 		# sound is what a patch is for.
 		_capture_plugin_states()
 		out.store_string(engine.format_patch(_patch_text_with_plugin_states()))
+		document_path = path
 		_set_document_name(path.get_file())
 		_say("saved")
 		return
@@ -12224,6 +12471,7 @@ func _on_file_selected(path: String) -> void:
 	# Named, which opening through the dialog never did — the toolbar went on showing
 	# whatever had been open before, and the one place that says which file you are
 	# editing was quietly lying.
+	document_path = path
 	_set_document_name(path.get_file())
 	_load_text(file.get_as_text())
 
@@ -12284,6 +12532,7 @@ func _load_handed_off_patch() -> bool:
 	if not carried_name.is_empty():
 		file_name = "%s.json" % carried_name.to_lower().replace(" ", "-")
 
+	document_path = ""
 	_set_document_name(file_name)
 	_load_text(str(envelope["text"]))
 	_say("opened %s from the browser page" %
@@ -12339,6 +12588,7 @@ func _on_web_file_chosen(arguments: Array) -> void:
 		_import_module(str(arguments[0]),
 			ModuleImport.name_from_path(chosen_name) if not chosen_name.is_empty() else "module")
 		return
+	document_path = ""
 	_set_document_name(chosen_name)
 	_load_text(str(arguments[0]))
 
@@ -12407,6 +12657,7 @@ func _web_save() -> void:
 	var name: String = patch.get("metadata", {}).get("name", "patch")
 	var file_name := name.to_lower().replace(" ", "-") + ".json"
 	JavaScriptBridge.download_buffer(text.to_utf8_buffer(), file_name, "application/json")
+	document_path = ""
 	_set_document_name(file_name)
 	_say("downloaded %s" % file_name)
 
@@ -12444,6 +12695,7 @@ func _new_file() -> void:
 				"to": {"node": "out", "port": "right"}},
 		],
 	}))
+	document_path = ""
 	_set_document_name("")
 
 

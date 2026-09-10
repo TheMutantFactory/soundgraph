@@ -1589,3 +1589,40 @@ Consequences:
 The gate's text output is unchanged. `run/` is already ignored. A gate
 older than this leaves no file, and the window says so rather than
 guessing.
+
+## 2026-09-10 — Scan and Flash: the editor's hand on the Axoloti, through a bank file
+
+Decision:
+Two buttons beside Add node. Scan looks for an Axoloti on USB and reads
+back its firmware, card and load; Flash bakes an ordered bank of patches
+and writes it to the board's card. The bank is a small JSON file
+(`schema/bank.schema.json`): a name and an ordered list of entries, each a
+directory name and a patch path relative to the bank file. Entry order is
+MIDI Program Change order and the first entry is what the board boots
+into. The editor keeps the bank's path in settings as "what Flash writes";
+a hardware panel edits the list (add the open patch, add files, up, down,
+remove) and shows the flash as it happens. The work is one Python tool,
+`embedded/axoloti/tools/hw.py`, over the driver, the codegen and the baker
+that already exist; it runs as its own process and reports through
+`run/axoloti-status.json`, which the editor draws every frame.
+
+Reason:
+A show set is a dozen patches switched from a MIDI controller, and the
+firmware's own loader already does that from a card. What was missing was
+a way to say which patches, in what order, from the editor, and to get
+them onto the board without a terminal. The board's driver, the compiler
+and the card layout were all hardware-verified in embedded/axoloti; the
+editor should call them, not restate them.
+
+Alternatives:
+Talking USB from GDScript (a second driver to keep faithful); flashing the
+open patch alone (no set list, no Program Change); a menu instead of
+buttons (a bench plugs and re-flashes twenty times an hour).
+
+Consequences:
+Windows works: the driver finds libusb from the libusb-package wheel, the
+bulk interface is already WinUSB under the Axoloti installer, the SDK
+fetcher opens the pinned dmg with 7-Zip, and codegen finds the Arm
+toolchain where its installer puts it. The compiler itself is not
+bundled; Scan says when it is missing. The editor never blocks on the
+board: a scan or flash is a process, and the panel follows its file.

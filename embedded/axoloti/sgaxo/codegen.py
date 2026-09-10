@@ -42,7 +42,20 @@ BUILD = HERE / "build"
 SDK = RIG / "sdk"
 REPO = RIG.parent.parent
 DSP_CORE_SRC = REPO / "dsp-core" / "src"
-SG_VALIDATE = REPO / "build" / "bin" / "sg-validate"
+
+
+def _first_existing(*candidates):
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+# Windows builds put an .exe on it; the first spelling that exists wins.
+SG_VALIDATE = _first_existing(
+    REPO / "build" / "bin" / "sg-validate",
+    REPO / "build" / "bin" / "sg-validate.exe",
+    REPO / "build" / "bin" / "Release" / "sg-validate.exe")
 
 # SDRAM map: 0xC0000000 +4MB kernel delay lines (.sdram section);
 # 0xC0400000 capture; 0xC0480000 +3.5MB sample buffers, host-uploaded.
@@ -52,9 +65,40 @@ BUFFER_POOL_SIZE = 0x380000
 SAMPLE_RATE = 48000.0
 FWID = "0xe95bac96"
 
-CXX = "arm-none-eabi-g++"
-OBJCOPY = "arm-none-eabi-objcopy"
-NM = "arm-none-eabi-nm"
+
+
+def find_tool(name):
+    """The toolchain binary, or None: the path first, then SOUNDGRAPH_ARM_BIN,
+    then where the Arm installer puts it on Windows. None rather than the bare
+    name, so a missing compiler is a sentence in a report instead of a
+    FileNotFoundError from subprocess."""
+    import glob
+    import os
+    import shutil
+    found = shutil.which(name)
+    if found:
+        return found
+    roots = []
+    if os.environ.get("SOUNDGRAPH_ARM_BIN"):
+        roots.append(os.environ["SOUNDGRAPH_ARM_BIN"])
+    for programs in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"),
+                     os.environ.get("LOCALAPPDATA")):
+        if programs:
+            roots.extend(glob.glob(os.path.join(
+                programs, "Arm GNU Toolchain arm-none-eabi", "*", "bin")))
+            roots.extend(glob.glob(os.path.join(
+                programs, "GNU Arm Embedded Toolchain", "*", "bin")))
+    for root in roots:
+        for spelling in (name, name + ".exe"):
+            candidate = os.path.join(root, spelling)
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
+CXX = find_tool("arm-none-eabi-g++") or "arm-none-eabi-g++"
+OBJCOPY = find_tool("arm-none-eabi-objcopy") or "arm-none-eabi-objcopy"
+NM = find_tool("arm-none-eabi-nm") or "arm-none-eabi-nm"
 
 CXXFLAGS = [
     "-nostdlib", "-ffreestanding", "-fno-exceptions", "-fno-rtti",

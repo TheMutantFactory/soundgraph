@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soundgraph.dev/schema/bank.schema.json",
+  "title": "SoundGraph patch bank",
+  "description": "An ordered list of patches for a board's card. Entry order is MIDI Program Change order: program 0 is the first entry, and the first entry is what the board boots into. Patch paths are relative to the bank file or absolute.",
+  "type": "object",
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "name": { "type": "string", "description": "What the set is called; a label, not an identifier." },
+    "target": { "type": "string", "description": "The board family the bank is baked for. Only \"axoloti\" today.", "default": "axoloti" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "patch"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The entry's directory on the card, unique within the bank: letters, digits, - and _."
+          },
+          "patch": { "type": "string", "description": "The patch file, relative to the bank file or absolute." }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

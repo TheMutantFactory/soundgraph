@@ -25,6 +25,9 @@ signal make_module_requested
 ## Somebody wants to tell the workbench something. Main owns the dialog.
 signal feedback_requested
 signal quit_requested
+## The board on USB: look for it, and write the chosen bank to its card. Main owns both.
+signal scan_requested
+signal flash_requested
 signal mute_toggled
 
 enum Rung {
@@ -57,6 +60,7 @@ const EXAMPLE_SUBMENU_THRESHOLD := 16
 var toolbar_identity: VBoxContainer
 var toolbar_title: Label
 var toolbar_edit_group: HBoxContainer
+var toolbar_hardware_group: HBoxContainer
 var toolbar_menu_button: MenuButton
 var toolbar_identity_margin: MarginContainer
 var toolbar_menu_popup: PopupMenu
@@ -284,6 +288,25 @@ func _build() -> void:
 	add_button.pressed.connect(func() -> void: add_node_requested.emit())
 	_primary_buttons.append(add_button)
 	graph_group.add_child(Design.make_primary(_defocus(add_button) as Button))
+
+	# Scan and Flash, beside the verb: the two things a board on USB is for. They are
+	# plain buttons rather than menu rows because at a bench the board is plugged in,
+	# unplugged and re-flashed twenty times an hour, and a menu is a fine place for a
+	# thing done twice a day. They go with undo and redo when the bar runs short.
+	var hardware_group := _toolbar_group(bar)
+	toolbar_hardware_group = hardware_group
+	var scan_button := Button.new()
+	scan_button.text = "Scan"
+	scan_button.tooltip_text = "Look for an Axoloti on USB, and what it is running"
+	scan_button.icon = _icon(Icons.Kind.PLUG, Design.INK_NORMAL)
+	_icon_kinds[scan_button] = Icons.Kind.PLUG
+	scan_button.pressed.connect(func() -> void: scan_requested.emit())
+	hardware_group.add_child(_defocus(scan_button))
+	var flash_button := Button.new()
+	flash_button.text = "Flash"
+	flash_button.tooltip_text = "Write the chosen bank of patches to the board's card"
+	flash_button.pressed.connect(func() -> void: flash_requested.emit())
+	hardware_group.add_child(_defocus(flash_button))
 
 	# Auto-place and Arrange selection behind one menu, for the same reason. Both are
 	# occasional; the second is usually unavailable anyway, and a permanently greyed
@@ -869,6 +892,7 @@ func _apply_toolbar_rung(rung: int) -> void:
 		# inside it, it is the one control whose loss would strand the user.
 		toolbar_add_button.text = "+  Add node" if toolbar_rung < Rung.VERB else "+"
 	_show_toolbar_group(toolbar_edit_group, toolbar_rung < Rung.EDIT)
+	_show_toolbar_group(toolbar_hardware_group, toolbar_rung < Rung.EDIT)
 	if transport_word != null:
 		transport_word.visible = toolbar_rung < Rung.IDENTITY
 

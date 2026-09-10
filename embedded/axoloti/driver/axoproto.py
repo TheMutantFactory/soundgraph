@@ -78,7 +78,20 @@ def _backend():
             be = usb.backend.libusb1.get_backend(find_library=lambda x, p=path: p)
         if be is not None:
             return be
-    raise BoardNotFound("libusb-1.0 not found (brew install libusb)")
+    # Windows has no brew and no libusb on the path; the libusb-package wheel
+    # carries the DLL, and the board's bulk interface is already bound to WinUSB
+    # by the Axoloti installer, which is all libusb needs there.
+    try:
+        import libusb_package
+    except ImportError:
+        libusb_package = None
+    if libusb_package is not None:
+        be = usb.backend.libusb1.get_backend(
+            find_library=libusb_package.find_library)
+        if be is not None:
+            return be
+    raise BoardNotFound(
+        "libusb-1.0 not found (brew install libusb, or pip install libusb-package)")
 
 
 class Axoloti:
