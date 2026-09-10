@@ -3947,9 +3947,18 @@ func _open_hardware_panel() -> void:
 		Design.show_fitted(hardware_panel, HardwarePanel.wanted_size())
 
 
+## The set list that ships: examples/banks/demo.json, every entry hardware-verified to
+## compile for the Axoloti. What Flash writes until somebody chooses otherwise.
+static func default_bank_path() -> String:
+	return ProjectSettings.globalize_path("res://").path_join("../examples/banks/demo.json") 		.simplify_path()
+
+
 ## Loads the bank at `path` and makes it the one Flash writes. Quiet at boot, when a
-## bank that has gone missing is not news worth a message.
+## bank that has gone missing is not news worth a message — and at boot with nothing
+## chosen, the demo set is the bank, so Flash does something the first time.
 func _use_bank(path: String, quiet := false) -> void:
+	if path == "" and quiet and FileAccess.file_exists(default_bank_path()):
+		path = default_bank_path()
 	if path == "":
 		bank = null
 		Settings.store("hardware_bank", "")
@@ -3988,10 +3997,12 @@ func _pick_bank(fresh: bool) -> void:
 	bank_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE if fresh else FileDialog.FILE_MODE_OPEN_FILE
 	bank_dialog.title = "New bank" if fresh else "Open bank"
 	bank_dialog.filters = PackedStringArray(["*.json ; Patch banks"])
-	if bank != null and bank.path != "":
-		bank_dialog.current_dir = bank.path.get_base_dir()
-	elif document_path != "":
-		bank_dialog.current_dir = document_path.get_base_dir()
+	# Opens among the banks, never among the patches. It used to open where the
+	# document lived, which for the boot patch is the synth examples, and a new bank
+	# saved there over an example's name replaced the example.
+	bank_dialog.current_dir = bank.path.get_base_dir() if bank != null and bank.path != "" 		else default_bank_path().get_base_dir()
+	if fresh:
+		bank_dialog.current_file = "my-set.json"
 	bank_dialog.file_selected.connect(func(path: String) -> void:
 		if fresh:
 			var made := PatchBank.new()

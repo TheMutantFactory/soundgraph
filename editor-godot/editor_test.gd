@@ -1168,6 +1168,14 @@ func _initialize() -> void:
 			and scan_button.get_theme_stylebox("normal") != lit_box,
 		"and a scan that finds nothing takes the light off again")
 	main.hardware.runner = Callable()
+	# The demo set ships in the repository and is the bank until somebody picks one:
+	# ten entries, each of which compiled for the board when the set was made.
+	main._use_bank("", true)
+	check(main.bank != null and main.bank.path == main.default_bank_path()
+			and main.bank.entries.size() == 10 and main.bank.missing().is_empty()
+			and str(main.bank.entries[0]["name"]) == "first-synth",
+		"with nothing chosen, the demo set is what Flash writes (%d entries, none missing)"
+			% (main.bank.entries.size() if main.bank != null else 0))
 	main._use_bank("")
 	DirAccess.remove_absolute(bank_file)
 	if FileAccess.file_exists(status_file):

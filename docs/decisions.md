@@ -1652,3 +1652,25 @@ Consequences:
 Dialogs fit any window the editor runs in and are readable at every
 interface size. The green is a fifth palette token and is filled, never
 outlined, so it cannot be mistaken for the panic control.
+
+## 2026-09-10 — The demo set is the default bank
+
+Decision:
+`examples/banks/demo.json` ships in the repository: ten entries, each
+hardware-verified to compile for the Axoloti, in Program Change order with
+first-synth first because the first entry is what the board boots into.
+With no bank chosen, the editor makes it the bank at boot, so Flash does
+something the first time it is pressed.
+
+Reason:
+A Flash button that says "choose a bank first" on a show floor is a
+button that does nothing. The set was chosen from the demo shortlist by
+sweeping every example through the codegen: poly-five, axe, duo-lead and
+two sfxr rolls are refused (an oscillator's FM input, pulse-width
+sweeps), typing and babble use SampleHold, and warehouse compiles but is
+slower than real time on the board.
+
+Consequences:
+Editing the default bank from the panel writes to the tracked file, which
+is what a demo repository wants; New bank… is the way to a set of one's
+own. The refusals are the codegen's next work, poly-five first.

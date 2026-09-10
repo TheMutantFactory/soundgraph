@@ -107,6 +107,15 @@ checked on Tuesday:
 | 7 | `warehouse.json` | the 85-node, 4-voice one that runs on the Axoloti |
 | 8 | `typing.json` | it talks |
 
+The Axoloti gets its own set: `examples/banks/demo.json`, ten entries the editor's Flash
+button writes to the card until another bank is chosen — first-synth (what the board
+boots into), plucked-string, acid-bass, mallard, coin, jump, powerup, hurt, explode and
+yes-dear, in Program Change order. Every one compiled and was written to a board on
+2026-09-10. Not in it, and why: poly-five, axe and duo-lead connect an oscillator's
+FM input, which the target does not take yet; shoot and laser-shoot sweep pulse width;
+typing and babble use SampleHold; warehouse compiles but renders slower than real time
+on the board.
+
 Everything else stays reachable through search, not the front row.
 
 ## Schedule
