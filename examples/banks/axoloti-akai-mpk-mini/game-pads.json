@@ -592,7 +592,7 @@
         "y": 200.0
       },
       "parameters": {
-        "cc": 1,
+        "cc": 2,
         "low": 0.0,
         "high": 1.0,
         "resting": 0.8,

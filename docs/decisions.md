@@ -1794,3 +1794,26 @@ desktop, which is finer, not coarser; the 64-frame fidelity suite still
 passes. Loads at 16: Poly Five's five voices 51%, a drum about 6%, a DX7
 preset with four drums and an echo 66%. Five voices plus eight drums is
 123% and will not run; four voices plus four drums, or five plus two, will.
+
+## 2026-09-10 — K1 is the stick's number; the knobs are K2 to K8
+
+Decision:
+The MPK set leaves K1 alone and maps its functions to K2–K8. The
+generator refuses a knob whose CC the stick also sends. Poly Five's pitch
+bend and detune are frequency ratios multiplied in, not octaves into fm.
+
+Reason:
+On this MPK, K1 and the stick's up-down axis both send CC 1, and the stick
+sends 0 when let go. Every patch read that 0 as K1 turned fully down: the
+cutoff four octaves under, a bright DX7 or FM preset effectively silent,
+Poly Five muffled the moment the stick was touched. The board's own tally
+showed the numbers; a sweep of all 199 entries rendered on the board found
+none silent at velocity 8 or 100, and a Program Change walk found every
+entry to 127 landing where it should, which left the collision. The fm
+route was a separate cost: an fm input that moves is an exp2 per sample
+per oscillator, and turning a knob pushed Poly Five into overrun.
+
+Consequences:
+K1 does nothing in this set. Program numbers are seven bits, so entries
+past 127 are reached by walking. Poly Five sits at 83% of a codec call
+still and 91% with everything moving.

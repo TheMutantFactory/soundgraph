@@ -342,7 +342,7 @@
         "y": 600.0
       },
       "parameters": {
-        "cc": 4,
+        "cc": 5,
         "low": 1.0,
         "high": 1.035,
         "resting": 0.14,
@@ -368,7 +368,7 @@
         "y": 800.0
       },
       "parameters": {
-        "cc": 1,
+        "cc": 2,
         "low": -3.0,
         "high": 3.0,
         "resting": 0.5,
@@ -399,7 +399,7 @@
         "y": 950.0
       },
       "parameters": {
-        "cc": 2,
+        "cc": 3,
         "low": 0.0,
         "high": 0.9,
         "resting": 0.38888888888888884,
@@ -425,7 +425,7 @@
         "y": 200.0
       },
       "parameters": {
-        "cc": 3,
+        "cc": 4,
         "low": 0.0,
         "high": 1.0,
         "resting": 0.8,
@@ -454,7 +454,7 @@
         "y": 1100.0
       },
       "parameters": {
-        "cc": 5,
+        "cc": 6,
         "low": 0.0,
         "high": 8.0,
         "resting": 0.0,

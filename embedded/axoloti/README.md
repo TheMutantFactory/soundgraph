@@ -204,8 +204,11 @@ block end, and no block is handed to a node that still reads it.
 `examples/banks/axoloti-akai-mpk-mini/` and its bank: Poly Five with the
 kit on the pads, eight game sounds on the pads, the kit alone, and one
 patch per DX7 and FM preset with a filter, an echo and four drums — 199
-entries, knobs K1–K8 on MidiCC nodes (CC 1–8, what this MPK sends; a mk3
-factory program says 70–77), pads on a NoteTriggers row at note 36, and
+entries, knobs K2–K8 on MidiCC nodes (CC 2–8, what this MPK sends; a mk3
+factory program says 70–77 — K1 is left alone, because its CC 1 is also
+the stick's up-down axis, and the stick sends 0 when let go, which the
+patch read as K1 turned all the way down and a bright preset went silent),
+pads on a NoteTriggers row at note 36, and
 the joystick: its CC axis bends the pitch up two semitones, its bend axis
 is the volume, left quieter and right louder. Poly Five carries no echo
 (the engine copies everything after the keyboard once per voice, and an
@@ -219,9 +222,10 @@ axes moving at once, and matches the native render to 1e-5. The game pads
 carry six sounds; eight were 96%. The bank asks for
 `"program_change": "prev-next"`: on the board program 0 is the previous
 entry, 1 the next, 2 the first, and every other number the entry it names,
-so the MPK's PROG CHANGE pads walk a bank of two hundred. A mk2 or a
-re-programmed mini sends other numbers: change `CONTROLLER` in the script
-and run it again.
+so the MPK's PROG CHANGE pads walk a bank of two hundred: a program number
+is seven bits, so entries past 127 are reached by walking, and the walk was
+checked on the board entry by entry. A mk2 or a re-programmed mini sends
+other numbers: change `CONTROLLER` in the script and run it again.
 
 ## Shipping standalone: the SD bank
 
