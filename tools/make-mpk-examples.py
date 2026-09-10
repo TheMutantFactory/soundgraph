@@ -331,9 +331,14 @@ def poly5_pads(kit_lanes=4):
                     wires + sum_wires + vol_wires, out)
 
 
-GAME_PADS = [  # pads 1..6; eight sounds put the board at 96% of a codec call
-    ("game/coin.json", "coin"), ("game/jump.json", "jump"), ("game/powerup.json", "powerup"),
-    ("game/hurt.json", "hurt"), ("game/explode.json", "explode"), ("sfxr/explosion.json", "boom"),
+# Pads 1..6 (eight sounds put the board at 96% of a codec call), each with the gain
+# that brings its peak on the card to about 0.4, where Poly Five sits: as drawn, the game
+# sounds peak between 0.05 and 0.14, eleven decibels under the synth, and the pads
+# entry came up quiet on the board while matching the desktop's render exactly.
+GAME_PADS = [
+    ("game/coin.json", "coin", 10.0), ("game/jump.json", "jump", 16.0),
+    ("game/powerup.json", "powerup", 8.0), ("game/hurt.json", "hurt", 16.0),
+    ("game/explode.json", "explode", 5.6), ("sfxr/explosion.json", "boom", 5.6),
 ]
 
 
@@ -342,8 +347,11 @@ def game_pads():
     parts, extra, wires = [], [], []
     extra.append(node("pads", "NoteTriggers", {"base": CONTROLLER["pads_base"], "shift": 0}))
     feeds = []
-    for lane, (rel, prefix) in enumerate(GAME_PADS, start=1):
+    for lane, (rel, prefix, gain) in enumerate(GAME_PADS, start=1):
         part = Part(load(rel), prefix)
+        part.nodes.append(node(f"{prefix}_norm", "Gain", {"gain": gain}, x=2000, y=lane * 300))
+        part.connections.append(wire(part.feeds[0], f"{prefix}_norm.in"))
+        part.feeds = [f"{prefix}_norm.out"]
         inputs = [n for n in part.nodes if n["type"] == "Input" and n.get("host") == "note"]
         for inp in inputs:
             short = inp["id"][len(prefix) + 1:]
@@ -378,12 +386,14 @@ def kit_alone():
                     out, level_knob=2)
 
 
-def preset_with_pads(rel, name, kit_lanes):
+def preset_with_pads(rel, name, kit_lanes, boost=1.0):
     """A DX7 or FM preset on the keys with a filter, an echo and the kit.
     K2 cutoff  K3 resonance  K4 level  K5 echo time  K6 echo feedback  K7 echo level
     K8 drums level (K1 shares CC 1 with the stick's pitch axis, so it is left alone)
     Stick up: pitch bend, two semitones. Stick left/right: volume, quieter to louder."""
-    voice = Part(load(rel), "v")
+    # The source's own ids wear "src_"; everything added here wears "v_", so a preset
+    # with a node called "filter" (duo-lead has one) does not collide with ours.
+    voice = Part(load(rel), "src")
     extra, wires = [], []
     # ---- the stick ----------------------------------------------------------------
     # The preset's operators live inside a module, so the pitch goes in as a ratio on
@@ -404,7 +414,7 @@ def preset_with_pads(rel, name, kit_lanes):
         knob("v_cutoff", 2, -4.0, 2.5, 1.0, x=1200, y=200),
         knob("v_resonance", 3, 0.0, 0.85, 0.2 / 0.85, x=1200, y=350),
         node("v_level", "Gain", {"gain": 0.8}, x=1800, y=0),
-        knob("v_level_knob", 4, 0.0, 1.0, 0.8, x=1500, y=200),
+        knob("v_level_knob", 4, 0.0, boost, 0.8, x=1500, y=200),  # boost: a quiet source's headroom
     ]
     wires += [wire(voice.feeds[0], "v_filter.in"), wire("v_cutoff.out", "v_filter.cutoff_mod"),
               wire("v_resonance.out", "v_filter.resonance"),
@@ -447,12 +457,24 @@ def main():
         (OUT / f"{entry_name}.json").write_text(json.dumps(patch, indent=2) + "\n", encoding="utf-8")
         entries.append({"name": entry_name, "patch": f"axoloti-akai-mpk-mini/{entry_name}.json"})
 
+    # The order is the set list, and the first eight are what the PROG CHANGE pads
+    # reach directly (pads 4 to 8 name entries 3 to 7; pad 3 is entry 0, pads 1 and 2
+    # walk). Synths first, the kit fifth, three DX7 voices, then the game sounds and
+    # the rest of the presets.
     emit("poly5-pads", poly5_pads(args.poly_kit_lanes))
-    emit("game-pads", game_pads())
+    for stem, boost in (("acid-bass", 1.0), ("duo-lead", 1.0), ("mallard", 3.0)):
+        # mallard peaks at 0.13 on the card as drawn, a third of the others; its level
+        # knob reaches three times as far.
+        emit(f"synth-{stem}", preset_with_pads(f"synths/{stem}.json", f"Synth {stem}", args.kit_lanes, boost))
     emit("drum-pads", kit_alone())
+    for stem in ("ep-road", "bell-glass", "bass-round"):
+        emit(f"dx7-{stem}", preset_with_pads(f"dx7/{stem}.json", f"DX7 {stem}", args.kit_lanes))
+    emit("game-pads", game_pads())
     for family in ("dx7", "fm"):
         for path in sorted((EXAMPLES / family).glob("*.json")):
             entry = f"{family}-{path.stem}"
+            if any(e["name"] == entry for e in entries):
+                continue  # already placed among the first eight
             emit(entry, preset_with_pads(f"{family}/{path.name}", f"{family.upper()} {path.stem}",
                                          args.kit_lanes))
 

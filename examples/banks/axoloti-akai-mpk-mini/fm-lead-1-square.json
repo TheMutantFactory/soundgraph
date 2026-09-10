@@ -6,16 +6,16 @@
   },
   "nodes": [
     {
-      "id": "v_note",
+      "id": "src_note",
       "type": "Input",
       "host": "note",
       "name": "Keyboard",
       "parameters": {}
     },
     {
-      "id": "v_mod",
+      "id": "src_mod",
       "type": "module",
-      "module": "v_opl2_operator",
+      "module": "src_opl2_operator",
       "name": "Operator 1",
       "parameters": {
         "ratio": 2,
@@ -28,9 +28,9 @@
       }
     },
     {
-      "id": "v_car",
+      "id": "src_car",
       "type": "module",
-      "module": "v_opl2_operator",
+      "module": "src_opl2_operator",
       "name": "Operator 2",
       "parameters": {
         "ratio": 1,
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": "v_mod_level",
+      "id": "src_mod_level",
       "type": "Gain",
       "name": "Operator 1 level",
       "parameters": {
@@ -50,7 +50,7 @@
       }
     },
     {
-      "id": "v_car_level",
+      "id": "src_car_level",
       "type": "Gain",
       "name": "Operator 2 level",
       "parameters": {
@@ -58,7 +58,7 @@
       }
     },
     {
-      "id": "v_sum",
+      "id": "src_sum",
       "type": "Add",
       "name": "Mix",
       "parameters": {}
@@ -661,7 +661,7 @@
         "port": "out"
       },
       "to": {
-        "node": "v_mod",
+        "node": "src_mod",
         "port": "note"
       }
     },
@@ -671,67 +671,67 @@
         "port": "out"
       },
       "to": {
-        "node": "v_car",
+        "node": "src_car",
         "port": "note"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_mod",
+        "node": "src_mod",
         "port": "gate"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_car",
+        "node": "src_car",
         "port": "gate"
       }
     },
     {
       "from": {
-        "node": "v_mod",
+        "node": "src_mod",
         "port": "out"
       },
       "to": {
-        "node": "v_mod_level",
+        "node": "src_mod_level",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_car",
+        "node": "src_car",
         "port": "out"
       },
       "to": {
-        "node": "v_car_level",
+        "node": "src_car_level",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_mod_level",
+        "node": "src_mod_level",
         "port": "out"
       },
       "to": {
-        "node": "v_sum",
+        "node": "src_sum",
         "port": "a"
       }
     },
     {
       "from": {
-        "node": "v_car_level",
+        "node": "src_car_level",
         "port": "out"
       },
       "to": {
-        "node": "v_sum",
+        "node": "src_sum",
         "port": "b"
       }
     },
@@ -1057,7 +1057,7 @@
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "frequency"
       },
       "to": {
@@ -1077,7 +1077,7 @@
     },
     {
       "from": {
-        "node": "v_sum",
+        "node": "src_sum",
         "port": "out"
       },
       "to": {
@@ -1287,7 +1287,7 @@
     }
   ],
   "modules": {
-    "v_opl2_operator": {
+    "src_opl2_operator": {
       "description": "One OPL2 operator: pitch ratio, shaped sine, envelope, VCA.",
       "nodes": [
         {

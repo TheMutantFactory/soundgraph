@@ -1,59 +1,218 @@
 {
-  "schema_version": 2,
+  "schema_version": 1,
   "metadata": {
-    "name": "FM fx-2-soundtrack",
+    "name": "Synth acid-bass",
     "controller": "Akai MPK mini, knobs on CC 1-8, pads from note 36"
   },
   "nodes": [
     {
-      "id": "src_note",
+      "id": "src_kb",
       "type": "Input",
-      "host": "note",
-      "name": "Keyboard",
-      "parameters": {}
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "host": "note"
     },
     {
-      "id": "src_mod",
-      "type": "module",
-      "module": "src_opl2_operator",
-      "name": "Modulator",
+      "id": "src_glide",
+      "type": "OnePoleFilter",
+      "position": {
+        "x": 340,
+        "y": 0
+      },
+      "name": "Glide",
       "parameters": {
-        "ratio": 2,
-        "attack": 1.1198,
-        "decay": 3.4556,
-        "sustain": 0.3548,
-        "release": 10,
-        "shape": 2,
-        "feedback": 0.04435
+        "cutoff": 8,
+        "mode": 0
       }
     },
     {
-      "id": "src_car",
-      "type": "module",
-      "module": "src_opl2_operator",
-      "name": "Carrier",
+      "id": "src_saw",
+      "type": "SawOscillator",
+      "position": {
+        "x": 680,
+        "y": 0
+      },
+      "name": "Saw",
       "parameters": {
-        "ratio": 1,
-        "attack": 0.5599,
-        "decay": 0.5759,
-        "sustain": 0.7079,
-        "release": 8.6391
+        "frequency": 110
       }
     },
     {
-      "id": "src_index",
+      "id": "src_sq",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 680,
+        "y": 400
+      },
+      "name": "Square",
+      "parameters": {
+        "frequency": 110,
+        "pulse_width": 0.5
+      }
+    },
+    {
+      "id": "src_saw_amp",
       "type": "Gain",
-      "name": "Modulator \u2192 Carrier",
+      "position": {
+        "x": 1020,
+        "y": 0
+      },
+      "name": "Saw Level",
       "parameters": {
-        "gain": 0.3016
+        "gain": 1.0
       }
     },
     {
-      "id": "src_car_level",
+      "id": "src_sq_amp",
       "type": "Gain",
-      "name": "Carrier level",
+      "position": {
+        "x": 1020,
+        "y": 400
+      },
+      "name": "Square Level",
       "parameters": {
-        "gain": 0.2113
+        "gain": 0.0
+      }
+    },
+    {
+      "id": "src_cut",
+      "type": "Constant",
+      "position": {
+        "x": 1020,
+        "y": 800
+      },
+      "name": "Cutoff",
+      "parameters": {
+        "value": 380
+      }
+    },
+    {
+      "id": "src_res",
+      "type": "Constant",
+      "position": {
+        "x": 1020,
+        "y": 1200
+      },
+      "name": "Resonance",
+      "parameters": {
+        "value": 0.75
+      }
+    },
+    {
+      "id": "src_filter1",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1360,
+        "y": 0
+      },
+      "name": "Pole Pair A",
+      "parameters": {
+        "cutoff": 380,
+        "resonance": 0.75,
+        "mode": 0
+      }
+    },
+    {
+      "id": "src_filter2",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1700,
+        "y": 0
+      },
+      "name": "Pole Pair B",
+      "parameters": {
+        "cutoff": 380,
+        "resonance": 0.75,
+        "mode": 0
+      }
+    },
+    {
+      "id": "src_fenv",
+      "type": "ADSR",
+      "position": {
+        "x": 340,
+        "y": 800
+      },
+      "name": "Filter Env",
+      "parameters": {
+        "attack": 0.003,
+        "decay": 0.16,
+        "sustain": 0.0,
+        "release": 0.16
+      }
+    },
+    {
+      "id": "src_envmod",
+      "type": "Multiply",
+      "position": {
+        "x": 680,
+        "y": 800
+      },
+      "name": "Env Mod",
+      "parameters": {
+        "factor": 2.2
+      }
+    },
+    {
+      "id": "src_acc",
+      "type": "Multiply",
+      "position": {
+        "x": 680,
+        "y": 1200
+      },
+      "name": "Accent Cross",
+      "parameters": {
+        "factor": 1.0
+      }
+    },
+    {
+      "id": "src_acc_amt",
+      "type": "Gain",
+      "position": {
+        "x": 1020,
+        "y": 1600
+      },
+      "name": "Accent",
+      "parameters": {
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "src_mod_sum",
+      "type": "Add",
+      "position": {
+        "x": 1360,
+        "y": 800
+      },
+      "name": "Mod Sum"
+    },
+    {
+      "id": "src_aenv",
+      "type": "ADSR",
+      "position": {
+        "x": 1700,
+        "y": 400
+      },
+      "name": "Amp Env",
+      "parameters": {
+        "attack": 0.001,
+        "decay": 1.2,
+        "sustain": 0.7,
+        "release": 0.03
+      }
+    },
+    {
+      "id": "src_vca",
+      "type": "Gain",
+      "position": {
+        "x": 2040,
+        "y": 0
+      },
+      "name": "VCA",
+      "parameters": {
+        "gain": 0.35
       }
     },
     {
@@ -654,68 +813,238 @@
         "port": "out"
       },
       "to": {
-        "node": "src_mod",
-        "port": "note"
-      }
-    },
-    {
-      "from": {
-        "node": "v_bent",
-        "port": "out"
-      },
-      "to": {
-        "node": "src_car",
-        "port": "note"
-      }
-    },
-    {
-      "from": {
-        "node": "src_note",
-        "port": "gate"
-      },
-      "to": {
-        "node": "src_mod",
-        "port": "gate"
-      }
-    },
-    {
-      "from": {
-        "node": "src_note",
-        "port": "gate"
-      },
-      "to": {
-        "node": "src_car",
-        "port": "gate"
-      }
-    },
-    {
-      "from": {
-        "node": "src_mod",
-        "port": "out"
-      },
-      "to": {
-        "node": "src_index",
+        "node": "src_glide",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "src_index",
+        "node": "src_glide",
         "port": "out"
       },
       "to": {
-        "node": "src_car",
-        "port": "pm"
+        "node": "src_saw",
+        "port": "frequency"
       }
     },
     {
       "from": {
-        "node": "src_car",
+        "node": "src_glide",
         "port": "out"
       },
       "to": {
-        "node": "src_car_level",
+        "node": "src_sq",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "src_saw",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_saw_amp",
         "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "src_sq",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_sq_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "src_saw_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter1",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "src_sq_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter1",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "src_cut",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter1",
+        "port": "cutoff"
+      }
+    },
+    {
+      "from": {
+        "node": "src_cut",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter2",
+        "port": "cutoff"
+      }
+    },
+    {
+      "from": {
+        "node": "src_res",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter1",
+        "port": "resonance"
+      }
+    },
+    {
+      "from": {
+        "node": "src_res",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter2",
+        "port": "resonance"
+      }
+    },
+    {
+      "from": {
+        "node": "src_kb",
+        "port": "gate"
+      },
+      "to": {
+        "node": "src_fenv",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "src_kb",
+        "port": "gate"
+      },
+      "to": {
+        "node": "src_aenv",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "src_fenv",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_envmod",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "src_fenv",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_acc",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "src_kb",
+        "port": "velocity"
+      },
+      "to": {
+        "node": "src_acc",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "src_envmod",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_mod_sum",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "src_acc",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_acc_amt",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "src_acc_amt",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_mod_sum",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "src_mod_sum",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter1",
+        "port": "cutoff_mod"
+      }
+    },
+    {
+      "from": {
+        "node": "src_mod_sum",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter2",
+        "port": "cutoff_mod"
+      }
+    },
+    {
+      "from": {
+        "node": "src_filter1",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_filter2",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "src_filter2",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_vca",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "src_aenv",
+        "port": "out"
+      },
+      "to": {
+        "node": "src_vca",
+        "port": "gain"
       }
     },
     {
@@ -1040,7 +1369,7 @@
     },
     {
       "from": {
-        "node": "src_note",
+        "node": "src_kb",
         "port": "frequency"
       },
       "to": {
@@ -1060,7 +1389,7 @@
     },
     {
       "from": {
-        "node": "src_car_level",
+        "node": "src_vca",
         "port": "out"
       },
       "to": {
@@ -1268,159 +1597,5 @@
         "port": "right"
       }
     }
-  ],
-  "modules": {
-    "src_opl2_operator": {
-      "description": "One OPL2 operator: pitch ratio, shaped sine, envelope, VCA.",
-      "nodes": [
-        {
-          "id": "pitch",
-          "type": "Multiply",
-          "parameters": {
-            "factor": 1
-          }
-        },
-        {
-          "id": "osc",
-          "type": "SineOscillator",
-          "parameters": {}
-        },
-        {
-          "id": "env",
-          "type": "ADSR",
-          "parameters": {}
-        },
-        {
-          "id": "vca",
-          "type": "Multiply",
-          "parameters": {}
-        },
-        {
-          "id": "note",
-          "type": "Input"
-        },
-        {
-          "id": "gate",
-          "type": "Input"
-        },
-        {
-          "id": "pm",
-          "type": "Input"
-        },
-        {
-          "id": "out",
-          "type": "Output"
-        }
-      ],
-      "connections": [
-        {
-          "from": {
-            "node": "pitch",
-            "port": "out"
-          },
-          "to": {
-            "node": "osc",
-            "port": "frequency"
-          }
-        },
-        {
-          "from": {
-            "node": "osc",
-            "port": "out"
-          },
-          "to": {
-            "node": "vca",
-            "port": "a"
-          }
-        },
-        {
-          "from": {
-            "node": "env",
-            "port": "out"
-          },
-          "to": {
-            "node": "vca",
-            "port": "b"
-          }
-        },
-        {
-          "from": {
-            "node": "note",
-            "port": "out"
-          },
-          "to": {
-            "node": "pitch",
-            "port": "a"
-          }
-        },
-        {
-          "from": {
-            "node": "gate",
-            "port": "out"
-          },
-          "to": {
-            "node": "env",
-            "port": "gate"
-          }
-        },
-        {
-          "from": {
-            "node": "pm",
-            "port": "out"
-          },
-          "to": {
-            "node": "osc",
-            "port": "pm"
-          }
-        },
-        {
-          "from": {
-            "node": "vca",
-            "port": "out"
-          },
-          "to": {
-            "node": "out",
-            "port": "in"
-          }
-        }
-      ],
-      "parameters": [
-        {
-          "name": "ratio",
-          "node": "pitch",
-          "parameter": "factor"
-        },
-        {
-          "name": "shape",
-          "node": "osc",
-          "parameter": "shape"
-        },
-        {
-          "name": "feedback",
-          "node": "osc",
-          "parameter": "feedback"
-        },
-        {
-          "name": "attack",
-          "node": "env",
-          "parameter": "attack"
-        },
-        {
-          "name": "decay",
-          "node": "env",
-          "parameter": "decay"
-        },
-        {
-          "name": "sustain",
-          "node": "env",
-          "parameter": "sustain"
-        },
-        {
-          "name": "release",
-          "node": "env",
-          "parameter": "release"
-        }
-      ]
-    }
-  }
+  ]
 }

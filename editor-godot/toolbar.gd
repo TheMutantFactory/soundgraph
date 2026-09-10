@@ -28,6 +28,8 @@ signal quit_requested
 ## The board on USB: look for it, and write the chosen bank to its card. Main owns both.
 signal scan_requested
 signal flash_requested
+## The Support button, top right: main opens the page.
+signal support_requested
 signal mute_toggled
 
 enum Rung {
@@ -62,6 +64,13 @@ var toolbar_title: Label
 var toolbar_edit_group: HBoxContainer
 var toolbar_hardware_group: HBoxContainer
 var toolbar_scan_button: Button
+## Support, in a fill that drifts between purple and chartreuse: the one thing in the
+## chrome that moves on its own, and slowly enough to be a colour rather than a signal.
+var toolbar_support_button: Button
+const SUPPORT_PURPLE := Color("7b2cbf")
+const SUPPORT_CHARTREUSE := Color("9ef01a")
+const SUPPORT_PERIOD := 9.0  # seconds, one full purple-to-chartreuse-and-back
+var _support_phase := 0.0
 ## Whether the last scan found a board: the scan button says Connected, in green.
 var connected := false
 var toolbar_menu_button: MenuButton
@@ -739,6 +748,14 @@ func _build() -> void:
 		if id == QUIT_ID:
 			quit_requested.emit())
 	toolbar_menu_popup = burger_popup
+	var support := Button.new()
+	toolbar_support_button = support
+	support.text = "Support"
+	support.tooltip_text = "Support SoundGraph: mutantfactory.net/soundgraph/support"
+	support.pressed.connect(func() -> void: support_requested.emit())
+	support.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
+	bar.add_child(_defocus(support))
+	_dress_support(0.0)
 	bar.add_child(_defocus(burger))
 
 	var margin := MarginContainer.new()
@@ -912,10 +929,12 @@ func _apply_toolbar_rung(rung: int) -> void:
 ## The row's height follows the interface size, asked every frame because the size
 ## changes elsewhere; and the QR's hover code goes when the pointer is on neither the
 ## QR nor the code, asked the same way, because a popup does not see the pointer leave.
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	var half := Design.ui_scale == Design.Scale.FOUR_K
 	if half != condensed:
 		set_condensed(half)
+	_support_phase = fmod(_support_phase + delta / SUPPORT_PERIOD, 1.0)
+	_dress_support(_support_phase)
 	if _qr_hover != null and _qr_hover.visible:
 		var at := get_global_mouse_position()
 		var over_qr := toolbar_qr != null and toolbar_qr.get_global_rect().has_point(at)
@@ -1009,6 +1028,40 @@ func set_condensed(on: bool) -> void:
 			else:
 				(node as Control).remove_theme_font_size_override("font_size")
 	_dress_scan_button()
+
+
+## The support button's colour at a phase of its cycle, 0..1: purple at 0, chartreuse at
+## a half, purple again at 1, along a cosine so the turns are soft. The label's ink goes
+## from white on the purple to near-black on the chartreuse, so it reads the whole way.
+static func support_colour(phase: float) -> Color:
+	var mix := 0.5 - 0.5 * cos(TAU * phase)
+	return SUPPORT_PURPLE.lerp(SUPPORT_CHARTREUSE, mix)
+
+
+func _dress_support(phase: float) -> void:
+	var button := toolbar_support_button
+	if button == null:
+		return
+	var fill := support_colour(phase)
+	var mix := 0.5 - 0.5 * cos(TAU * phase)
+	var ink := Color("ffffff").lerp(Color("14181f"), mix)
+	var normal := Design.furniture_box(Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_XS,
+		Design.RADIUS_BUTTON, false) if condensed 		else Design.padded_panel(Design.Surface.RAISED, Design.SPACE_M, Design.SPACE_S,
+			Design.RADIUS_BUTTON)
+	normal.bg_color = fill
+	normal.border_color = fill
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = fill.lightened(0.12)
+	hover.border_color = hover.bg_color
+	button.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = fill.darkened(0.12)
+	pressed.border_color = pressed.bg_color
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_color_override("font_color", ink)
+	button.add_theme_color_override("font_hover_color", ink)
+	button.add_theme_color_override("font_pressed_color", ink)
 
 
 ## The scan button is the board's light. Green and "Connected" while the last scan found

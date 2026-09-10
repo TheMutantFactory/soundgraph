@@ -10,12 +10,36 @@
       "patch": "axoloti-akai-mpk-mini/poly5-pads.json"
     },
     {
-      "name": "game-pads",
-      "patch": "axoloti-akai-mpk-mini/game-pads.json"
+      "name": "synth-acid-bass",
+      "patch": "axoloti-akai-mpk-mini/synth-acid-bass.json"
+    },
+    {
+      "name": "synth-duo-lead",
+      "patch": "axoloti-akai-mpk-mini/synth-duo-lead.json"
+    },
+    {
+      "name": "synth-mallard",
+      "patch": "axoloti-akai-mpk-mini/synth-mallard.json"
     },
     {
       "name": "drum-pads",
       "patch": "axoloti-akai-mpk-mini/drum-pads.json"
+    },
+    {
+      "name": "dx7-ep-road",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-road.json"
+    },
+    {
+      "name": "dx7-bell-glass",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-glass.json"
+    },
+    {
+      "name": "dx7-bass-round",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-round.json"
+    },
+    {
+      "name": "game-pads",
+      "patch": "axoloti-akai-mpk-mini/game-pads.json"
     },
     {
       "name": "dx7-algo-01",
@@ -166,10 +190,6 @@
       "patch": "axoloti-akai-mpk-mini/dx7-bass-pluck.json"
     },
     {
-      "name": "dx7-bass-round",
-      "patch": "axoloti-akai-mpk-mini/dx7-bass-round.json"
-    },
-    {
       "name": "dx7-bass-soft",
       "patch": "axoloti-akai-mpk-mini/dx7-bass-soft.json"
     },
@@ -196,10 +216,6 @@
     {
       "name": "dx7-bell-far",
       "patch": "axoloti-akai-mpk-mini/dx7-bell-far.json"
-    },
-    {
-      "name": "dx7-bell-glass",
-      "patch": "axoloti-akai-mpk-mini/dx7-bell-glass.json"
     },
     {
       "name": "dx7-bell-long",
@@ -248,10 +264,6 @@
     {
       "name": "dx7-ep-mellow",
       "patch": "axoloti-akai-mpk-mini/dx7-ep-mellow.json"
-    },
-    {
-      "name": "dx7-ep-road",
-      "patch": "axoloti-akai-mpk-mini/dx7-ep-road.json"
     },
     {
       "name": "dx7-organ-5th",

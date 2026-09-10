@@ -70,6 +70,17 @@
       }
     },
     {
+      "id": "coin_norm",
+      "type": "Gain",
+      "position": {
+        "x": 2000.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "gain": 10.0
+      }
+    },
+    {
       "id": "coin_pitch",
       "type": "Constant",
       "position": {
@@ -142,6 +153,17 @@
       },
       "parameters": {
         "gain": 0.025
+      }
+    },
+    {
+      "id": "jump_norm",
+      "type": "Gain",
+      "position": {
+        "x": 2000.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "gain": 16.0
       }
     },
     {
@@ -228,6 +250,17 @@
       }
     },
     {
+      "id": "powerup_norm",
+      "type": "Gain",
+      "position": {
+        "x": 2000.0,
+        "y": 900.0
+      },
+      "parameters": {
+        "gain": 8.0
+      }
+    },
+    {
       "id": "powerup_pitch",
       "type": "Constant",
       "position": {
@@ -303,6 +336,17 @@
       }
     },
     {
+      "id": "hurt_norm",
+      "type": "Gain",
+      "position": {
+        "x": 2000.0,
+        "y": 1200.0
+      },
+      "parameters": {
+        "gain": 16.0
+      }
+    },
+    {
       "id": "hurt_pitch",
       "type": "Constant",
       "position": {
@@ -375,6 +419,17 @@
       },
       "parameters": {
         "gain": 0.05
+      }
+    },
+    {
+      "id": "explode_norm",
+      "type": "Gain",
+      "position": {
+        "x": 2000.0,
+        "y": 1500.0
+      },
+      "parameters": {
+        "gain": 5.6
       }
     },
     {
@@ -508,6 +563,17 @@
       "position": {
         "x": 560,
         "y": -720
+      }
+    },
+    {
+      "id": "boom_norm",
+      "type": "Gain",
+      "position": {
+        "x": 2000.0,
+        "y": 1800.0
+      },
+      "parameters": {
+        "gain": 5.6
       }
     },
     {
@@ -682,6 +748,16 @@
     },
     {
       "from": {
+        "node": "coin_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "coin_norm",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
         "node": "jump_slide",
         "port": "frequency"
       },
@@ -748,6 +824,16 @@
       "to": {
         "node": "jump_slide",
         "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "jump_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump_norm",
+        "port": "in"
       }
     },
     {
@@ -822,6 +908,16 @@
     },
     {
       "from": {
+        "node": "powerup_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "powerup_norm",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
         "node": "hurt_slide",
         "port": "frequency"
       },
@@ -892,6 +988,16 @@
     },
     {
       "from": {
+        "node": "hurt_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "hurt_norm",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
         "node": "explode_slide",
         "port": "frequency"
       },
@@ -958,6 +1064,16 @@
       "to": {
         "node": "explode_slide",
         "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "explode_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "explode_norm",
+        "port": "in"
       }
     },
     {
@@ -1092,7 +1208,17 @@
     },
     {
       "from": {
-        "node": "coin_amp",
+        "node": "boom_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_norm",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "coin_norm",
         "port": "out"
       },
       "to": {
@@ -1102,7 +1228,7 @@
     },
     {
       "from": {
-        "node": "jump_amp",
+        "node": "jump_norm",
         "port": "out"
       },
       "to": {
@@ -1122,7 +1248,7 @@
     },
     {
       "from": {
-        "node": "powerup_amp",
+        "node": "powerup_norm",
         "port": "out"
       },
       "to": {
@@ -1142,7 +1268,7 @@
     },
     {
       "from": {
-        "node": "hurt_amp",
+        "node": "hurt_norm",
         "port": "out"
       },
       "to": {
@@ -1162,7 +1288,7 @@
     },
     {
       "from": {
-        "node": "explode_amp",
+        "node": "explode_norm",
         "port": "out"
       },
       "to": {
@@ -1182,7 +1308,7 @@
     },
     {
       "from": {
-        "node": "boom_amp",
+        "node": "boom_norm",
         "port": "out"
       },
       "to": {

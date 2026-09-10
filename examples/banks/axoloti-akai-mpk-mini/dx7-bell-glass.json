@@ -6,16 +6,16 @@
   },
   "nodes": [
     {
-      "id": "v_note",
+      "id": "src_note",
       "type": "Input",
       "host": "note",
       "name": "Keyboard",
       "parameters": {}
     },
     {
-      "id": "v_op6",
+      "id": "src_op6",
       "type": "module",
-      "module": "v_dx7_operator",
+      "module": "src_dx7_operator",
       "name": "OP6 modulator \u00b7 feedback",
       "parameters": {
         "ratio": 14,
@@ -27,9 +27,9 @@
       }
     },
     {
-      "id": "v_op5",
+      "id": "src_op5",
       "type": "module",
-      "module": "v_dx7_operator",
+      "module": "src_dx7_operator",
       "name": "OP5 modulator",
       "parameters": {
         "ratio": 5,
@@ -40,9 +40,9 @@
       }
     },
     {
-      "id": "v_op4",
+      "id": "src_op4",
       "type": "module",
-      "module": "v_dx7_operator",
+      "module": "src_dx7_operator",
       "name": "OP4 carrier",
       "parameters": {
         "ratio": 2,
@@ -53,9 +53,9 @@
       }
     },
     {
-      "id": "v_op3",
+      "id": "src_op3",
       "type": "module",
-      "module": "v_dx7_operator",
+      "module": "src_dx7_operator",
       "name": "OP3 modulator",
       "parameters": {
         "ratio": 9,
@@ -66,9 +66,9 @@
       }
     },
     {
-      "id": "v_op2",
+      "id": "src_op2",
       "type": "module",
-      "module": "v_dx7_operator",
+      "module": "src_dx7_operator",
       "name": "OP2 modulator",
       "parameters": {
         "ratio": 2,
@@ -79,9 +79,9 @@
       }
     },
     {
-      "id": "v_op1",
+      "id": "src_op1",
       "type": "module",
-      "module": "v_dx7_operator",
+      "module": "src_dx7_operator",
       "name": "OP1 carrier",
       "parameters": {
         "ratio": 1,
@@ -92,7 +92,7 @@
       }
     },
     {
-      "id": "v_op6_index_5",
+      "id": "src_op6_index_5",
       "type": "Gain",
       "name": "OP6 \u2192 OP5",
       "parameters": {
@@ -100,7 +100,7 @@
       }
     },
     {
-      "id": "v_op5_index_4",
+      "id": "src_op5_index_4",
       "type": "Gain",
       "name": "OP5 \u2192 OP4",
       "parameters": {
@@ -108,7 +108,7 @@
       }
     },
     {
-      "id": "v_op3_index_2",
+      "id": "src_op3_index_2",
       "type": "Gain",
       "name": "OP3 \u2192 OP2",
       "parameters": {
@@ -116,7 +116,7 @@
       }
     },
     {
-      "id": "v_op2_index_1",
+      "id": "src_op2_index_1",
       "type": "Gain",
       "name": "OP2 \u2192 OP1",
       "parameters": {
@@ -124,7 +124,7 @@
       }
     },
     {
-      "id": "v_op4_level",
+      "id": "src_op4_level",
       "type": "Gain",
       "name": "OP4 level",
       "parameters": {
@@ -132,7 +132,7 @@
       }
     },
     {
-      "id": "v_op1_level",
+      "id": "src_op1_level",
       "type": "Gain",
       "name": "OP1 level",
       "parameters": {
@@ -140,13 +140,13 @@
       }
     },
     {
-      "id": "v_carrier_sum_1",
+      "id": "src_carrier_sum_1",
       "type": "Add",
       "name": "Carrier mix",
       "parameters": {}
     },
     {
-      "id": "v_mix",
+      "id": "src_mix",
       "type": "Gain",
       "name": "Mix",
       "parameters": {}
@@ -749,17 +749,17 @@
         "port": "out"
       },
       "to": {
-        "node": "v_op6",
+        "node": "src_op6",
         "port": "note"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_op6",
+        "node": "src_op6",
         "port": "gate"
       }
     },
@@ -769,17 +769,17 @@
         "port": "out"
       },
       "to": {
-        "node": "v_op5",
+        "node": "src_op5",
         "port": "note"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_op5",
+        "node": "src_op5",
         "port": "gate"
       }
     },
@@ -789,17 +789,17 @@
         "port": "out"
       },
       "to": {
-        "node": "v_op4",
+        "node": "src_op4",
         "port": "note"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_op4",
+        "node": "src_op4",
         "port": "gate"
       }
     },
@@ -809,17 +809,17 @@
         "port": "out"
       },
       "to": {
-        "node": "v_op3",
+        "node": "src_op3",
         "port": "note"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_op3",
+        "node": "src_op3",
         "port": "gate"
       }
     },
@@ -829,17 +829,17 @@
         "port": "out"
       },
       "to": {
-        "node": "v_op2",
+        "node": "src_op2",
         "port": "note"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_op2",
+        "node": "src_op2",
         "port": "gate"
       }
     },
@@ -849,147 +849,147 @@
         "port": "out"
       },
       "to": {
-        "node": "v_op1",
+        "node": "src_op1",
         "port": "note"
       }
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "gate"
       },
       "to": {
-        "node": "v_op1",
+        "node": "src_op1",
         "port": "gate"
       }
     },
     {
       "from": {
-        "node": "v_op6",
+        "node": "src_op6",
         "port": "out"
       },
       "to": {
-        "node": "v_op6_index_5",
+        "node": "src_op6_index_5",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_op6_index_5",
+        "node": "src_op6_index_5",
         "port": "out"
       },
       "to": {
-        "node": "v_op5",
+        "node": "src_op5",
         "port": "pm"
       }
     },
     {
       "from": {
-        "node": "v_op5",
+        "node": "src_op5",
         "port": "out"
       },
       "to": {
-        "node": "v_op5_index_4",
+        "node": "src_op5_index_4",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_op5_index_4",
+        "node": "src_op5_index_4",
         "port": "out"
       },
       "to": {
-        "node": "v_op4",
+        "node": "src_op4",
         "port": "pm"
       }
     },
     {
       "from": {
-        "node": "v_op3",
+        "node": "src_op3",
         "port": "out"
       },
       "to": {
-        "node": "v_op3_index_2",
+        "node": "src_op3_index_2",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_op3_index_2",
+        "node": "src_op3_index_2",
         "port": "out"
       },
       "to": {
-        "node": "v_op2",
+        "node": "src_op2",
         "port": "pm"
       }
     },
     {
       "from": {
-        "node": "v_op2",
+        "node": "src_op2",
         "port": "out"
       },
       "to": {
-        "node": "v_op2_index_1",
+        "node": "src_op2_index_1",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_op2_index_1",
+        "node": "src_op2_index_1",
         "port": "out"
       },
       "to": {
-        "node": "v_op1",
+        "node": "src_op1",
         "port": "pm"
       }
     },
     {
       "from": {
-        "node": "v_op4",
+        "node": "src_op4",
         "port": "out"
       },
       "to": {
-        "node": "v_op4_level",
+        "node": "src_op4_level",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_op1",
+        "node": "src_op1",
         "port": "out"
       },
       "to": {
-        "node": "v_op1_level",
+        "node": "src_op1_level",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "v_op4_level",
+        "node": "src_op4_level",
         "port": "out"
       },
       "to": {
-        "node": "v_carrier_sum_1",
+        "node": "src_carrier_sum_1",
         "port": "a"
       }
     },
     {
       "from": {
-        "node": "v_op1_level",
+        "node": "src_op1_level",
         "port": "out"
       },
       "to": {
-        "node": "v_carrier_sum_1",
+        "node": "src_carrier_sum_1",
         "port": "b"
       }
     },
     {
       "from": {
-        "node": "v_carrier_sum_1",
+        "node": "src_carrier_sum_1",
         "port": "out"
       },
       "to": {
-        "node": "v_mix",
+        "node": "src_mix",
         "port": "in"
       }
     },
@@ -1315,7 +1315,7 @@
     },
     {
       "from": {
-        "node": "v_note",
+        "node": "src_note",
         "port": "frequency"
       },
       "to": {
@@ -1335,7 +1335,7 @@
     },
     {
       "from": {
-        "node": "v_mix",
+        "node": "src_mix",
         "port": "out"
       },
       "to": {
@@ -1545,7 +1545,7 @@
     }
   ],
   "modules": {
-    "v_dx7_operator": {
+    "src_dx7_operator": {
       "description": "One DX7 operator: pitch ratio, sine, envelope, VCA.",
       "nodes": [
         {

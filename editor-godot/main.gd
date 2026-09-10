@@ -394,6 +394,8 @@ var keyboard_mode := "full"
 ## What is open, shown so "which patch am I looking at" is never a guess.
 var document_label: RichTextLabel
 var document_name := "untitled"
+## Where the Support button goes.
+const SUPPORT_URL := "https://mutantfactory.net/soundgraph/support"
 ## Where the document came from, when it came from a file: what "Add current patch"
 ## puts in a bank. Empty for a new, handed-over or downloaded patch.
 var document_path := ""
@@ -806,6 +808,7 @@ func _build_ui() -> void:
 	toolbar.feedback_requested.connect(_open_feedback)
 	toolbar.quit_requested.connect(_quit_by_hand)
 	toolbar.scan_requested.connect(_scan_hardware)
+	toolbar.support_requested.connect(func() -> void: OS.shell_open(SUPPORT_URL))
 	toolbar.flash_requested.connect(_flash_hardware)
 	_use_bank(str(Settings.fetch("hardware_bank", "")), true)
 	toolbar.undo_requested.connect(_undo)

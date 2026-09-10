@@ -1220,6 +1220,20 @@ func _initialize() -> void:
 	if FileAccess.file_exists(status_file):
 		DirAccess.remove_absolute(status_file)
 
+	# ---- Support, top right, drifting between two colours -------------------------------
+	var support: Button = main.toolbar.toolbar_support_button
+	var at_purple := EditorToolbar.support_colour(0.0)
+	var at_green := EditorToolbar.support_colour(0.5)
+	check(support != null and support.text == "Support"
+			and support.tooltip_text.contains("mutantfactory.net/soundgraph/support")
+			and main.toolbar.support_requested.get_connections().size() == 1,
+		"a Support button sits on the top row and reaches the editor")
+	check(at_purple.is_equal_approx(EditorToolbar.SUPPORT_PURPLE)
+			and at_green.is_equal_approx(EditorToolbar.SUPPORT_CHARTREUSE)
+			and EditorToolbar.support_colour(1.0).is_equal_approx(at_purple)
+			and (support.get_theme_stylebox("normal") as StyleBoxFlat) != null,
+		"and its colour cycles from purple to chartreuse and back")
+
 	# ---- feedback leaves through an outbox --------------------------------------------
 	# The outbox is the deliverable and the only thing tested: the network belongs to
 	# the vendored submitter, and the live service is not this suite's to lean on.

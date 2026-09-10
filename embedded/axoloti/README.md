@@ -201,10 +201,11 @@ block end, and no block is handed to a node that still reads it.
 ## A controller on the board: the MPK mini set
 
 `tools/make-mpk-examples.py` (repository root) writes
-`examples/banks/axoloti-akai-mpk-mini/` and its bank: Poly Five with the
-kit on the pads, eight game sounds on the pads, the kit alone, and one
-patch per DX7 and FM preset with a filter, an echo and four drums — 199
-entries, knobs K2–K8 on MidiCC nodes (CC 2–8, what this MPK sends; a mk3
+`examples/banks/axoloti-akai-mpk-mini/` and its bank, in set-list order:
+Poly Five with kick and snare on the pads, three synths (acid-bass,
+duo-lead, mallard), the kit alone, three DX7 voices, six game sounds on
+the pads, then one patch per remaining DX7 and FM preset, each with a
+filter, an echo and four drums — 202 entries, knobs K2–K8 on MidiCC nodes (CC 2–8, what this MPK sends; a mk3
 factory program says 70–77 — K1 is left alone, because its CC 1 is also
 the stick's up-down axis, and the stick sends 0 when let go, which the
 patch read as K1 turned all the way down and a bright preset went silent),
