@@ -1135,11 +1135,19 @@ func _initialize() -> void:
 	await process_frame
 	main._open_hardware_panel()
 	await process_frame
+	await process_frame
 	var panel_room: Vector2i = main.get_viewport().get_visible_rect().size
 	check(main.hardware_panel.size.x <= panel_room.x and main.hardware_panel.size.y <= panel_room.y
 			and main.hardware_panel.size.y >= 300 and main.hardware_panel.theme == Design.dialog_theme(),
 		"the hardware panel fits the window at 4K (%s in %s)"
 			% [str(main.hardware_panel.size), str(panel_room)])
+	# And nothing is cut off: the window grew to its body, or the body scrolls.
+	var body_height: int = main.hardware_panel.content_height()
+	check(main.hardware_panel.size.y >= mini(body_height, int(panel_room.y * 0.85))
+			and main.hardware_panel.log_view.get_global_rect().end.y
+				<= main.hardware_panel.position.y + main.hardware_panel.size.y + 1,
+		"and its last row, the log, is inside the window (body %d, window %d)"
+			% [body_height, main.hardware_panel.size.y])
 	main.hardware_panel.hide()
 	main._use_ui_scale(Design.Scale.COMFORTABLE)
 	await process_frame

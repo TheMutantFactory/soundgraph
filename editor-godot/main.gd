@@ -3946,6 +3946,11 @@ func _open_hardware_panel() -> void:
 	hardware_panel.show_progress(hardware.status() if _hardware_action != "" else {})
 	if not hardware_panel.visible:
 		Design.show_fitted(hardware_panel, HardwarePanel.wanted_size())
+		# After a frame, so the body has laid out and knows its height.
+		(func() -> void:
+			if hardware_panel != null and hardware_panel.visible:
+				hardware_panel.fit_to_content(get_viewport().get_visible_rect().size)
+		).call_deferred()
 
 
 ## The set list that ships: examples/banks/demo.json, every entry hardware-verified to

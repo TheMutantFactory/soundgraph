@@ -647,18 +647,25 @@ static func make_lit(button: Button, fill: Color, compact: bool = false) -> Butt
 	pressed.bg_color = fill.darkened(0.12)
 	pressed.border_color = pressed.bg_color
 	button.add_theme_stylebox_override("pressed", pressed)
+	# Disabled keeps the colour, dimmed: a lit button that goes grey while busy reads
+	# as the light having gone out, which is the one thing it must not say.
+	var disabled := normal.duplicate() as StyleBoxFlat
+	disabled.bg_color = fill.darkened(0.4)
+	disabled.border_color = disabled.bg_color
+	button.add_theme_stylebox_override("disabled", disabled)
 	button.add_theme_color_override("font_color", ON_ACCENT)
 	button.add_theme_color_override("font_hover_color", ON_ACCENT)
 	button.add_theme_color_override("font_pressed_color", ON_ACCENT)
+	button.add_theme_color_override("font_disabled_color", Color(ON_ACCENT, 0.7))
 	button.add_theme_font_override("font", font(WEIGHT_SEMIBOLD))
 	return button
 
 
 ## Takes a filled treatment off again, back to the theme's own button.
 static func make_plain(button: Button) -> Button:
-	for state in ["normal", "hover", "pressed"]:
+	for state in ["normal", "hover", "pressed", "disabled"]:
 		button.remove_theme_stylebox_override(state)
-	for colour in ["font_color", "font_hover_color", "font_pressed_color"]:
+	for colour in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
 		button.remove_theme_color_override(colour)
 	button.remove_theme_font_override("font")
 	return button

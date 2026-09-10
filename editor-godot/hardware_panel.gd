@@ -36,6 +36,8 @@ var remove_button: Button
 var flash_button: Button
 var progress_label: Label
 var log_view: RichTextLabel
+var scroller: ScrollContainer
+var body: VBoxContainer
 
 
 func _init() -> void:
@@ -46,10 +48,18 @@ func _init() -> void:
 	size = wanted_size()
 	add_theme_stylebox_override("panel",
 		Design.padded_panel(Design.Surface.NODE, Design.SPACE_M, Design.SPACE_M))
+	# The body scrolls when the window it was fitted into is shorter than the body:
+	# rows past the bottom edge are reachable rather than gone.
+	scroller = ScrollContainer.new()
+	scroller.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(scroller)
 	var box := VBoxContainer.new()
-	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	body = box
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", Design.SPACE_S)
-	add_child(box)
+	scroller.add_child(box)
 
 	var heading := Label.new()
 	heading.text = "Hardware"
@@ -163,6 +173,28 @@ func _init() -> void:
 ## Furniture-sized: the panel is read once and dismissed, and has to fit the window.
 static func wanted_size() -> Vector2i:
 	return Vector2i(Design.furniture_scale(640), Design.furniture_scale(600))
+
+
+## The height the body actually wants, once it has had a frame to lay out: every row
+## at its minimum, plus the panel's own padding. Asked after the first frame because
+## an autowrapped label measured before layout is a column of words.
+func content_height() -> int:
+	if body == null:
+		return wanted_size().y
+	var padding := get_theme_stylebox("panel").get_minimum_size().y
+	return int(body.get_combined_minimum_size().y + padding)
+
+
+## Grows the window to its content when the room allows, so nothing is cut off; when
+## it does not, the body scrolls.
+func fit_to_content(room: Vector2, ratio: float = 0.85) -> void:
+	var need := content_height()
+	var allowed := int(room.y * ratio)
+	var height := mini(maxi(size.y, need), allowed)
+	if height != size.y:
+		var was := size
+		size = Vector2i(size.x, height)
+		position = Vector2i(position.x, position.y - (height - was.y) / 2)
 
 
 func _rule() -> HSeparator:
