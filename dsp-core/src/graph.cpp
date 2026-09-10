@@ -1476,7 +1476,7 @@ void Graph::clear_tap(int slot) {
     taps_[slot].ring.shrink_to_fit();
 }
 
-std::uint32_t Graph::tap_edges(int slot) const {
+std::uint64_t Graph::tap_edges(int slot) const {
     if (slot < 0 || slot >= kTapSlots) {
         return 0;
     }

@@ -179,8 +179,10 @@ public:
     godot::PackedFloat32Array get_scope_tap(int samples) const;
     godot::PackedFloat32Array get_scope_gate(int samples) const;
     // Rising edges each tap has seen since it was armed: the trigger counter.
-    int get_scope_tap_edges() const;
-    int get_scope_gate_edges() const;
+    // 64-bit, as Godot's own integers are: the core counts in 64 and an int cast
+    // showed the count negative past two billion edges.
+    int64_t get_scope_tap_edges() const;
+    int64_t get_scope_gate_edges() const;
 
 protected:
     static void _bind_methods();

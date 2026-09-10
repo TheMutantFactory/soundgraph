@@ -483,12 +483,12 @@ PackedFloat32Array SoundGraphEngine::get_scope_gate(int samples) const {
     return read_tap(1, samples);
 }
 
-int SoundGraphEngine::get_scope_tap_edges() const {
-    return static_cast<int>(graph_.tap_edges(0));
+int64_t SoundGraphEngine::get_scope_tap_edges() const {
+    return static_cast<int64_t>(graph_.tap_edges(0));
 }
 
-int SoundGraphEngine::get_scope_gate_edges() const {
-    return static_cast<int>(graph_.tap_edges(1));
+int64_t SoundGraphEngine::get_scope_gate_edges() const {
+    return static_cast<int64_t>(graph_.tap_edges(1));
 }
 
 void SoundGraphEngine::push_scope(const float* samples, int count) {

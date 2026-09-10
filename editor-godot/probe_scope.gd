@@ -142,6 +142,9 @@ func _ready() -> void:
 	trigger_label.text = "trig 0"
 	trigger_label.tooltip_text = "Rising edges the trigger wire has fired since the " 		+ "probe was pointed — counted in the engine, where no pulse can be missed."
 	trigger_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# The numeric face: every digit the same width, so a count that ticks does not
+	# shuffle the words beside it.
+	trigger_label.add_theme_font_override("font", Design.numeric_font())
 	trigger_label.add_theme_font_size_override("font_size",
 		Design.furniture_type(Design.SIZE_SECONDARY))
 	trigger_label.add_theme_color_override("font_color", Design.INK_SECOND)
@@ -362,6 +365,13 @@ func capture() -> void:
 	if trigger_label != null:
 		trigger_label.text = "trig %d" % (engine.get_scope_gate_edges()
 			if not gate.is_empty() else engine.get_scope_tap_edges())
+		# As wide as ten digits whatever the count says: a label that grew and shrank
+		# with its digits reflowed the row, and the whole panel breathed a few pixels
+		# on every trigger.
+		var count_font: Font = trigger_label.get_theme_font("font")
+		if count_font != null:
+			trigger_label.custom_minimum_size.x = count_font.get_string_size("trig 4294967296",
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, trigger_label.get_theme_font_size("font_size")).x
 	if display != null:
 		display.queue_redraw()
 

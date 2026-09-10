@@ -148,7 +148,9 @@ public:
     // Rising edges through 0.5 seen by this tap since it was armed — the trigger
     // counter. Counted here, where no pulse can be missed; exact for gates, and
     // for audio a curiosity rather than a lie.
-    std::uint32_t tap_edges(int slot) const;
+    // 64-bit: at the fastest possible edge rate a 32-bit count wrapped in a day, and the
+    // editor showed the second half of it negative through an int cast.
+    std::uint64_t tap_edges(int slot) const;
     // Copies the newest `samples` into `destination`, oldest first. Returns the
     // count actually copied.
     int read_tap(int slot, float* destination, int samples) const;
@@ -285,7 +287,7 @@ private:
         int port = -1;
         int write = 0;
         float last = 0.0f;
-        std::uint32_t edges = 0;
+        std::uint64_t edges = 0;
         std::vector<float> ring;
     };
     Tap taps_[kTapSlots];
