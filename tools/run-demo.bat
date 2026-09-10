@@ -9,6 +9,10 @@ rem out the graph is zoomed, at the 4K interface size - whose work area draws it
 rem words and cells at twice the chrome - whatever the last hand at the laptop left
 rem behind. Add --zoom=2 for twice that again, nodes and all.
 rem
+rem Full screen, through Godot's own switch (it goes before the --, where the engine
+rem reads its options; everything after the -- is the editor's). Alt+Enter is not a
+rem thing a queue should watch somebody remember.
+rem
 rem Anything else on the command line is passed through to the editor after its own
 rem arguments, so a patch or a further --detail= can follow.
 rem
@@ -38,4 +42,4 @@ if not exist "%REPO%\editor-godot\bin\soundgraph_godot.dll" (
     exit /b 1
 )
 
-"%GODOT%" --path "%REPO%\editor-godot" -- --detail=1:1 --size=4k --arrange --case=168 %*
+"%GODOT%" --path "%REPO%\editor-godot" --fullscreen -- --detail=1:1 --size=4k --arrange --case=168 %*
