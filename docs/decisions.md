@@ -1559,3 +1559,33 @@ weighted by machine load: 380 of 384 at a desk, 26 of 384 behind a build.
 Consequences:
 The check measures what it claims whatever the LFO is doing. The document
 is untouched; only the engine is told.
+
+## 2026-09-10 — The gate writes a status file, and a window draws it
+
+Decision:
+`tools/pre-push.sh` rewrites `run/gate-status` at every step: the refs
+being pushed, the stages planned, the one running and since when, the
+suite log it is writing, one line per finished stage with its verdict and
+seconds, and the reason when it refuses. Every refusal goes through one
+`refuse` function, and an exit trap turns whatever exit happens into a
+finished file. `tools/watch-gate.bat` opens `tools/watch-gate.ps1` in its
+own window: one screen, redrawn each second, with the stage list, the
+elapsed times, the live check count inside a Godot suite, and the verdict,
+with a beep either way.
+
+Reason:
+The gate takes ten minutes and its output goes wherever the push was
+typed. When the push came from a tool that is a log file nobody has open,
+and "is it still going" had no answer but reading the log. A status file
+is the run told once, somewhere anything can read it; the window is the
+first reader, and the show machine can dock it beside the editor.
+
+Alternatives:
+Pushing from a terminal shows the same headers live, and still does.
+Logging to a service was considered and there was none to log to; the
+file is what a service would be fed from if one ever exists.
+
+Consequences:
+The gate's text output is unchanged. `run/` is already ignored. A gate
+older than this leaves no file, and the window says so rather than
+guessing.

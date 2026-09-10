@@ -29,25 +29,123 @@ godot=${SOUNDGRAPH_GODOT:-$(git config --get soundgraph.godot || true)}
 
 say() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
+# ---- the status file -------------------------------------------------------------------
+# run/gate-status, rewritten whole at every step, is the run told somewhere a window can
+# read it: tools/watch-gate.bat draws it. The gate's own output goes wherever the push
+# was typed, which is a log file nobody is looking at when the push came from a tool,
+# and ten minutes of "is it still going" is what this answers. One line per fact; the
+# stages that have finished are one done= line each, with their verdict and seconds.
+status_file="run/gate-status"
+mkdir -p run 2>/dev/null || true
+run_started=$(date +%s)
+state=running
+stage=""
+stage_started=0
+stage_log=""
+done_lines=""
+reason=""
+planned=""
+# What git tells a pre-push hook: the remote as the first argument, and one line per ref
+# on stdin. Read only when stdin is not a terminal, so the script still runs by hand.
+remote=${1:-}
+refs=""
+if [ ! -t 0 ]; then
+    while read -r local_ref _local_sha _remote_ref _remote_sha; do
+        [ -n "$local_ref" ] && refs="$refs ${local_ref#refs/*/}"
+    done
+fi
+refs=${refs# }
+
+status_write() {
+    {
+        echo "run=$run_started"
+        echo "state=$state"
+        echo "remote=$remote"
+        echo "refs=$refs"
+        echo "planned=$planned"
+        echo "stage=$stage"
+        echo "stage_started=$stage_started"
+        echo "log=$stage_log"
+        printf '%s' "$done_lines"
+        echo "reason=$reason"
+        echo "now=$(date +%s)"
+    } > "$status_file.tmp" 2>/dev/null && mv -f "$status_file.tmp" "$status_file" 2>/dev/null || true
+}
+
+stage_begin() {
+    stage=$1
+    stage_log=${2:-}
+    stage_started=$(date +%s)
+    status_write
+}
+
+# ok, crash (passed, then the known teardown death) or failed.
+stage_end() {
+    done_lines="${done_lines}done=$stage $1 $(( $(date +%s) - stage_started ))
+"
+    stage=""
+    stage_log=""
+    status_write
+}
+
+# Every refusal goes through here, so the file carries the reason the terminal got. The
+# first line is the reason; the rest are the notes under it.
+refuse() {
+    reason=$1
+    shift
+    echo "$reason" >&2
+    for line in "$@"; do echo "  $line" >&2; done
+    exit 1
+}
+
+# The verdict, written on the way out whichever way that is: a refusal exits from wherever
+# it was, and the trap is what turns that into a finished file rather than one that says
+# "running" forever.
+gate_exit() {
+    code=$1
+    if [ "$state" = running ]; then
+        if [ "$code" -eq 0 ]; then
+            state=passed
+        else
+            state=refused
+            [ -n "$stage" ] && stage_end failed
+            [ -n "$reason" ] || reason="the gate stopped with exit $code"
+        fi
+    fi
+    status_write
+}
+trap 'gate_exit $?' EXIT
+
+# The suites, named once: the loop below runs them and the plan above lists them.
+suites="editor_test design_test layout_test panel_style_test legalize_test tidy_test routes_test crossing_semantics hit_geometry geometry_contract_test design_tokens"
+planned="extension"
+[ -d "$build" ] && planned="$planned build ctest"
+if [ -n "$godot" ] && [ -x "$godot" ]; then
+    planned="$planned $suites"
+fi
+status_write
+
 # ---- the stale-extension trap, closed ------------------------------------------------
 # The Godot tests load editor-godot/bin/soundgraph_godot.dll, and a green suite against
 # an old binary proves nothing about the code being pushed. The repository's notes call
 # this the trap that fails nowhere near the cause; here it fails exactly at the cause.
 dll="editor-godot/bin/soundgraph_godot.dll"
+stage_begin extension
 if [ -f "$dll" ]; then
     stale=$(find dsp-core/src dsp-core/include patch-io/src runtime-godot/src         \( -name '*.cpp' -o -name '*.h' \) -newer "$dll" 2>/dev/null | head -1)
     if [ -n "$stale" ]; then
-        echo "the Godot extension is stale: $stale is newer than $dll" >&2
-        echo "run tools/rebuild-extensions.sh, then push again" >&2
-        exit 1
+        refuse "the Godot extension is stale: $stale is newer than $dll" \
+            "run tools/rebuild-extensions.sh, then push again"
     fi
 fi
+stage_end ok
 
 # ---- build ---------------------------------------------------------------------------
 # Before ctest, because ctest against binaries older than the source is a suite that
 # reports on a program nobody is pushing.
 if [ -d "$build" ]; then
     say "building $build"
+    stage_begin build
     if ! cmake --build "$build" >/dev/null 2>&1; then
         # MSVC needs its environment and a git hook does not inherit one. Try the usual
         # place before giving up, so this works from an ordinary shell on Windows.
@@ -76,16 +174,15 @@ if [ -d "$build" ]; then
                 "$(cygpath -w "$vcvars")" > "$runner"
             cmd //c "$(cygpath -w "$runner")" || {
                 rm -f "$runner"
-                echo "build failed — fix it before pushing" >&2
-                exit 1
+                refuse "build failed — fix it before pushing"
             }
             rm -f "$runner"
         else
-            echo "build failed — run cmake --build $build to see why" >&2
-            echo "  (no Visual Studio with the C++ tools found via vswhere)" >&2
-            exit 1
+            refuse "build failed — run cmake --build $build to see why" \
+                "(no Visual Studio with the C++ tools found via vswhere)"
         fi
     fi
+    stage_end ok
 else
     echo "no $build directory; skipping the native build and ctest" >&2
 fi
@@ -93,10 +190,11 @@ fi
 # ---- ctest ---------------------------------------------------------------------------
 if [ -d "$build" ]; then
     say "ctest"
+    stage_begin ctest
     ( cd "$build" && ctest --output-on-failure ) || {
-        echo "ctest failed — fix it before pushing" >&2
-        exit 1
+        refuse "ctest failed — fix it before pushing"
     }
+    stage_end ok
 fi
 
 # ---- the editor suites ----------------------------------------------------------------
@@ -130,9 +228,10 @@ if [ -n "$godot" ] && [ -x "$godot" ]; then
     # legalize_test joins them because it turned out to run headless: the router is pure
     # geometry against the obstacle list, so a fault can be measured without a rendering
     # server. Every other harness in the layout and cable passes needs pixels and stays out.
-    for suite in editor_test design_test layout_test panel_style_test legalize_test tidy_test routes_test crossing_semantics hit_geometry geometry_contract_test design_tokens; do
+    for suite in $suites; do
         say "godot: $suite"
         log="$suite_logs/$suite.log"
+        stage_begin "$suite" "$log"
         status=0
         ( cd editor-godot && "$godot" --headless --path . --script "$suite.gd" )             > "$log" 2>&1 || status=$?
         grep -E "FAIL|checks passed|checks failed" "$log" || true
@@ -155,38 +254,37 @@ if [ -n "$godot" ] && [ -x "$godot" ]; then
         # print no verdict at all. Requiring the conclusion is the only reading that
         # treats silence as bad news.
         if ! grep -q "checks passed" "$log"; then
-            echo "$suite did not report success — fix it before pushing" >&2
-            echo "  the whole run is in $log" >&2
-            exit 1
+            refuse "$suite did not report success — fix it before pushing" \
+                "the whole run is in $log"
         fi
 
         if [ "$status" -eq 0 ]; then
             passed=$((passed + 1))
+            stage_end ok
             continue
         fi
 
         # Past here the process did not exit cleanly, and the marker decides whether that
         # happened before or after our last statement.
         if ! grep -q "HARNESS_SCRIPT_COMPLETE" "$log"; then
-            echo "$suite reported success but did not finish its teardown (status $status)" >&2
-            echo "  no HARNESS_SCRIPT_COMPLETE: it died inside the suite, not after it" >&2
-            echo "  the whole run is in $log" >&2
-            exit 1
+            refuse "$suite reported success but did not finish its teardown (status $status)" \
+                "no HARNESS_SCRIPT_COMPLETE: it died inside the suite, not after it" \
+                "the whole run is in $log"
         fi
 
         # Only the signal actually observed. A SIGABRT, a timeout, an out-of-memory kill
         # or anything else arriving late has not earned this exemption just by being
         # late, and inheriting it would be how the next real defect gets waved through.
         if [ "$status" -ne "$teardown_signal" ]; then
-            echo "$suite finished its script and then exited $status" >&2
-            echo "  that is not the known teardown crash ($teardown_signal); look at it" >&2
-            echo "  the whole run is in $log" >&2
-            exit 1
+            refuse "$suite finished its script and then exited $status" \
+                "that is not the known teardown crash ($teardown_signal); look at it" \
+                "the whole run is in $log"
         fi
 
         crashed=$((crashed + 1))
         crashers="$crashers $suite"
         echo "  $suite: script complete, then Godot died in engine shutdown" >&2
+        stage_end crash
     done
 else
     echo "" >&2
