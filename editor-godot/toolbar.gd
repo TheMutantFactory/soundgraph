@@ -24,6 +24,7 @@ signal arrange_action(id: int)
 signal make_module_requested
 ## Somebody wants to tell the workbench something. Main owns the dialog.
 signal feedback_requested
+signal quit_requested
 signal mute_toggled
 
 enum Rung {
@@ -43,6 +44,8 @@ const PatchGraph := preload("res://patch_graph.gd")
 
 ## Where section labels' ids start, well clear of every setting's.
 const SECTION_ID := 900
+## The one plain command on the hamburger itself; every other row there is a door.
+const QUIT_ID := 1
 
 ## The optical cell the seven door marks are drawn in — one figure, so that a wide glyph
 ## and a tall one occupy the same square and the column of them reads as a column.
@@ -698,6 +701,17 @@ func _build() -> void:
 		burger_popup.set_item_icon(burger_popup.item_count - 1,
 			_icon(int(door[2]), Design.INK_SECOND.lerp(Design.INK_NORMAL, 0.4),
 				DOOR_ICON))
+	# Quit, last, behind a rule, on the menu itself rather than under File: it is the one
+	# command that is about the program and not the patch, and a show floor full screen
+	# has no title bar to close from. Ctrl+Q, the way every program that has a quit spells
+	# it. The editor decides whether to ask first; the menu only asks.
+	burger_popup.add_separator()
+	burger_popup.add_item("Quit", QUIT_ID)
+	burger_popup.set_item_accelerator(burger_popup.get_item_index(QUIT_ID),
+		KEY_MASK_CTRL | KEY_Q)
+	burger_popup.id_pressed.connect(func(id: int) -> void:
+		if id == QUIT_ID:
+			quit_requested.emit())
 	toolbar_menu_popup = burger_popup
 	bar.add_child(_defocus(burger))
 

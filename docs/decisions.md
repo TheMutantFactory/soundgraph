@@ -1521,3 +1521,23 @@ Consequences:
 A rack lens opens on the case, not on the slack. Module positions are
 unchanged — the rack node moved, not its contents — so cables, hit tests
 and the layout harnesses read as before.
+
+## 2026-09-10 — Quit is on the hamburger; the demo launcher clears the terminal
+
+Decision:
+The hamburger ends with a rule and Quit, on Ctrl+Q. With unsaved work it
+asks first; otherwise it quits the way the tooling's flag file does.
+run-demo.bat launches the plain Godot binary when it sits beside the
+configured console one, and minimises the window it was typed into before
+the editor comes up.
+
+Reason:
+Full screen has no title bar, and a show floor should not need Alt+F4. The
+console flavour of Godot is a wrapper that starts the real editor as a
+child; the grandchild is not owed the foreground, so the editor opened
+behind the terminal it was launched from.
+
+Consequences:
+The gate keeps the console binary, which is where its output comes from.
+The launcher's minimise is best effort through user32 and does nothing
+when it cannot; the editor launches either way.

@@ -1034,6 +1034,30 @@ func _initialize() -> void:
 	await process_frame
 	check(not main.node_browser.visible, "and so does Esc")
 
+	# ---- Quit is on the hamburger --------------------------------------------------------
+	# Last, behind a rule, on Ctrl+Q; and with unsaved work it asks before it goes. The
+	# other branch quits the program, which is not something this suite gets to watch.
+	var burger_menu: PopupMenu = main.toolbar.toolbar_menu_popup
+	var quit_index: int = burger_menu.get_item_index(EditorToolbar.QUIT_ID)
+	check(quit_index == burger_menu.item_count - 1
+			and burger_menu.get_item_text(quit_index) == "Quit"
+			and burger_menu.is_item_separator(quit_index - 1)
+			and burger_menu.get_item_accelerator(quit_index) == (KEY_MASK_CTRL | KEY_Q),
+		"the hamburger ends with Quit, behind a rule, on Ctrl+Q")
+	check(main.toolbar.quit_requested.is_connected(main._quit_by_hand),
+		"and the item reaches the editor")
+	var unsaved_before_quit: bool = main.unsaved
+	main.unsaved = true
+	main._quit_by_hand()
+	await process_frame
+	check(main.quit_dialog != null and main.quit_dialog.visible
+			and main.quit_dialog.ok_button_text == "Quit",
+		"quitting with unsaved work asks first")
+	main.quit_dialog.canceled.emit()
+	await process_frame
+	check(main.quit_dialog == null, "and No keeps the editor open")
+	main.unsaved = unsaved_before_quit
+
 	# ---- feedback leaves through an outbox --------------------------------------------
 	# The outbox is the deliverable and the only thing tested: the network belongs to
 	# the vendored submitter, and the live service is not this suite's to lean on.

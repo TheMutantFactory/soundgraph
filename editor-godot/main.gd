@@ -798,6 +798,7 @@ func _build_ui() -> void:
 	# docs/add-node-browser.md — the palette goes when the browser can do its job.
 	toolbar.add_node_requested.connect(_open_node_browser)
 	toolbar.feedback_requested.connect(_open_feedback)
+	toolbar.quit_requested.connect(_quit_by_hand)
 	toolbar.undo_requested.connect(_undo)
 	toolbar.redo_requested.connect(_redo)
 	toolbar.example_chosen.connect(_load_example)
@@ -3870,6 +3871,33 @@ func _watch_for_quit_request(delta: float) -> void:
 			file.store_string(JSON.stringify(patch, "  "))
 			file.close()
 	get_tree().quit()
+
+
+## Quit, asked for from the menu or Ctrl+Q. Unsaved work gets a question; the tooling's
+## flag file above gets a rescue copy instead, because nobody is there to answer one.
+var quit_dialog: ConfirmationDialog
+
+
+func _quit_by_hand() -> void:
+	if quit_dialog != null and is_instance_valid(quit_dialog):
+		return
+	if not unsaved or patch.is_empty():
+		get_tree().quit()
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Quit without saving?"
+	dialog.dialog_text = "The patch has changes that have not been saved. Quit anyway?"
+	dialog.ok_button_text = "Quit"
+	dialog.confirmed.connect(func() -> void:
+		quit_dialog = null
+		dialog.queue_free()
+		get_tree().quit())
+	dialog.canceled.connect(func() -> void:
+		quit_dialog = null
+		dialog.queue_free())
+	quit_dialog = dialog
+	add_child(dialog)
+	dialog.popup_centered()
 
 
 func shutdown_audio() -> void:
