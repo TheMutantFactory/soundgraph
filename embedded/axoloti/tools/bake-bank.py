@@ -43,7 +43,7 @@ def sanitize(name):
     return clean
 
 
-def bake(out_dir, patches, names, to_board):
+def bake(out_dir, patches, names, to_board, nav=False):
     out_dir = pathlib.Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     index_lines = []
@@ -53,7 +53,8 @@ def bake(out_dir, patches, names, to_board):
         print(f"compiling {path} as bank entry {len(entries)} ({name!r})")
         binary, _pid, buffers = codegen.build_patch(
             pathlib.Path(path), frames=0, name=name, zero_input=False,
-            sd_bank_name=name)
+            sd_bank_name=name, bank_index=len(entries), bank_count=len(patches),
+            program_change="prev-next" if nav else "midi")
         assert len(binary) <= MAX_SD_PATCH
         files = [(sd_name, blob) for _addr, blob, sd_name in buffers]
         entries.append((name, binary, files))
@@ -113,6 +114,9 @@ def main():
     parser.add_argument("patches", nargs="+")
     parser.add_argument("--board", action="store_true")
     parser.add_argument("--names", default=None)
+    parser.add_argument("--nav", action="store_true",
+                        help="program 0 = previous entry, 1 = next, 2 = first; "
+                             "the rest as MIDI has them")
     args = parser.parse_args()
     if args.names:
         names = [sanitize(n) for n in args.names.split(",")]
@@ -122,7 +126,7 @@ def main():
         names = [sanitize(pathlib.Path(p).stem) for p in args.patches]
     if len(set(names)) != len(names):
         raise SystemExit(f"duplicate bank names: {names}")
-    bake(args.out_dir, args.patches, names, args.board)
+    bake(args.out_dir, args.patches, names, args.board, nav=args.nav)
 
 
 if __name__ == "__main__":

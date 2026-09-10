@@ -212,7 +212,8 @@ def flash(status, bank_path, dry_run):
     real_stdout = sys.stdout
     sys.stdout = Tee(status, real_stdout)
     try:
-        bake_bank.bake(out_dir, [str(p) for p in patches], names, not dry_run)
+        bake_bank.bake(out_dir, [str(p) for p in patches], names, not dry_run,
+                       nav=str(data.get("program_change", "midi")) == "prev-next")
     finally:
         sys.stdout = real_stdout
     total = 0

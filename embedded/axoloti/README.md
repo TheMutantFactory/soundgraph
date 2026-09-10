@@ -126,10 +126,13 @@ Compiled patches are playable instruments: live MIDI (any transport) drives
 the same note handler the golden events replay through.
 
 Supported today: Input(note)/Output seams, Sine/Saw/Square/Noise
-oscillators, Noise (white and pink), LFO (all shapes), StateVariableFilter,
+oscillators — with their fm, pm and (the sine's) feedback inputs, the sine's
+four shapes — Noise (white and pink), LFO (all shapes), StateVariableFilter,
 OnePoleFilter, Delay/Comb/Allpass (SDRAM-backed lines, 4 MB budget), Phaser,
 Drive, Crush, Slide, Arpeggio, ADSR, AhdEnvelope, Retrigger, Gain, Constant,
-Add, Multiply, Mixer — twenty-four node types, every one hardware-verified:
+Add, Multiply, Mixer, MidiCC (the board's CC and pitch-bend table, read once
+a block), NoteTriggers and TriggerBus (pads) — twenty-seven node types,
+every one hardware-verified:
 eleven manifest goldens bit-exact, slide 9e-6, first-synth 2e-6, and three
 fixtures against the native render at or under 1e-5. Editor patches at any
 schema version compile through the patch-io resolver, including Sampler
@@ -156,6 +159,26 @@ python3 sgaxo/codegen.py path/to/patch.json   # -> sgaxo/build/patch.bin
 
 Toolchain output is captured: a failure comes back as the compiler's own
 words, and warnings are counted and kept quiet unless `SGAXO_VERBOSE=1`.
+
+Block buffers are pooled by lifetime: an output's block is free once its last
+consumer has run, so a patch's close memory scales with how many signals are
+alive at once rather than how many nodes it has (eight game sounds on one
+card: 73 outputs in 21 blocks). A source of a feedback binding lives to the
+block end, and no block is handed to a node that still reads it.
+
+## A controller on the board: the MPK mini set
+
+`tools/make-mpk-examples.py` (repository root) writes
+`examples/banks/axoloti-akai-mpk-mini/` and its bank: Poly Five with the
+kit on the pads, eight game sounds on the pads, the kit alone, and one
+patch per DX7 and FM preset with a filter, an echo and four drums — 199
+entries, knobs K1–K8 on MidiCC nodes (CC 70–77, the mk3's factory
+program), pads on a NoteTriggers row at note 36. The bank asks for
+`"program_change": "prev-next"`: on the board program 0 is the previous
+entry, 1 the next, 2 the first, and every other number the entry it names,
+so the MPK's PROG CHANGE pads walk a bank of two hundred. A mk2 or a
+re-programmed mini sends other numbers: change `CONTROLLER` in the script
+and run it again.
 
 ## Shipping standalone: the SD bank
 

@@ -1,0 +1,1383 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "name": "Drum pads",
+    "controller": "Akai MPK mini mk3, factory program 1"
+  },
+  "nodes": [
+    {
+      "id": "d_pads",
+      "type": "NoteTriggers",
+      "position": {
+        "x": 440,
+        "y": 0
+      },
+      "parameters": {
+        "base": 36,
+        "shift": 0
+      }
+    },
+    {
+      "id": "d_k_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 200
+      }
+    },
+    {
+      "id": "d_s_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 600
+      }
+    },
+    {
+      "id": "d_c_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 2200
+      }
+    },
+    {
+      "id": "d_o_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 3000
+      }
+    },
+    {
+      "id": "d_cl_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 3800
+      }
+    },
+    {
+      "id": "d_r_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 4600
+      }
+    },
+    {
+      "id": "d_b_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 5400
+      }
+    },
+    {
+      "id": "d_v_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 6200
+      }
+    },
+    {
+      "id": "d_k_penv",
+      "type": "ADSR",
+      "position": {
+        "x": 880,
+        "y": 0
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.035,
+        "sustain": 0.0,
+        "release": 0.035
+      }
+    },
+    {
+      "id": "d_k_drop",
+      "type": "Multiply",
+      "position": {
+        "x": 1320,
+        "y": 0
+      },
+      "parameters": {
+        "factor": 2.2
+      }
+    },
+    {
+      "id": "d_k_body",
+      "type": "SineOscillator",
+      "position": {
+        "x": 1760,
+        "y": 0
+      },
+      "parameters": {
+        "frequency": 52
+      }
+    },
+    {
+      "id": "d_k_env",
+      "type": "ADSR",
+      "position": {
+        "x": 880,
+        "y": 400
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.5,
+        "sustain": 0.0,
+        "release": 0.5
+      }
+    },
+    {
+      "id": "d_k_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 1.4
+      }
+    },
+    {
+      "id": "d_s_t1",
+      "type": "SineOscillator",
+      "position": {
+        "x": 880,
+        "y": 800
+      },
+      "parameters": {
+        "frequency": 185
+      }
+    },
+    {
+      "id": "d_s_t2",
+      "type": "SineOscillator",
+      "position": {
+        "x": 880,
+        "y": 1200
+      },
+      "parameters": {
+        "frequency": 330
+      }
+    },
+    {
+      "id": "d_s_tenv",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 800
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.09,
+        "sustain": 0.0,
+        "release": 0.09
+      }
+    },
+    {
+      "id": "d_s_tamp",
+      "type": "Gain",
+      "position": {
+        "x": 1760,
+        "y": 800
+      },
+      "parameters": {
+        "gain": 0.6
+      }
+    },
+    {
+      "id": "d_s_noise",
+      "type": "Noise",
+      "position": {
+        "x": 880,
+        "y": 1600
+      },
+      "parameters": {
+        "colour": 0
+      }
+    },
+    {
+      "id": "d_s_filter",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 1600
+      },
+      "parameters": {
+        "cutoff": 1800,
+        "resonance": 0.3,
+        "mode": 2
+      }
+    },
+    {
+      "id": "d_s_nenv",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 2000
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.18,
+        "sustain": 0.0,
+        "release": 0.18
+      }
+    },
+    {
+      "id": "d_s_namp",
+      "type": "Gain",
+      "position": {
+        "x": 1760,
+        "y": 1600
+      },
+      "parameters": {
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "d_s_sum",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 800
+      },
+      "parameters": {
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "d_c_noise",
+      "type": "Noise",
+      "position": {
+        "x": 880,
+        "y": 2400
+      },
+      "parameters": {
+        "colour": 0
+      }
+    },
+    {
+      "id": "d_c_hpf",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 2400
+      },
+      "parameters": {
+        "cutoff": 6500,
+        "resonance": 0.2,
+        "mode": 1
+      }
+    },
+    {
+      "id": "d_c_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 2800
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.06,
+        "sustain": 0.0,
+        "release": 0.06
+      }
+    },
+    {
+      "id": "d_c_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 2400
+      },
+      "parameters": {
+        "gain": 0.8
+      }
+    },
+    {
+      "id": "d_o_noise",
+      "type": "Noise",
+      "position": {
+        "x": 880,
+        "y": 3200
+      },
+      "parameters": {
+        "colour": 0
+      }
+    },
+    {
+      "id": "d_o_hpf",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 3200
+      },
+      "parameters": {
+        "cutoff": 6500,
+        "resonance": 0.2,
+        "mode": 1
+      }
+    },
+    {
+      "id": "d_o_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 3600
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.45,
+        "sustain": 0.0,
+        "release": 0.45
+      }
+    },
+    {
+      "id": "d_o_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 3200
+      },
+      "parameters": {
+        "gain": 0.8
+      }
+    },
+    {
+      "id": "d_cl_noise",
+      "type": "Noise",
+      "position": {
+        "x": 880,
+        "y": 4000
+      },
+      "parameters": {
+        "colour": 0
+      }
+    },
+    {
+      "id": "d_cl_bp",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 4000
+      },
+      "parameters": {
+        "cutoff": 1100,
+        "resonance": 0.55,
+        "mode": 2
+      }
+    },
+    {
+      "id": "d_cl_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 4400
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.09,
+        "sustain": 0.0,
+        "release": 0.09
+      }
+    },
+    {
+      "id": "d_cl_amp",
+      "type": "Gain",
+      "position": {
+        "x": 1760,
+        "y": 4000
+      },
+      "parameters": {
+        "gain": 2.5
+      }
+    },
+    {
+      "id": "d_cl_stut",
+      "type": "Delay",
+      "position": {
+        "x": 2200,
+        "y": 4000
+      },
+      "parameters": {
+        "time": 0.011,
+        "feedback": 0.45,
+        "mix": 0.5
+      }
+    },
+    {
+      "id": "d_r_osc",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 880,
+        "y": 4800
+      },
+      "parameters": {
+        "frequency": 505,
+        "pulse_width": 0.5
+      }
+    },
+    {
+      "id": "d_r_bp",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 4800
+      },
+      "parameters": {
+        "cutoff": 1200,
+        "resonance": 0.6,
+        "mode": 2
+      }
+    },
+    {
+      "id": "d_r_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 5200
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.03,
+        "sustain": 0.0,
+        "release": 0.03
+      }
+    },
+    {
+      "id": "d_r_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 4800
+      },
+      "parameters": {
+        "gain": 0.9
+      }
+    },
+    {
+      "id": "d_b_low",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 880,
+        "y": 5600
+      },
+      "parameters": {
+        "frequency": 540,
+        "pulse_width": 0.5
+      }
+    },
+    {
+      "id": "d_b_high",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 880,
+        "y": 6000
+      },
+      "parameters": {
+        "frequency": 800,
+        "pulse_width": 0.5
+      }
+    },
+    {
+      "id": "d_b_bp",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 5600
+      },
+      "parameters": {
+        "cutoff": 850,
+        "resonance": 0.4,
+        "mode": 2
+      }
+    },
+    {
+      "id": "d_b_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 6000
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.3,
+        "sustain": 0.0,
+        "release": 0.3
+      }
+    },
+    {
+      "id": "d_b_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 5600
+      },
+      "parameters": {
+        "gain": 0.7
+      }
+    },
+    {
+      "id": "d_v_osc",
+      "type": "SineOscillator",
+      "position": {
+        "x": 880,
+        "y": 6400
+      },
+      "parameters": {
+        "frequency": 2500
+      }
+    },
+    {
+      "id": "d_v_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 6400
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.045,
+        "sustain": 0.0,
+        "release": 0.045
+      }
+    },
+    {
+      "id": "d_v_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 6400
+      },
+      "parameters": {
+        "gain": 0.6
+      }
+    },
+    {
+      "id": "d_mix",
+      "type": "Mixer",
+      "position": {
+        "x": 2640,
+        "y": 0
+      },
+      "parameters": {
+        "level1": 0.9,
+        "level2": 0.8,
+        "level3": 0.5,
+        "level4": 0.5
+      }
+    },
+    {
+      "id": "d_mix2",
+      "type": "Mixer",
+      "position": {
+        "x": 2640,
+        "y": 4000
+      },
+      "parameters": {
+        "level1": 0.7,
+        "level2": 0.6,
+        "level3": 0.55,
+        "level4": 0.5
+      }
+    },
+    {
+      "id": "fx_delay",
+      "type": "Delay",
+      "position": {
+        "x": 2000.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "time": 0.3,
+        "feedback": 0.35,
+        "mix": 1.0
+      }
+    },
+    {
+      "id": "fx_time",
+      "type": "MidiCC",
+      "position": {
+        "x": 1700.0,
+        "y": 400.0
+      },
+      "parameters": {
+        "cc": 71,
+        "low": 0.05,
+        "high": 0.6,
+        "resting": 0.42,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "fx_fb",
+      "type": "MidiCC",
+      "position": {
+        "x": 1700.0,
+        "y": 550.0
+      },
+      "parameters": {
+        "cc": 72,
+        "low": 0.0,
+        "high": 0.7,
+        "resting": 0.5,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "fx_wet",
+      "type": "Gain",
+      "position": {
+        "x": 2300.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "gain": 0.0
+      }
+    },
+    {
+      "id": "fx_wet_level",
+      "type": "MidiCC",
+      "position": {
+        "x": 1700.0,
+        "y": 700.0
+      },
+      "parameters": {
+        "cc": 73,
+        "low": 0.0,
+        "high": 0.8,
+        "resting": 0.0,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "final_sum0",
+      "type": "Add",
+      "position": {
+        "x": 2800.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "master",
+      "type": "Gain",
+      "position": {
+        "x": 3200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "gain": 0.8
+      }
+    },
+    {
+      "id": "master_level",
+      "type": "MidiCC",
+      "position": {
+        "x": 3000.0,
+        "y": 200.0
+      },
+      "parameters": {
+        "cc": 70,
+        "low": 0.0,
+        "high": 1.0,
+        "resting": 0.8,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "position": {
+        "x": 3600.0,
+        "y": 0.0
+      },
+      "host": "stereo"
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t1"
+      },
+      "to": {
+        "node": "d_k_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t2"
+      },
+      "to": {
+        "node": "d_s_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t3"
+      },
+      "to": {
+        "node": "d_c_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t4"
+      },
+      "to": {
+        "node": "d_o_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t5"
+      },
+      "to": {
+        "node": "d_cl_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t6"
+      },
+      "to": {
+        "node": "d_r_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t7"
+      },
+      "to": {
+        "node": "d_b_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t8"
+      },
+      "to": {
+        "node": "d_v_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_k_penv",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_k_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_tenv",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_nenv",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_c_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_c_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_o_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_o_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_v_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_penv",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_k_drop",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_drop",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_k_body",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_body",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_k_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_k_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix",
+        "port": "in1"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_t1",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_tamp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_t2",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_tamp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_tenv",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_tamp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_noise",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_filter",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_filter",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_namp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_nenv",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_namp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_tamp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_sum",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_namp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_sum",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_sum",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix",
+        "port": "in2"
+      }
+    },
+    {
+      "from": {
+        "node": "d_c_noise",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_c_hpf",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_c_hpf",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_c_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_c_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_c_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_c_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix",
+        "port": "in3"
+      }
+    },
+    {
+      "from": {
+        "node": "d_o_noise",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_o_hpf",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_o_hpf",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_o_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_o_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_o_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_o_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix",
+        "port": "in4"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_noise",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_bp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_stut",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_stut",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in1"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_bp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in2"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_low",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_high",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_bp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in3"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_v_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_v_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in4"
+      }
+    },
+    {
+      "from": {
+        "node": "d_mix",
+        "port": "out"
+      },
+      "to": {
+        "node": "fx_delay",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "fx_time",
+        "port": "out"
+      },
+      "to": {
+        "node": "fx_delay",
+        "port": "time"
+      }
+    },
+    {
+      "from": {
+        "node": "fx_fb",
+        "port": "out"
+      },
+      "to": {
+        "node": "fx_delay",
+        "port": "feedback"
+      }
+    },
+    {
+      "from": {
+        "node": "fx_delay",
+        "port": "out"
+      },
+      "to": {
+        "node": "fx_wet",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "fx_wet_level",
+        "port": "out"
+      },
+      "to": {
+        "node": "fx_wet",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_mix",
+        "port": "out"
+      },
+      "to": {
+        "node": "final_sum0",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "fx_wet",
+        "port": "out"
+      },
+      "to": {
+        "node": "final_sum0",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "master_level",
+        "port": "out"
+      },
+      "to": {
+        "node": "master",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "final_sum0",
+        "port": "out"
+      },
+      "to": {
+        "node": "master",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "master",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "left"
+      }
+    },
+    {
+      "from": {
+        "node": "master",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "right"
+      }
+    }
+  ]
+}

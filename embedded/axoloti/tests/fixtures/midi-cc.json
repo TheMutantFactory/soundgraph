@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "name": "MIDI CC at rest"
+  },
+  "nodes": [
+    {
+      "id": "kb",
+      "type": "Input",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "host": "note"
+    },
+    {
+      "id": "knob",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "cc": 70,
+        "low": 100.0,
+        "high": 2000.0,
+        "resting": 0.25,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "osc",
+      "type": "SawOscillator",
+      "position": {
+        "x": 400.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "frequency": 110.0
+      }
+    },
+    {
+      "id": "filter",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 800.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "cutoff": 900.0,
+        "resonance": 0.4,
+        "mode": 0
+      }
+    },
+    {
+      "id": "env",
+      "type": "ADSR",
+      "position": {
+        "x": 800.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "attack": 0.01,
+        "decay": 0.1,
+        "sustain": 0.6,
+        "release": 0.2
+      }
+    },
+    {
+      "id": "amp",
+      "type": "Gain",
+      "position": {
+        "x": 1200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "gain": 0.5
+      }
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "position": {
+        "x": 1600.0,
+        "y": 0.0
+      },
+      "host": "stereo"
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "kb",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "filter",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "knob",
+        "port": "out"
+      },
+      "to": {
+        "node": "filter",
+        "port": "cutoff"
+      }
+    },
+    {
+      "from": {
+        "node": "kb",
+        "port": "gate"
+      },
+      "to": {
+        "node": "env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "filter",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "env",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "left"
+      }
+    },
+    {
+      "from": {
+        "node": "amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "right"
+      }
+    }
+  ]
+}

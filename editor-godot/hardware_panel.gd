@@ -254,6 +254,8 @@ func show_bank() -> void:
 	else:
 		bank_label.text = "%s — %s" % [bank.name, bank.path]
 		bank_label.tooltip_text = bank.path
+		if bank.program_change == "prev-next":
+			bank_label.tooltip_text += "\nProgram Change: 0 is the previous entry, 1 the next, 2 the first."
 		var lost := bank.missing()
 		for index in bank.entries.size():
 			var entry: Dictionary = bank.entries[index]

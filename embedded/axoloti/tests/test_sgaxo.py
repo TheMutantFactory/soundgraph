@@ -176,7 +176,26 @@ def test_first_synth_playable_over_midi(board, toolchain):
     assert peak > 0.05, "MIDI note produced no audio"
 
 
+def test_supported_defaults_match_registry():
+    """No board needed. Every parameter default the codegen bakes when a patch
+    is silent about it must be the engine's own: the output level once said
+    1.0 where the engine says 0.8, and every fixture that left it unsaid ran
+    25% louder on the board."""
+    if not codegen.SG_VALIDATE.exists():
+        pytest.skip("sg-validate not built")
+    table = codegen.registry()
+    drift = []
+    for node_type, spec in codegen.SUPPORTED.items():
+        declared = table.get(node_type, {})
+        for name, default in spec["params"].items():
+            if name in declared and abs(declared[name][0] - default) > 1e-6 * max(1.0, abs(default)):
+                drift.append(f"{node_type}.{name}: codegen {default} vs engine {declared[name][0]}")
+    assert not drift, chr(10).join(drift)
+
+
 SG_RENDER = GOLDEN.parent.parent / "build" / "bin" / "sg-render"
+if not SG_RENDER.exists() and SG_RENDER.with_suffix(".exe").exists():
+    SG_RENDER = SG_RENDER.with_suffix(".exe")  # Windows builds put an .exe on it
 
 
 def _native_reference(fixture, wav, seconds=0.1, notes=None, gate=0.7,
@@ -260,10 +279,9 @@ def _mirror_schedule(total_frames, notes, gate=0.7, velocity=0.9):
     ("examples/patches/envelope-amp.json", [48, 55, 60], 0.5, 5e-4),
     # Modules + Comb (Karplus-Strong pitch tracking) + Noise burst.
     ("examples/patches/plucked-string.json", [45, 52, 57], 0.5, 5e-5),
-    # AudioInput + a feedback edge through the Delay. Rendered with silent
-    # input on both sides, so this proves the wiring runs clean (no NaN, no
-    # garbage) rather than exercising audio content.
-    ("examples/patches/delay-echo.json", None, 0.25, TOLERANCE),
+    # (delay-echo.json, the AudioInput-plus-feedback case, was retired from the
+    # examples on 2026-09-09; the feedback path is covered by comb-room and the
+    # effects-chain fixture.)
     # Sampler: the buffer ships to SDRAM over USB, the read head runs in
     # libgcc soft-double, and the notes trigger it through NoteInput.trigger.
     ("examples/patches/nodes/Sampler.json", [60, 64], 0.6, TOLERANCE),
@@ -271,6 +289,19 @@ def _mirror_schedule(total_frames, notes, gate=0.7, velocity=0.9):
     # 5e-5 headroom for the derived per-trigger log2 and the lattice's float
     # accumulation order under -ffp-contract=off vs the host's fma.
     ("examples/patches/nodes/Speech.json", [48, 50], 1.0, 5e-5),
+    # Oscillator modulation: pm from a fed-back sine, fm from an LFO through the
+    # per-sample exp2f_approx. 5e-4 for the integrated frequency error (slide
+    # physics again) under half a second of drift.
+    ("embedded/axoloti/tests/fixtures/fm-pm-feedback.json", [57, 64], 0.5, 5e-4),
+    # NoteTriggers lanes and the bus through a TriggerBus, one-millisecond
+    # pulses into three envelopes. Exact arithmetic.
+    ("embedded/axoloti/tests/fixtures/note-triggers.json", [60, 61, 62], 0.5, TOLERANCE),
+    # MidiCC at rest: nothing heard, so the resting position drives the cutoff.
+    ("embedded/axoloti/tests/fixtures/midi-cc.json", [48], 0.3, 5e-5),
+    # A DX7 algorithm: six sines, pm chains, an operator feeding itself back.
+    ("examples/patches/dx7/algo-01.json", [60, 67], 0.5, 5e-4),
+    # The editor's boot patch: five voices, the square detuned through fm.
+    ("examples/patches/synths/poly-five.json", [48, 52, 55], 0.6, 1e-3),
 ])
 def test_editor_patch_matches_native_render(board, toolchain, tmp_path, rel,
                                             notes, seconds, tolerance):

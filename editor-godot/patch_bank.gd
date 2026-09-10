@@ -18,6 +18,12 @@ const EXTENSION := "json"
 var path := ""
 var name := ""
 var target := "axoloti"
+## Which controller the set's knobs and pads are numbered for; a note, not a rule.
+var controller := ""
+## How the board answers a Program Change: "midi" loads the entry the number names;
+## "prev-next" makes program 0 the previous entry, 1 the next and 2 the first, for a
+## controller with eight program pads and a bank of two hundred.
+var program_change := "midi"
 var entries: Array[Dictionary] = []
 
 
@@ -55,6 +61,8 @@ func load_file(from: String) -> String:
 	path = from
 	name = str(data.get("name", from.get_file().get_basename()))
 	target = str(data.get("target", "axoloti"))
+	controller = str(data.get("controller", ""))
+	program_change = str(data.get("program_change", "midi"))
 	entries.clear()
 	for entry in data.get("entries", []):
 		if entry is Dictionary and entry.has("patch"):
@@ -66,12 +74,17 @@ func load_file(from: String) -> String:
 
 
 func to_json() -> String:
-	return JSON.stringify({
+	var data := {
 		"schema_version": SCHEMA_VERSION,
 		"name": name,
 		"target": target,
-		"entries": entries,
-	}, "  ") + "\n"
+	}
+	if controller != "":
+		data["controller"] = controller
+	if program_change != "midi":
+		data["program_change"] = program_change
+	data["entries"] = entries
+	return JSON.stringify(data, "  ") + "\n"
 
 
 ## Writes the bank back where it came from. Returns "" or what went wrong.

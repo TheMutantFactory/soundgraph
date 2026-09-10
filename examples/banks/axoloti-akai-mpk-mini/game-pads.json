@@ -1,0 +1,1622 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "name": "Game pads",
+    "controller": "Akai MPK mini mk3, factory program 1"
+  },
+  "nodes": [
+    {
+      "id": "coin_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "slide": 0,
+        "acceleration": 0,
+        "limit": 3.528,
+        "frequency": 1451.31
+      }
+    },
+    {
+      "id": "coin_osc",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 560,
+        "y": 0
+      },
+      "parameters": {
+        "pulse_width": 0.5,
+        "pulse_width_sweep": 0
+      }
+    },
+    {
+      "id": "coin_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "offset": 0,
+        "sweep": 0,
+        "depth": 1
+      }
+    },
+    {
+      "id": "coin_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1120,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "hold": 0.000315737,
+        "decay": 0.0371055,
+        "punch": 0.321
+      }
+    },
+    {
+      "id": "coin_amp",
+      "type": "Gain",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.025
+      }
+    },
+    {
+      "id": "coin_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "jump_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "slide": 15.713,
+        "acceleration": 0,
+        "limit": 3.528,
+        "frequency": 863.372
+      }
+    },
+    {
+      "id": "jump_osc",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 560,
+        "y": 0
+      },
+      "parameters": {
+        "pulse_width": 0.43736,
+        "pulse_width_sweep": 0
+      }
+    },
+    {
+      "id": "jump_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "offset": 0,
+        "sweep": 0,
+        "depth": 1
+      }
+    },
+    {
+      "id": "jump_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1120,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "hold": 0.0608474,
+        "decay": 0.156179,
+        "punch": 0
+      }
+    },
+    {
+      "id": "jump_amp",
+      "type": "Gain",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.025
+      }
+    },
+    {
+      "id": "jump_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "powerup_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "slide": 75.7114,
+        "acceleration": 0,
+        "limit": 3.528,
+        "frequency": 238.511
+      }
+    },
+    {
+      "id": "powerup_osc",
+      "type": "SawOscillator",
+      "position": {
+        "x": 560,
+        "y": 0
+      }
+    },
+    {
+      "id": "powerup_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "offset": 0,
+        "sweep": 0,
+        "depth": 1
+      }
+    },
+    {
+      "id": "powerup_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1120,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "hold": 0.155323,
+        "decay": 0.133502,
+        "punch": 0
+      }
+    },
+    {
+      "id": "powerup_amp",
+      "type": "Gain",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.05
+      }
+    },
+    {
+      "id": "powerup_repeat",
+      "type": "Retrigger",
+      "position": {
+        "x": 0,
+        "y": -360
+      },
+      "parameters": {
+        "rate": 6.62881,
+        "width": 1
+      }
+    },
+    {
+      "id": "powerup_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 900.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "hurt_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "slide": -2258.94,
+        "acceleration": 0,
+        "limit": 3.528,
+        "frequency": 1307.45
+      }
+    },
+    {
+      "id": "hurt_osc",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 560,
+        "y": 0
+      },
+      "parameters": {
+        "pulse_width": 0.29393,
+        "pulse_width_sweep": 0
+      }
+    },
+    {
+      "id": "hurt_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "offset": 0,
+        "sweep": 0,
+        "depth": 1
+      }
+    },
+    {
+      "id": "hurt_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1120,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "hold": 0.00951282,
+        "decay": 0.102646,
+        "punch": 0
+      }
+    },
+    {
+      "id": "hurt_amp",
+      "type": "Gain",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.025
+      }
+    },
+    {
+      "id": "hurt_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 1200.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "explode_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "slide": 0,
+        "acceleration": 0,
+        "limit": 3.528,
+        "frequency": 229.673
+      }
+    },
+    {
+      "id": "explode_osc",
+      "type": "NoiseOscillator",
+      "position": {
+        "x": 560,
+        "y": 0
+      },
+      "parameters": {
+        "steps": 32,
+        "seed": 12345
+      }
+    },
+    {
+      "id": "explode_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "offset": 0,
+        "sweep": 0,
+        "depth": 1
+      }
+    },
+    {
+      "id": "explode_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1120,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "hold": 0.245295,
+        "decay": 0.508717,
+        "punch": 0.21086
+      }
+    },
+    {
+      "id": "explode_amp",
+      "type": "Gain",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.05
+      }
+    },
+    {
+      "id": "explode_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 1500.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "select_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "slide": 0,
+        "acceleration": 0,
+        "limit": 3.528,
+        "frequency": 1212.88
+      }
+    },
+    {
+      "id": "select_osc",
+      "type": "SawOscillator",
+      "position": {
+        "x": 560,
+        "y": 0
+      }
+    },
+    {
+      "id": "select_highpass",
+      "type": "OnePoleFilter",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "cutoff": 56.1499,
+        "mode": 1,
+        "cutoff_sweep": 0
+      }
+    },
+    {
+      "id": "select_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "offset": 0,
+        "sweep": 0,
+        "depth": 1
+      }
+    },
+    {
+      "id": "select_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1680,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "hold": 0.0444571,
+        "decay": 0.0186871,
+        "punch": 0
+      }
+    },
+    {
+      "id": "select_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2240,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.05
+      }
+    },
+    {
+      "id": "select_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 1800.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "jump2_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "slide": 11.1336,
+        "acceleration": 0,
+        "limit": 3.528,
+        "frequency": 901.511
+      }
+    },
+    {
+      "id": "jump2_osc",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 560,
+        "y": 0
+      },
+      "parameters": {
+        "pulse_width": 0.22973,
+        "pulse_width_sweep": 0
+      }
+    },
+    {
+      "id": "jump2_highpass",
+      "type": "OnePoleFilter",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "cutoff": 151.537,
+        "mode": 1,
+        "cutoff_sweep": 0
+      }
+    },
+    {
+      "id": "jump2_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "offset": 0,
+        "sweep": 0,
+        "depth": 1
+      }
+    },
+    {
+      "id": "jump2_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1680,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "hold": 0.219266,
+        "decay": 0.0234994,
+        "punch": 0
+      }
+    },
+    {
+      "id": "jump2_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2240,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.025
+      }
+    },
+    {
+      "id": "jump2_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 2100.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "boom_slide",
+      "type": "Slide",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "parameters": {
+        "frequency": 229.673,
+        "acceleration": 0,
+        "limit": 3.528,
+        "slide": 0
+      }
+    },
+    {
+      "id": "boom_arpeggio",
+      "type": "Arpeggio",
+      "position": {
+        "x": 560,
+        "y": 0
+      },
+      "parameters": {
+        "frequency": 229.673,
+        "interval": 0,
+        "time": 0.45424
+      }
+    },
+    {
+      "id": "boom_osc",
+      "type": "NoiseOscillator",
+      "position": {
+        "x": 1120,
+        "y": 0
+      },
+      "parameters": {
+        "seed": 12345,
+        "steps": 32
+      }
+    },
+    {
+      "id": "boom_vibrato",
+      "type": "LFO",
+      "position": {
+        "x": 560,
+        "y": -360
+      },
+      "parameters": {
+        "amount": 0,
+        "offset": 0,
+        "rate": 1,
+        "shape": 0
+      }
+    },
+    {
+      "id": "boom_phaser",
+      "type": "Phaser",
+      "position": {
+        "x": 1680,
+        "y": 0
+      },
+      "parameters": {
+        "depth": 1,
+        "offset": 0,
+        "sweep": 0
+      }
+    },
+    {
+      "id": "boom_envelope",
+      "type": "AhdEnvelope",
+      "position": {
+        "x": 1680,
+        "y": 360
+      },
+      "parameters": {
+        "attack": 0,
+        "decay": 0.508717,
+        "hold": 0.245295,
+        "punch": 0.21086
+      }
+    },
+    {
+      "id": "boom_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2240,
+        "y": 0
+      },
+      "parameters": {
+        "gain": 0.05
+      }
+    },
+    {
+      "id": "boom_repeat",
+      "type": "Retrigger",
+      "position": {
+        "x": 0,
+        "y": -360
+      },
+      "parameters": {
+        "rate": 2.20148,
+        "width": 1
+      }
+    },
+    {
+      "id": "boom_repeat_on",
+      "type": "Multiply",
+      "position": {
+        "x": 560,
+        "y": -360
+      },
+      "parameters": {
+        "factor": 0
+      }
+    },
+    {
+      "id": "boom_restart",
+      "type": "Add",
+      "position": {
+        "x": 560,
+        "y": -720
+      }
+    },
+    {
+      "id": "boom_pitch",
+      "type": "Constant",
+      "position": {
+        "x": 0.0,
+        "y": 2400.0
+      },
+      "parameters": {
+        "value": 261.6256
+      }
+    },
+    {
+      "id": "pads",
+      "type": "NoteTriggers",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "base": 36,
+        "shift": 0
+      }
+    },
+    {
+      "id": "mix_sum0",
+      "type": "Add",
+      "position": {
+        "x": 2400.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "mix_sum1",
+      "type": "Add",
+      "position": {
+        "x": 2600.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "mix_sum2",
+      "type": "Add",
+      "position": {
+        "x": 2800.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "mix_sum3",
+      "type": "Add",
+      "position": {
+        "x": 3000.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "mix_sum4",
+      "type": "Add",
+      "position": {
+        "x": 3200.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "mix_sum5",
+      "type": "Add",
+      "position": {
+        "x": 3400.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "mix_sum6",
+      "type": "Add",
+      "position": {
+        "x": 3600.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "master",
+      "type": "Gain",
+      "position": {
+        "x": 3200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "gain": 0.8
+      }
+    },
+    {
+      "id": "master_level",
+      "type": "MidiCC",
+      "position": {
+        "x": 3000.0,
+        "y": 200.0
+      },
+      "parameters": {
+        "cc": 70,
+        "low": 0.0,
+        "high": 1.0,
+        "resting": 0.8,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "position": {
+        "x": 3600.0,
+        "y": 0.0
+      },
+      "host": "stereo"
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "coin_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "coin_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "coin_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "coin_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "coin_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "coin_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t1"
+      },
+      "to": {
+        "node": "coin_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "coin_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "coin_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "coin_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "coin_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t1"
+      },
+      "to": {
+        "node": "coin_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "jump_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "jump_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "jump_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "jump_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t2"
+      },
+      "to": {
+        "node": "jump_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "jump_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "jump_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t2"
+      },
+      "to": {
+        "node": "jump_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "powerup_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "powerup_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "powerup_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "powerup_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "powerup_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "powerup_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t3"
+      },
+      "to": {
+        "node": "powerup_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "powerup_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "powerup_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "powerup_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "powerup_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "powerup_repeat",
+        "port": "gate"
+      },
+      "to": {
+        "node": "powerup_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "hurt_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "hurt_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "hurt_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "hurt_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "hurt_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "hurt_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t4"
+      },
+      "to": {
+        "node": "hurt_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "hurt_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "hurt_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "hurt_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "hurt_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t4"
+      },
+      "to": {
+        "node": "hurt_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "explode_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "explode_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "explode_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "explode_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "explode_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "explode_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t5"
+      },
+      "to": {
+        "node": "explode_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "explode_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "explode_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "explode_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "explode_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t5"
+      },
+      "to": {
+        "node": "explode_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "select_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "select_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "select_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "select_highpass",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "select_highpass",
+        "port": "out"
+      },
+      "to": {
+        "node": "select_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "select_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "select_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t6"
+      },
+      "to": {
+        "node": "select_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "select_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "select_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "select_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "select_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t6"
+      },
+      "to": {
+        "node": "select_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "jump2_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "jump2_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "jump2_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump2_highpass",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "jump2_highpass",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump2_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "jump2_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump2_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t7"
+      },
+      "to": {
+        "node": "jump2_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "jump2_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump2_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "jump2_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "jump2_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t7"
+      },
+      "to": {
+        "node": "jump2_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_slide",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "boom_arpeggio",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_arpeggio",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "boom_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_vibrato",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_osc",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_phaser",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_slide",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t8"
+      },
+      "to": {
+        "node": "boom_envelope",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_phaser",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_envelope",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_repeat",
+        "port": "gate"
+      },
+      "to": {
+        "node": "boom_repeat_on",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t8"
+      },
+      "to": {
+        "node": "boom_restart",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_repeat_on",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_restart",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_restart",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_slide",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_restart",
+        "port": "out"
+      },
+      "to": {
+        "node": "boom_arpeggio",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "coin_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum0",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "jump_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum0",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "mix_sum0",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum1",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "powerup_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum1",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "mix_sum1",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum2",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "hurt_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum2",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "mix_sum2",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum3",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "explode_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum3",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "mix_sum3",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum4",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "select_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum4",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "mix_sum4",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum5",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "jump2_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum5",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "mix_sum5",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum6",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "boom_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix_sum6",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "master_level",
+        "port": "out"
+      },
+      "to": {
+        "node": "master",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "mix_sum6",
+        "port": "out"
+      },
+      "to": {
+        "node": "master",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "master",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "left"
+      }
+    },
+    {
+      "from": {
+        "node": "master",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "right"
+      }
+    }
+  ]
+}

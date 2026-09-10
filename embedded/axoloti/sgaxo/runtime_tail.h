@@ -96,10 +96,32 @@ static void sgaxo_midi_in(midi_device_t dev, uint8_t port, uint8_t b0,
   // failure. Called from the MIDI input thread, the same context the
   // patcher's own program-change objects use.
   if (status == 0xC0) {
+#ifdef SGAXO_BANK_NAV
+    // A controller with eight program-change pads and a bank of two hundred: pad
+    // one is the previous entry, pad two the next, pad three the first; every
+    // other program number is the entry it names, as MIDI has it.
+    uint32_t target = b1;
+    if (b1 == 0) target = (SGAXO_BANK_INDEX + SGAXO_BANK_COUNT - 1u) % SGAXO_BANK_COUNT;
+    else if (b1 == 1) target = (SGAXO_BANK_INDEX + 1u) % SGAXO_BANK_COUNT;
+    else if (b1 == 2) target = 0;
+    LoadPatchIndexed(target);
+#else
     LoadPatchIndexed(b1);
+#endif
     return;
   }
 #endif
+  // Controllers and the bend land in the table MidiCC kernels read; 7-bit
+  // positions as 0..1, the bend's 14 bits likewise, the way the engine's
+  // cc_values carry them.
+  if (status == 0xB0) {
+    if (b1 < 128) sgaxo_cc[b1] = (float)b2 * (1.0f / 127.0f);
+    return;
+  }
+  if (status == 0xE0) {
+    sgaxo_cc[128] = (float)(((uint32_t)b2 << 7) | b1) * (1.0f / 16383.0f);
+    return;
+  }
   int on;
   if (status == 0x90 && b2 > 0) on = 1;
   else if (status == 0x80 || (status == 0x90 && b2 == 0)) on = 0;
@@ -183,6 +205,7 @@ AXO_PATCH_MIDI(SGAXO_PATCH_ID, sgaxo_dsp, sgaxo_dispose, sgaxo_midi_in, {
   volatile uint32_t *p = (volatile uint32_t *)SGAXO_SHM_ADDR;
   for (unsigned i = 0; i < sizeof(sgaxo_shm_t) / 4; i++) p[i] = 0;
   sgaxo_fifo_pos = SGAXO_FRAMES;  // .bss is zeroed; mark the FIFO empty
+  for (int j = 0; j < 129; j++) sgaxo_cc[j] = -1.0f;  // nothing heard yet
 #ifdef SGAXO_SD_BUFFERS
   sgaxo_load_sd_buffers();  // before sg_graph_init: Speech scans its bank
 #endif

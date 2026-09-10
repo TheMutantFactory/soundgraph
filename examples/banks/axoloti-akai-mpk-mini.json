@@ -1,0 +1,805 @@
+{
+  "schema_version": 1,
+  "name": "Axoloti + Akai MPK mini",
+  "target": "axoloti",
+  "controller": "Akai MPK mini mk3, factory program 1",
+  "program_change": "prev-next",
+  "entries": [
+    {
+      "name": "poly5-pads",
+      "patch": "axoloti-akai-mpk-mini/poly5-pads.json"
+    },
+    {
+      "name": "game-pads",
+      "patch": "axoloti-akai-mpk-mini/game-pads.json"
+    },
+    {
+      "name": "drum-pads",
+      "patch": "axoloti-akai-mpk-mini/drum-pads.json"
+    },
+    {
+      "name": "dx7-algo-01",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-01.json"
+    },
+    {
+      "name": "dx7-algo-02",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-02.json"
+    },
+    {
+      "name": "dx7-algo-03",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-03.json"
+    },
+    {
+      "name": "dx7-algo-04",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-04.json"
+    },
+    {
+      "name": "dx7-algo-05",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-05.json"
+    },
+    {
+      "name": "dx7-algo-06",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-06.json"
+    },
+    {
+      "name": "dx7-algo-07",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-07.json"
+    },
+    {
+      "name": "dx7-algo-08",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-08.json"
+    },
+    {
+      "name": "dx7-algo-09",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-09.json"
+    },
+    {
+      "name": "dx7-algo-10",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-10.json"
+    },
+    {
+      "name": "dx7-algo-11",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-11.json"
+    },
+    {
+      "name": "dx7-algo-12",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-12.json"
+    },
+    {
+      "name": "dx7-algo-13",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-13.json"
+    },
+    {
+      "name": "dx7-algo-14",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-14.json"
+    },
+    {
+      "name": "dx7-algo-15",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-15.json"
+    },
+    {
+      "name": "dx7-algo-16",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-16.json"
+    },
+    {
+      "name": "dx7-algo-17",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-17.json"
+    },
+    {
+      "name": "dx7-algo-18",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-18.json"
+    },
+    {
+      "name": "dx7-algo-19",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-19.json"
+    },
+    {
+      "name": "dx7-algo-20",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-20.json"
+    },
+    {
+      "name": "dx7-algo-21",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-21.json"
+    },
+    {
+      "name": "dx7-algo-22",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-22.json"
+    },
+    {
+      "name": "dx7-algo-23",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-23.json"
+    },
+    {
+      "name": "dx7-algo-24",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-24.json"
+    },
+    {
+      "name": "dx7-algo-25",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-25.json"
+    },
+    {
+      "name": "dx7-algo-26",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-26.json"
+    },
+    {
+      "name": "dx7-algo-27",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-27.json"
+    },
+    {
+      "name": "dx7-algo-28",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-28.json"
+    },
+    {
+      "name": "dx7-algo-29",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-29.json"
+    },
+    {
+      "name": "dx7-algo-30",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-30.json"
+    },
+    {
+      "name": "dx7-algo-31",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-31.json"
+    },
+    {
+      "name": "dx7-algo-32",
+      "patch": "axoloti-akai-mpk-mini/dx7-algo-32.json"
+    },
+    {
+      "name": "dx7-bass-bank",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-bank.json"
+    },
+    {
+      "name": "dx7-bass-grit",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-grit.json"
+    },
+    {
+      "name": "dx7-bass-knock",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-knock.json"
+    },
+    {
+      "name": "dx7-bass-pick",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-pick.json"
+    },
+    {
+      "name": "dx7-bass-pluck",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-pluck.json"
+    },
+    {
+      "name": "dx7-bass-round",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-round.json"
+    },
+    {
+      "name": "dx7-bass-soft",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-soft.json"
+    },
+    {
+      "name": "dx7-bass-sub",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-sub.json"
+    },
+    {
+      "name": "dx7-bass-wire",
+      "patch": "axoloti-akai-mpk-mini/dx7-bass-wire.json"
+    },
+    {
+      "name": "dx7-bell-bank",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-bank.json"
+    },
+    {
+      "name": "dx7-bell-dark",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-dark.json"
+    },
+    {
+      "name": "dx7-bell-deep",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-deep.json"
+    },
+    {
+      "name": "dx7-bell-far",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-far.json"
+    },
+    {
+      "name": "dx7-bell-glass",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-glass.json"
+    },
+    {
+      "name": "dx7-bell-long",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-long.json"
+    },
+    {
+      "name": "dx7-bell-near",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-near.json"
+    },
+    {
+      "name": "dx7-bell-small",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-small.json"
+    },
+    {
+      "name": "dx7-bell-tiny",
+      "patch": "axoloti-akai-mpk-mini/dx7-bell-tiny.json"
+    },
+    {
+      "name": "dx7-ep-bank",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-bank.json"
+    },
+    {
+      "name": "dx7-ep-bells",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-bells.json"
+    },
+    {
+      "name": "dx7-ep-chime",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-chime.json"
+    },
+    {
+      "name": "dx7-ep-dusk",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-dusk.json"
+    },
+    {
+      "name": "dx7-ep-felt",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-felt.json"
+    },
+    {
+      "name": "dx7-ep-glass",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-glass.json"
+    },
+    {
+      "name": "dx7-ep-hard",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-hard.json"
+    },
+    {
+      "name": "dx7-ep-mellow",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-mellow.json"
+    },
+    {
+      "name": "dx7-ep-road",
+      "patch": "axoloti-akai-mpk-mini/dx7-ep-road.json"
+    },
+    {
+      "name": "dx7-organ-5th",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-5th.json"
+    },
+    {
+      "name": "dx7-organ-bank",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-bank.json"
+    },
+    {
+      "name": "dx7-organ-full",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-full.json"
+    },
+    {
+      "name": "dx7-organ-high",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-high.json"
+    },
+    {
+      "name": "dx7-organ-hush",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-hush.json"
+    },
+    {
+      "name": "dx7-organ-jazz",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-jazz.json"
+    },
+    {
+      "name": "dx7-organ-pipe",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-pipe.json"
+    },
+    {
+      "name": "dx7-organ-soft",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-soft.json"
+    },
+    {
+      "name": "dx7-organ-thin",
+      "patch": "axoloti-akai-mpk-mini/dx7-organ-thin.json"
+    },
+    {
+      "name": "fm-accordion",
+      "patch": "axoloti-akai-mpk-mini/fm-accordion.json"
+    },
+    {
+      "name": "fm-acoustic-bass",
+      "patch": "axoloti-akai-mpk-mini/fm-acoustic-bass.json"
+    },
+    {
+      "name": "fm-acoustic-grand-piano",
+      "patch": "axoloti-akai-mpk-mini/fm-acoustic-grand-piano.json"
+    },
+    {
+      "name": "fm-acoustic-guitar-nylon",
+      "patch": "axoloti-akai-mpk-mini/fm-acoustic-guitar-nylon.json"
+    },
+    {
+      "name": "fm-acoustic-guitar-steel",
+      "patch": "axoloti-akai-mpk-mini/fm-acoustic-guitar-steel.json"
+    },
+    {
+      "name": "fm-agogo",
+      "patch": "axoloti-akai-mpk-mini/fm-agogo.json"
+    },
+    {
+      "name": "fm-alto-sax",
+      "patch": "axoloti-akai-mpk-mini/fm-alto-sax.json"
+    },
+    {
+      "name": "fm-applause",
+      "patch": "axoloti-akai-mpk-mini/fm-applause.json"
+    },
+    {
+      "name": "fm-bag-pipe",
+      "patch": "axoloti-akai-mpk-mini/fm-bag-pipe.json"
+    },
+    {
+      "name": "fm-banjo",
+      "patch": "axoloti-akai-mpk-mini/fm-banjo.json"
+    },
+    {
+      "name": "fm-baritone-sax",
+      "patch": "axoloti-akai-mpk-mini/fm-baritone-sax.json"
+    },
+    {
+      "name": "fm-bassoon",
+      "patch": "axoloti-akai-mpk-mini/fm-bassoon.json"
+    },
+    {
+      "name": "fm-bird-tweet",
+      "patch": "axoloti-akai-mpk-mini/fm-bird-tweet.json"
+    },
+    {
+      "name": "fm-blown-bottle",
+      "patch": "axoloti-akai-mpk-mini/fm-blown-bottle.json"
+    },
+    {
+      "name": "fm-brass-section",
+      "patch": "axoloti-akai-mpk-mini/fm-brass-section.json"
+    },
+    {
+      "name": "fm-breath-noise",
+      "patch": "axoloti-akai-mpk-mini/fm-breath-noise.json"
+    },
+    {
+      "name": "fm-bright-acoustic-piano",
+      "patch": "axoloti-akai-mpk-mini/fm-bright-acoustic-piano.json"
+    },
+    {
+      "name": "fm-celesta",
+      "patch": "axoloti-akai-mpk-mini/fm-celesta.json"
+    },
+    {
+      "name": "fm-cello",
+      "patch": "axoloti-akai-mpk-mini/fm-cello.json"
+    },
+    {
+      "name": "fm-choir-aahs",
+      "patch": "axoloti-akai-mpk-mini/fm-choir-aahs.json"
+    },
+    {
+      "name": "fm-church-organ",
+      "patch": "axoloti-akai-mpk-mini/fm-church-organ.json"
+    },
+    {
+      "name": "fm-clarinet-dmx-fixed",
+      "patch": "axoloti-akai-mpk-mini/fm-clarinet-dmx-fixed.json"
+    },
+    {
+      "name": "fm-clavichord",
+      "patch": "axoloti-akai-mpk-mini/fm-clavichord.json"
+    },
+    {
+      "name": "fm-contrabass",
+      "patch": "axoloti-akai-mpk-mini/fm-contrabass.json"
+    },
+    {
+      "name": "fm-distortion-guitar",
+      "patch": "axoloti-akai-mpk-mini/fm-distortion-guitar.json"
+    },
+    {
+      "name": "fm-drawbar-organ",
+      "patch": "axoloti-akai-mpk-mini/fm-drawbar-organ.json"
+    },
+    {
+      "name": "fm-dulcimer",
+      "patch": "axoloti-akai-mpk-mini/fm-dulcimer.json"
+    },
+    {
+      "name": "fm-electric-bass-finger",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-bass-finger.json"
+    },
+    {
+      "name": "fm-electric-bass-pick",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-bass-pick.json"
+    },
+    {
+      "name": "fm-electric-grand-piano",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-grand-piano.json"
+    },
+    {
+      "name": "fm-electric-guitar-clean",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-guitar-clean.json"
+    },
+    {
+      "name": "fm-electric-guitar-jazz",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-guitar-jazz.json"
+    },
+    {
+      "name": "fm-electric-guitar-muted",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-guitar-muted.json"
+    },
+    {
+      "name": "fm-electric-piano-dx-7",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-piano-dx-7.json"
+    },
+    {
+      "name": "fm-electric-piano-rhodes",
+      "patch": "axoloti-akai-mpk-mini/fm-electric-piano-rhodes.json"
+    },
+    {
+      "name": "fm-english-horn",
+      "patch": "axoloti-akai-mpk-mini/fm-english-horn.json"
+    },
+    {
+      "name": "fm-fiddle",
+      "patch": "axoloti-akai-mpk-mini/fm-fiddle.json"
+    },
+    {
+      "name": "fm-flute",
+      "patch": "axoloti-akai-mpk-mini/fm-flute.json"
+    },
+    {
+      "name": "fm-french-horn",
+      "patch": "axoloti-akai-mpk-mini/fm-french-horn.json"
+    },
+    {
+      "name": "fm-fretless-bass-dmx-bug-fix",
+      "patch": "axoloti-akai-mpk-mini/fm-fretless-bass-dmx-bug-fix.json"
+    },
+    {
+      "name": "fm-fx-1-rain",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-1-rain.json"
+    },
+    {
+      "name": "fm-fx-2-soundtrack",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-2-soundtrack.json"
+    },
+    {
+      "name": "fm-fx-3-crystal",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-3-crystal.json"
+    },
+    {
+      "name": "fm-fx-4-atmosphere",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-4-atmosphere.json"
+    },
+    {
+      "name": "fm-fx-5-brightness",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-5-brightness.json"
+    },
+    {
+      "name": "fm-fx-6-goblin",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-6-goblin.json"
+    },
+    {
+      "name": "fm-fx-7-echo-drops",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-7-echo-drops.json"
+    },
+    {
+      "name": "fm-fx-8-star-theme",
+      "patch": "axoloti-akai-mpk-mini/fm-fx-8-star-theme.json"
+    },
+    {
+      "name": "fm-glockenspiel",
+      "patch": "axoloti-akai-mpk-mini/fm-glockenspiel.json"
+    },
+    {
+      "name": "fm-guitar-fret-noise-dmx",
+      "patch": "axoloti-akai-mpk-mini/fm-guitar-fret-noise-dmx.json"
+    },
+    {
+      "name": "fm-guitar-harmonics",
+      "patch": "axoloti-akai-mpk-mini/fm-guitar-harmonics.json"
+    },
+    {
+      "name": "fm-gun-shot",
+      "patch": "axoloti-akai-mpk-mini/fm-gun-shot.json"
+    },
+    {
+      "name": "fm-harmonica-dmx-fixed",
+      "patch": "axoloti-akai-mpk-mini/fm-harmonica-dmx-fixed.json"
+    },
+    {
+      "name": "fm-harpsichord",
+      "patch": "axoloti-akai-mpk-mini/fm-harpsichord.json"
+    },
+    {
+      "name": "fm-helicopter",
+      "patch": "axoloti-akai-mpk-mini/fm-helicopter.json"
+    },
+    {
+      "name": "fm-honky-tonk-piano",
+      "patch": "axoloti-akai-mpk-mini/fm-honky-tonk-piano.json"
+    },
+    {
+      "name": "fm-kalimba",
+      "patch": "axoloti-akai-mpk-mini/fm-kalimba.json"
+    },
+    {
+      "name": "fm-koto",
+      "patch": "axoloti-akai-mpk-mini/fm-koto.json"
+    },
+    {
+      "name": "fm-lead-1-square",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-1-square.json"
+    },
+    {
+      "name": "fm-lead-2-sawtooth",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-2-sawtooth.json"
+    },
+    {
+      "name": "fm-lead-3-calliope",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-3-calliope.json"
+    },
+    {
+      "name": "fm-lead-4-chiffer",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-4-chiffer.json"
+    },
+    {
+      "name": "fm-lead-5-charang",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-5-charang.json"
+    },
+    {
+      "name": "fm-lead-6-voice",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-6-voice.json"
+    },
+    {
+      "name": "fm-lead-7-5th-sawtooth",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-7-5th-sawtooth.json"
+    },
+    {
+      "name": "fm-lead-8-lead-bass",
+      "patch": "axoloti-akai-mpk-mini/fm-lead-8-lead-bass.json"
+    },
+    {
+      "name": "fm-marimba",
+      "patch": "axoloti-akai-mpk-mini/fm-marimba.json"
+    },
+    {
+      "name": "fm-melodic-tom",
+      "patch": "axoloti-akai-mpk-mini/fm-melodic-tom.json"
+    },
+    {
+      "name": "fm-music-box",
+      "patch": "axoloti-akai-mpk-mini/fm-music-box.json"
+    },
+    {
+      "name": "fm-muted-trumpet",
+      "patch": "axoloti-akai-mpk-mini/fm-muted-trumpet.json"
+    },
+    {
+      "name": "fm-oboe",
+      "patch": "axoloti-akai-mpk-mini/fm-oboe.json"
+    },
+    {
+      "name": "fm-ocarina",
+      "patch": "axoloti-akai-mpk-mini/fm-ocarina.json"
+    },
+    {
+      "name": "fm-orchestra-hit",
+      "patch": "axoloti-akai-mpk-mini/fm-orchestra-hit.json"
+    },
+    {
+      "name": "fm-orchestral-harp",
+      "patch": "axoloti-akai-mpk-mini/fm-orchestral-harp.json"
+    },
+    {
+      "name": "fm-overdriven-guitar",
+      "patch": "axoloti-akai-mpk-mini/fm-overdriven-guitar.json"
+    },
+    {
+      "name": "fm-pad-1-new-age",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-1-new-age.json"
+    },
+    {
+      "name": "fm-pad-2-warm",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-2-warm.json"
+    },
+    {
+      "name": "fm-pad-3-polysynth",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-3-polysynth.json"
+    },
+    {
+      "name": "fm-pad-4-choir",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-4-choir.json"
+    },
+    {
+      "name": "fm-pad-5-bowed-glass",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-5-bowed-glass.json"
+    },
+    {
+      "name": "fm-pad-6-metal",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-6-metal.json"
+    },
+    {
+      "name": "fm-pad-7-halo",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-7-halo.json"
+    },
+    {
+      "name": "fm-pad-8-sweep",
+      "patch": "axoloti-akai-mpk-mini/fm-pad-8-sweep.json"
+    },
+    {
+      "name": "fm-pan-flute-dmx",
+      "patch": "axoloti-akai-mpk-mini/fm-pan-flute-dmx.json"
+    },
+    {
+      "name": "fm-percussive-organ",
+      "patch": "axoloti-akai-mpk-mini/fm-percussive-organ.json"
+    },
+    {
+      "name": "fm-piccolo",
+      "patch": "axoloti-akai-mpk-mini/fm-piccolo.json"
+    },
+    {
+      "name": "fm-pizzicato-string",
+      "patch": "axoloti-akai-mpk-mini/fm-pizzicato-string.json"
+    },
+    {
+      "name": "fm-recorder",
+      "patch": "axoloti-akai-mpk-mini/fm-recorder.json"
+    },
+    {
+      "name": "fm-reed-organ",
+      "patch": "axoloti-akai-mpk-mini/fm-reed-organ.json"
+    },
+    {
+      "name": "fm-reverse-cymbal",
+      "patch": "axoloti-akai-mpk-mini/fm-reverse-cymbal.json"
+    },
+    {
+      "name": "fm-rock-organ",
+      "patch": "axoloti-akai-mpk-mini/fm-rock-organ.json"
+    },
+    {
+      "name": "fm-seashore",
+      "patch": "axoloti-akai-mpk-mini/fm-seashore.json"
+    },
+    {
+      "name": "fm-shakuhachi",
+      "patch": "axoloti-akai-mpk-mini/fm-shakuhachi.json"
+    },
+    {
+      "name": "fm-shamisen",
+      "patch": "axoloti-akai-mpk-mini/fm-shamisen.json"
+    },
+    {
+      "name": "fm-shanai",
+      "patch": "axoloti-akai-mpk-mini/fm-shanai.json"
+    },
+    {
+      "name": "fm-sitar",
+      "patch": "axoloti-akai-mpk-mini/fm-sitar.json"
+    },
+    {
+      "name": "fm-slap-bass-1",
+      "patch": "axoloti-akai-mpk-mini/fm-slap-bass-1.json"
+    },
+    {
+      "name": "fm-slap-bass-2",
+      "patch": "axoloti-akai-mpk-mini/fm-slap-bass-2.json"
+    },
+    {
+      "name": "fm-soprano-sax",
+      "patch": "axoloti-akai-mpk-mini/fm-soprano-sax.json"
+    },
+    {
+      "name": "fm-steel-drums",
+      "patch": "axoloti-akai-mpk-mini/fm-steel-drums.json"
+    },
+    {
+      "name": "fm-string-ensemble-1-dmx",
+      "patch": "axoloti-akai-mpk-mini/fm-string-ensemble-1-dmx.json"
+    },
+    {
+      "name": "fm-string-ensemble-2-dmx",
+      "patch": "axoloti-akai-mpk-mini/fm-string-ensemble-2-dmx.json"
+    },
+    {
+      "name": "fm-synth-bass-1",
+      "patch": "axoloti-akai-mpk-mini/fm-synth-bass-1.json"
+    },
+    {
+      "name": "fm-synth-bass-2",
+      "patch": "axoloti-akai-mpk-mini/fm-synth-bass-2.json"
+    },
+    {
+      "name": "fm-synth-brass-1",
+      "patch": "axoloti-akai-mpk-mini/fm-synth-brass-1.json"
+    },
+    {
+      "name": "fm-synth-brass-2",
+      "patch": "axoloti-akai-mpk-mini/fm-synth-brass-2.json"
+    },
+    {
+      "name": "fm-synth-drum",
+      "patch": "axoloti-akai-mpk-mini/fm-synth-drum.json"
+    },
+    {
+      "name": "fm-synth-voice",
+      "patch": "axoloti-akai-mpk-mini/fm-synth-voice.json"
+    },
+    {
+      "name": "fm-synthstrings-1",
+      "patch": "axoloti-akai-mpk-mini/fm-synthstrings-1.json"
+    },
+    {
+      "name": "fm-synthstrings-2",
+      "patch": "axoloti-akai-mpk-mini/fm-synthstrings-2.json"
+    },
+    {
+      "name": "fm-taiko-drum-new",
+      "patch": "axoloti-akai-mpk-mini/fm-taiko-drum-new.json"
+    },
+    {
+      "name": "fm-tango-accordion",
+      "patch": "axoloti-akai-mpk-mini/fm-tango-accordion.json"
+    },
+    {
+      "name": "fm-telephone-ring",
+      "patch": "axoloti-akai-mpk-mini/fm-telephone-ring.json"
+    },
+    {
+      "name": "fm-tenor-sax",
+      "patch": "axoloti-akai-mpk-mini/fm-tenor-sax.json"
+    },
+    {
+      "name": "fm-timpani-dmx",
+      "patch": "axoloti-akai-mpk-mini/fm-timpani-dmx.json"
+    },
+    {
+      "name": "fm-tinkle-bell",
+      "patch": "axoloti-akai-mpk-mini/fm-tinkle-bell.json"
+    },
+    {
+      "name": "fm-tremolo-strings-dmx",
+      "patch": "axoloti-akai-mpk-mini/fm-tremolo-strings-dmx.json"
+    },
+    {
+      "name": "fm-trombone",
+      "patch": "axoloti-akai-mpk-mini/fm-trombone.json"
+    },
+    {
+      "name": "fm-trumpet-dmx-fixed",
+      "patch": "axoloti-akai-mpk-mini/fm-trumpet-dmx-fixed.json"
+    },
+    {
+      "name": "fm-tuba",
+      "patch": "axoloti-akai-mpk-mini/fm-tuba.json"
+    },
+    {
+      "name": "fm-tubular-bells",
+      "patch": "axoloti-akai-mpk-mini/fm-tubular-bells.json"
+    },
+    {
+      "name": "fm-vibraphone",
+      "patch": "axoloti-akai-mpk-mini/fm-vibraphone.json"
+    },
+    {
+      "name": "fm-viola",
+      "patch": "axoloti-akai-mpk-mini/fm-viola.json"
+    },
+    {
+      "name": "fm-violin",
+      "patch": "axoloti-akai-mpk-mini/fm-violin.json"
+    },
+    {
+      "name": "fm-voice-oohs",
+      "patch": "axoloti-akai-mpk-mini/fm-voice-oohs.json"
+    },
+    {
+      "name": "fm-whistle",
+      "patch": "axoloti-akai-mpk-mini/fm-whistle.json"
+    },
+    {
+      "name": "fm-woodblock",
+      "patch": "axoloti-akai-mpk-mini/fm-woodblock.json"
+    },
+    {
+      "name": "fm-xylophone",
+      "patch": "axoloti-akai-mpk-mini/fm-xylophone.json"
+    }
+  ]
+}

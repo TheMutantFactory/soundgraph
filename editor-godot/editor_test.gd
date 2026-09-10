@@ -1094,6 +1094,17 @@ func _initialize() -> void:
 		"and it comes back from the file with its patch where it said")
 	check(PatchBank.sanitize("Poly Five (live)!") == "Poly-Five--live--",
 		"entry names follow the baker's rule, so the card gets the same directory")
+	# The navigation mode and the controller note survive a round trip, and a plain
+	# bank writes neither: the file stays what the schema's defaults say it is.
+	reread.program_change = "prev-next"
+	reread.controller = "Akai MPK mini mk3"
+	check(reread.save() == "" and reread.load_file(bank_file) == ""
+			and reread.program_change == "prev-next" and reread.controller == "Akai MPK mini mk3"
+			and not test_bank.to_json().contains("program_change"),
+		"a bank keeps how it answers Program Change, and says nothing when it is plain MIDI")
+	reread.program_change = "midi"
+	reread.controller = ""
+	reread.save()
 	main._use_bank(bank_file)
 	check(str(Settings.fetch("hardware_bank", "")) == bank_file and main.bank != null
 			and main.bank.entries.size() == 1,

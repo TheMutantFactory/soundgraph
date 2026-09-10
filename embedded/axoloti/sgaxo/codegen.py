@@ -160,21 +160,21 @@ SUPPORTED = {
     },
     "SineOscillator": {
         "inputs": ["frequency", "fm", "pm", "feedback"],
-        "connectable": {"frequency"},
+        "connectable": {"frequency", "fm", "pm", "feedback"},
         "params": {"frequency": 440.0, "shape": 0.0, "feedback": 0.0},
-        "fixed": {"shape": 0.0, "feedback": 0.0},
+        "fixed": {},
         "outputs": ["out"],
     },
     "SawOscillator": {
         "inputs": ["frequency", "fm", "pm"],
-        "connectable": {"frequency"},
+        "connectable": {"frequency", "fm", "pm"},
         "params": {"frequency": 440.0},
         "fixed": {},
         "outputs": ["out"],
     },
     "SquareOscillator": {
         "inputs": ["frequency", "fm", "pm"],
-        "connectable": {"frequency"},
+        "connectable": {"frequency", "fm", "pm"},
         "params": {"frequency": 440.0, "pulse_width": 0.5,
                    "pulse_width_sweep": 0.0},
         "fixed": {"pulse_width_sweep": 0.0},
@@ -182,7 +182,7 @@ SUPPORTED = {
     },
     "NoiseOscillator": {
         "inputs": ["frequency", "fm", "pm"],
-        "connectable": {"frequency"},
+        "connectable": {"frequency", "fm", "pm"},
         "params": {"frequency": 440.0, "steps": 32.0, "seed": 12345.0},
         "fixed": {},
         "outputs": ["out"],
@@ -192,6 +192,24 @@ SUPPORTED = {
         "params": {"colour": 0.0, "seed": 12345.0},
         "fixed": {},
         "outputs": ["out"],
+    },
+    "MidiCC": {
+        "inputs": [], "connectable": set(),
+        "params": {"cc": 1.0, "low": 0.0, "high": 1.0, "resting": 0.0, "glide": 15.0},
+        "fixed": {},
+        "outputs": ["out"],
+    },
+    "NoteTriggers": {
+        "inputs": ["bus"], "connectable": {"bus"},
+        "params": {"base": 48.0, "shift": 0.0},
+        "fixed": {},
+        "outputs": ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "bus"],
+    },
+    "TriggerBus": {
+        "inputs": ["bus"], "connectable": {"bus"},
+        "params": {"shift": 0.0},
+        "fixed": {},
+        "outputs": ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"],
     },
     "LFO": {
         "inputs": ["rate"], "connectable": {"rate"},
@@ -343,11 +361,41 @@ SUPPORTED = {
     },
     "StereoOutput": {
         "inputs": ["left", "right"], "connectable": {"left", "right"},
-        "params": {"level": 1.0, "safety_limit": 1.0},
+        "params": {"level": 0.8, "safety_limit": 1.0},
         "fixed": {},
         "outputs": [],
     },
 }
+
+
+_REGISTRY = None
+
+
+def registry():
+    """Every node type's parameters as the engine declares them — default, low,
+    high — read from `sg-validate --list-nodes`, once. The engine clamps a
+    parameter to its range when it is set; a patch that says high=2000 on a
+    MidiCC runs at 1000 natively, and the board has to agree. The defaults
+    are checked against SUPPORTED by the rig's tests, because a default that
+    drifts is a whole patch quietly 25% louder on one target."""
+    global _REGISTRY
+    if _REGISTRY is not None:
+        return _REGISTRY
+    import re
+    listing = subprocess.run([str(SG_VALIDATE), "--list-nodes"],
+                             capture_output=True, text=True, check=True).stdout
+    table, current = {}, None
+    for line in listing.splitlines():
+        head = re.match(r"^(\w+)\s+\(", line)
+        if head:
+            current = head.group(1)
+            table[current] = {}
+            continue
+        row = re.match(r"^  ([a-z_0-9]+) = ([-+0-9.e]+)\S*.*?\(([-+0-9.e]+) to ([-+0-9.e]+)", line)
+        if row and current:
+            table[current][row.group(1)] = tuple(float(row.group(k)) for k in (2, 3, 4))
+    _REGISTRY = table
+    return table
 
 
 def _resolve(patch_path):
@@ -382,6 +430,10 @@ def _validate(resolved):
             if k not in params:
                 raise Unsupported(f"{n['id']}: unknown parameter {k!r}")
             params[k] = float(v)
+        # Clamped to the engine's own ranges, as DspNode::set_parameter clamps.
+        for name, (_default, low, high) in registry().get(t, {}).items():
+            if name in params:
+                params[name] = f32(min(max(f32(params[name]), low), high))
         for name, required in spec["fixed"].items():
             if params[name] != required:
                 raise Unsupported(
@@ -439,6 +491,10 @@ def _validate(resolved):
                 receivers[voice].append(i)
         else:
             global_receivers.extend(members.values())
+    # A NoteTriggers hears every note too: it is a row of pads, not a voice.
+    for i, n in nodes.items():
+        if n["type"] == "NoteTriggers":
+            global_receivers.append(i)
     return nodes, bindings, order, voices, receivers, global_receivers
 
 
@@ -475,7 +531,8 @@ def _plan_buffers(resolved, nodes):
 
 def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
           buffer_placements, voices, receivers, global_receivers,
-          sd_bank_name=None, buffer_files=()):
+          sd_bank_name=None, buffer_files=(), bank_index=0, bank_count=1,
+          bank_nav=False):
     L = ["// Generated by sgaxo/codegen.py — do not edit.",
          '#include "kernels.h"', ""]
     init = []
@@ -489,8 +546,44 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
             used_outputs.add((i, "left"))
             used_outputs.add((i, "right"))
 
+    # --- one pool of blocks, shared by outputs whose lives do not overlap ------
+    # A block is written by its node and read by its consumers, the last of which
+    # runs at some later index in the schedule; past that index the block is
+    # free for the next output. A source of a feedback binding is read at block
+    # end, so it lives to the end. A block is never handed to a node that still
+    # reads it, so no kernel writes over its own input. The eight game sounds on
+    # one card were 9 KB past the board's close memory with a block per output;
+    # pooled, they fit with room to spare.
+    producer_index = {i: k for k, i in enumerate(order)}
+    last_use = {}
+    for (dst, port), b in bindings.items():
+        reach = len(order) if b["fb"] else producer_index[dst]
+        for s in b["sources"]:
+            last_use[s] = max(last_use.get(s, -1), reach)
+    slot_of, free_slots, busy, pool_size = {}, [], [], 0
+    for k, i in enumerate(order):
+        still = []
+        for until, slot in busy:
+            (free_slots if until < k else still).append(slot if until < k else (until, slot))
+        busy = still
+        for port in SUPPORTED[nodes[i]["type"]]["outputs"]:
+            if (i, port) not in used_outputs:
+                continue
+            if free_slots:
+                slot = free_slots.pop()
+            else:
+                slot = pool_size
+                pool_size += 1
+            slot_of[(i, port)] = slot
+            busy.append((last_use.get((i, port), k), slot))
+
     def buf(i, port):
-        return f"buf_{_cid(i)}_{port}"
+        # An output nothing listens to is written into one shared scratch block
+        # rather than a block of its own: a Mixer feeding only the right channel
+        # of an Output that was folded away used to name a buffer never declared.
+        if (i, port) not in slot_of:
+            return "sg_scratch"
+        return f"sg_pool[{slot_of[(i, port)]}]"
 
     def fbbuf(i, port):
         return f"fb_{_cid(i)}_{port}"
@@ -499,12 +592,12 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
         return f"mix_{_cid(i)}_{port}"
 
     # --- state and buffers ---------------------------------------------------
+    L.append("static float sg_scratch[SGAXO_FRAMES];  // unlistened outputs land here")
+    L.append(f"static float sg_pool[{max(1, pool_size)}][SGAXO_FRAMES];  "
+             f"// {len(slot_of)} outputs share {pool_size} blocks")
     for i in order:
         n = nodes[i]
         t, c = n["type"], _cid(i)
-        for port in SUPPORTED[t]["outputs"]:
-            if (i, port) in used_outputs:
-                L.append(f"static float {buf(i, port)}[SGAXO_FRAMES];")
         if t == "NoteInput":
             L.append(f"static sgaxo::NoteState st_{c};")
             init += [f"st_{c}.target_note = 60.0f;",
@@ -521,6 +614,12 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
             L.append(f"static sgaxo::NoiseState st_{c};")
             seed = int(f32(n["params"]["seed"])) & 0xFFFFFFFF
             init.append(f"st_{c}.rng.seed({seed}u);")
+        elif t == "MidiCC":
+            L.append(f"static sgaxo::MidiCcState st_{c};")
+        elif t == "NoteTriggers":
+            L.append(f"static sgaxo::NoteTriggersState st_{c};")
+            init.append(f"st_{c}.base = {int(f32(n['params']['base']) + 0.5)};")
+            note_nodes.append(i)
         elif t == "LFO":
             L.append(f"static sgaxo::LfoState st_{c};")
             init.append(f"st_{c}.rng.seed(0x5EED1234u);")
@@ -641,17 +740,42 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
             L.append(f"  sgaxo::k_audio_input({in_l}, {in_r}, "
                      f"{buf(i, 'left')}, {buf(i, 'right')}, {_lit(p['gain'])});")
         elif t == "SineOscillator":
-            L.append(f"  sgaxo::k_sine(st_{c}, {src(i, 'frequency')}, "
-                     f"{buf(i, 'out')}, {_lit(p['frequency'])}, {_lit(SAMPLE_RATE)});")
+            L.append(f"  sgaxo::k_sine(st_{c}, {src(i, 'frequency')}, {src(i, 'fm')}, "
+                     f"{src(i, 'pm')}, {src(i, 'feedback')}, {buf(i, 'out')}, "
+                     f"{_lit(p['frequency'])}, {_lit(p['feedback'])}, "
+                     f"{int(f32(p['shape']))}, {_lit(SAMPLE_RATE)});")
         elif t == "SawOscillator":
-            L.append(f"  sgaxo::k_saw(st_{c}, {src(i, 'frequency')}, "
-                     f"{buf(i, 'out')}, {_lit(p['frequency'])}, {_lit(SAMPLE_RATE)});")
+            L.append(f"  sgaxo::k_saw(st_{c}, {src(i, 'frequency')}, {src(i, 'fm')}, "
+                     f"{src(i, 'pm')}, {buf(i, 'out')}, {_lit(p['frequency'])}, "
+                     f"{_lit(SAMPLE_RATE)});")
         elif t == "SquareOscillator":
-            L.append(f"  sgaxo::k_square(st_{c}, {src(i, 'frequency')}, "
-                     f"{buf(i, 'out')}, {_lit(p['frequency'])}, "
+            L.append(f"  sgaxo::k_square(st_{c}, {src(i, 'frequency')}, {src(i, 'fm')}, "
+                     f"{src(i, 'pm')}, {buf(i, 'out')}, {_lit(p['frequency'])}, "
                      f"{_lit(p['pulse_width'])}, {_lit(SAMPLE_RATE)});")
+        elif t == "MidiCC":
+            glide_seconds = f32(f32(p["glide"]) * 0.001)
+            if glide_seconds > 0.0001:
+                coeff = f32(1.0 - math.exp(f32(-1.0 / f32(glide_seconds * SAMPLE_RATE))))
+            else:
+                coeff = 1.0
+            L.append(f"  sgaxo::k_midi_cc(st_{c}, {buf(i, 'out')}, "
+                     f"{int(f32(p['cc']) + 0.5)}, {_lit(p['low'])}, {_lit(p['high'])}, "
+                     f"{_lit(p['resting'])}, {_lit(coeff)});")
+        elif t == "NoteTriggers":
+            lanes = [buf(i, port) if (i, port) in used_outputs else "0"
+                     for port in SUPPORTED[t]["outputs"]]
+            L.append(f"  {{ float *const o[9] = {{{', '.join(lanes)}}}; "
+                     f"sgaxo::k_note_triggers(st_{c}, {src(i, 'bus')}, o, "
+                     f"{int(f32(p['shift']) + 0.5)}); }}")
+        elif t == "TriggerBus":
+            lanes = [buf(i, port) if (i, port) in used_outputs else "0"
+                     for port in SUPPORTED[t]["outputs"]]
+            L.append(f"  {{ float *const o[8] = {{{', '.join(lanes)}}}; "
+                     f"sgaxo::k_trigger_bus({src(i, 'bus')}, o, "
+                     f"{int(f32(p['shift']) + 0.5)}); }}")
         elif t == "NoiseOscillator":
             L.append(f"  sgaxo::k_noise_osc(st_{c}, {src(i, 'frequency')}, "
+                     f"{src(i, 'fm')}, {src(i, 'pm')}, "
                      f"{buf(i, 'out')}, {_lit(p['frequency'])}, "
                      f"{_lit(p['steps'])}, {_lit(SAMPLE_RATE)});")
         elif t == "Noise":
@@ -878,6 +1002,10 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
     L.append("")
     if sd_bank_name is not None:
         L.append("#define SGAXO_BANK 1")
+        L.append(f"#define SGAXO_BANK_INDEX {int(bank_index)}u")
+        L.append(f"#define SGAXO_BANK_COUNT {max(1, int(bank_count))}u")
+        if bank_nav:
+            L.append("#define SGAXO_BANK_NAV 1")
         if buffer_files:
             L.append(f"#define SGAXO_SD_BUFFERS 1")
             L.append(f"#define SGAXO_SD_BUFFER_COUNT {len(buffer_files)}")
@@ -919,7 +1047,8 @@ def _tool(command, what):
 
 
 def build_patch(patch_path, frames=4800, name=None, events=(),
-                zero_input=True, sd_bank_name=None):
+                zero_input=True, sd_bank_name=None, bank_index=0, bank_count=1,
+                program_change="midi"):
     """Compile `patch_path` for the Axoloti; returns (binary_bytes, patch_id).
 
     events: (frame, note_on, note, velocity) tuples, delivered on 64-frame
@@ -952,7 +1081,9 @@ def build_patch(patch_path, frames=4800, name=None, events=(),
     source = _emit(nodes, bindings, order, frames, pid, list(events),
                    zero_input, placements, voices, receivers,
                    global_receivers, sd_bank_name=sd_bank_name,
-                   buffer_files=buffer_files)
+                   buffer_files=buffer_files, bank_index=bank_index,
+                   bank_count=bank_count,
+                   bank_nav=(program_change == "prev-next"))
 
     BUILD.mkdir(exist_ok=True)
     cpp = BUILD / f"{name}.cpp"

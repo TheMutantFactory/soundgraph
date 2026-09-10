@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "name": "Note triggers"
+  },
+  "nodes": [
+    {
+      "id": "pads",
+      "type": "NoteTriggers",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "base": 60,
+        "shift": 0
+      }
+    },
+    {
+      "id": "bus",
+      "type": "TriggerBus",
+      "position": {
+        "x": 0.0,
+        "y": 400.0
+      },
+      "parameters": {
+        "shift": 0
+      }
+    },
+    {
+      "id": "o1",
+      "type": "SineOscillator",
+      "position": {
+        "x": 400.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "frequency": 110.0
+      }
+    },
+    {
+      "id": "e1",
+      "type": "ADSR",
+      "position": {
+        "x": 400.0,
+        "y": 150.0
+      },
+      "parameters": {
+        "attack": 0.002,
+        "decay": 0.15,
+        "sustain": 0.0,
+        "release": 0.1
+      }
+    },
+    {
+      "id": "a1",
+      "type": "Gain",
+      "position": {
+        "x": 800.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "gain": 0.4
+      }
+    },
+    {
+      "id": "o2",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 400.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "frequency": 220.0,
+        "pulse_width": 0.3
+      }
+    },
+    {
+      "id": "e2",
+      "type": "ADSR",
+      "position": {
+        "x": 400.0,
+        "y": 450.0
+      },
+      "parameters": {
+        "attack": 0.002,
+        "decay": 0.1,
+        "sustain": 0.0,
+        "release": 0.1
+      }
+    },
+    {
+      "id": "a2",
+      "type": "Gain",
+      "position": {
+        "x": 800.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "gain": 0.3
+      }
+    },
+    {
+      "id": "o3",
+      "type": "SawOscillator",
+      "position": {
+        "x": 400.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "frequency": 330.0
+      }
+    },
+    {
+      "id": "e3",
+      "type": "ADSR",
+      "position": {
+        "x": 400.0,
+        "y": 750.0
+      },
+      "parameters": {
+        "attack": 0.002,
+        "decay": 0.2,
+        "sustain": 0.0,
+        "release": 0.1
+      }
+    },
+    {
+      "id": "a3",
+      "type": "Gain",
+      "position": {
+        "x": 800.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "gain": 0.3
+      }
+    },
+    {
+      "id": "s1",
+      "type": "Add",
+      "position": {
+        "x": 1200.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "s2",
+      "type": "Add",
+      "position": {
+        "x": 1400.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "position": {
+        "x": 1800.0,
+        "y": 0.0
+      },
+      "host": "stereo"
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "pads",
+        "port": "t1"
+      },
+      "to": {
+        "node": "e1",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "t2"
+      },
+      "to": {
+        "node": "e2",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "pads",
+        "port": "bus"
+      },
+      "to": {
+        "node": "bus",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "bus",
+        "port": "t3"
+      },
+      "to": {
+        "node": "e3",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "o1",
+        "port": "out"
+      },
+      "to": {
+        "node": "a1",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "e1",
+        "port": "out"
+      },
+      "to": {
+        "node": "a1",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "o2",
+        "port": "out"
+      },
+      "to": {
+        "node": "a2",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "e2",
+        "port": "out"
+      },
+      "to": {
+        "node": "a2",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "o3",
+        "port": "out"
+      },
+      "to": {
+        "node": "a3",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "e3",
+        "port": "out"
+      },
+      "to": {
+        "node": "a3",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "a1",
+        "port": "out"
+      },
+      "to": {
+        "node": "s1",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "a2",
+        "port": "out"
+      },
+      "to": {
+        "node": "s1",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "s1",
+        "port": "out"
+      },
+      "to": {
+        "node": "s2",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "a3",
+        "port": "out"
+      },
+      "to": {
+        "node": "s2",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "s2",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "left"
+      }
+    },
+    {
+      "from": {
+        "node": "s2",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "right"
+      }
+    }
+  ]
+}

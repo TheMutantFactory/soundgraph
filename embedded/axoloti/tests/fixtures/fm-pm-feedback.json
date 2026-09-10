@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "name": "FM, PM and feedback"
+  },
+  "nodes": [
+    {
+      "id": "kb",
+      "type": "Input",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "host": "note"
+    },
+    {
+      "id": "lfo",
+      "type": "LFO",
+      "position": {
+        "x": 0.0,
+        "y": 200.0
+      },
+      "parameters": {
+        "rate": 3.0,
+        "shape": 0,
+        "amount": 0.4,
+        "offset": 0.0
+      }
+    },
+    {
+      "id": "mod",
+      "type": "SineOscillator",
+      "position": {
+        "x": 400.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "frequency": 220.0,
+        "feedback": 0.6
+      }
+    },
+    {
+      "id": "car",
+      "type": "SineOscillator",
+      "position": {
+        "x": 800.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "frequency": 220.0
+      }
+    },
+    {
+      "id": "env",
+      "type": "ADSR",
+      "position": {
+        "x": 800.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "attack": 0.01,
+        "decay": 0.1,
+        "sustain": 0.7,
+        "release": 0.2
+      }
+    },
+    {
+      "id": "amp",
+      "type": "Gain",
+      "position": {
+        "x": 1200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "gain": 0.5
+      }
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "position": {
+        "x": 1600.0,
+        "y": 0.0
+      },
+      "host": "stereo"
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "kb",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "mod",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "kb",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "car",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "mod",
+        "port": "out"
+      },
+      "to": {
+        "node": "car",
+        "port": "pm"
+      }
+    },
+    {
+      "from": {
+        "node": "lfo",
+        "port": "out"
+      },
+      "to": {
+        "node": "car",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
+        "node": "kb",
+        "port": "gate"
+      },
+      "to": {
+        "node": "env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "car",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "env",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "left"
+      }
+    },
+    {
+      "from": {
+        "node": "amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "right"
+      }
+    }
+  ]
+}

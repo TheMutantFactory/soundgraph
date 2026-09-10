@@ -1674,3 +1674,43 @@ Consequences:
 Editing the default bank from the panel writes to the tracked file, which
 is what a demo repository wants; New bank… is the way to a set of one's
 own. The refusals are the codegen's next work, poly-five first.
+
+## 2026-09-10 — The Axoloti learns a controller: FM, CC, pads, and a walkable bank
+
+Decision:
+The codegen's oscillators take their fm, pm and feedback inputs and the
+sine's shapes, as sources.cpp reads them; MidiCC reads a board-side table
+the MIDI thread fills from CC and pitch bend; NoteTriggers and TriggerBus
+are kernels. Block buffers are pooled by lifetime. A bank may declare
+`"program_change": "prev-next"`, under which program 0 is the previous
+entry, 1 the next, 2 the first, and the rest are the entries they name.
+`tools/make-mpk-examples.py` generates a 199-entry set for an Akai MPK
+mini — Poly Five with the kit on the pads, the game sounds on the pads,
+the kit alone, and every DX7 and FM preset with a filter, an echo and four
+drums — in `examples/banks/axoloti-akai-mpk-mini/`, kept apart from
+`examples/patches` so the editor's example menu and its load-everything
+check do not grow by two hundred.
+
+Reason:
+The board could play notes and switch entries and nothing else, and the
+demo's own boot patch would not compile for it because a Constant fed an
+oscillator's fm input. A controller with eight knobs, eight pads and
+eight program-change pads is exactly the show instrument; what it needed
+was the three missing node families, and a way past MIDI's sixteen
+reachable programs without inventing a protocol — the pads still send
+Program Change, the board just reads three of the numbers as verbs.
+
+Alternatives:
+Prev/next as their own messages (nothing on the MPK sends them); a
+separate lighter kit per family (the whole kit put Poly Five 820 bytes
+past the 44 KB window, so four drums ride beside it and beside the
+presets); a block per output (eight game sounds on one card were 9 KB
+past close memory).
+
+Consequences:
+Poly Five, axe, duo-lead, the sfxr explosion and powerup, every DX7 and
+FM preset and the drum kit compile for the board. Native fidelity is
+verified on hardware for pm, fm, feedback, the triggers, MidiCC at rest,
+a DX7 algorithm and Poly Five. The controller numbers are the mk3's
+factory program; a mk2 differs, and the script is the one place to
+change them.

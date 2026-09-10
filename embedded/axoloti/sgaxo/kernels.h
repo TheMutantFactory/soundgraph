@@ -25,6 +25,11 @@
 
 #define SGAXO_FRAMES 64  // == soundgraph::kBlockSize
 
+// What the hardware has said so far, by controller number: 0..127 are CCs, 128 is
+// the pitch bend, and -1 means it has not spoken yet — ProcessContext::cc_values,
+// one for one. The MIDI thread writes it; MidiCC kernels read it once per block.
+static volatile float sgaxo_cc[129];
+
 typedef struct {
   int frame;
   int note_on;
@@ -150,8 +155,10 @@ inline float note_to_frequency(float note) {
 }
 
 // --- oscillators (sources.cpp OscillatorBase) --------------------------------
-// Supported subset: frequency input or parameter; fm/pm/feedback and non-sine
-// shapes are refused by the codegen.
+// frequency input or parameter; fm (octaves, per sample through exp2f_approx),
+// pm (cycles, clamped to +-8) and the sine's feedback (parameter, optionally
+// scaled by its input) exactly as OscillatorBase::process reads them. Non-sine
+// shapes and the square's pulse-width sweep are still refused by the codegen.
 
 struct OscState {
   float phase;
@@ -160,40 +167,84 @@ struct OscState {
 };
 
 template <typename RenderFn>
-inline void k_osc(OscState &s, const float *frequency_in, float *out,
-                  float base_frequency, float sample_rate, RenderFn render) {
+inline void k_osc(OscState &s, const float *frequency_in, const float *fm_in,
+                  const float *pm_in, const float *feedback_in, float *out,
+                  float base_frequency, float feedback, float sample_rate,
+                  RenderFn render) {
   const float nyquist = sample_rate * 0.5f;
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
     float frequency = frequency_in != 0 ? frequency_in[i] : base_frequency;
+    if (fm_in != 0) frequency *= exp2f_approx(fm_in[i]);
     frequency = clampf(frequency, 0.0f, nyquist);
     const float increment = frequency / sample_rate;
-    out[i] = render(s.phase, increment);
+    // The phase being read this sample, as distinct from the free-running phase
+    // underneath: modulation displaces one and never touches the other. With
+    // nothing modulating, read_phase is s.phase to the bit.
+    float displacement = 0.0f;
+    bool displaced = false;
+    if (pm_in != 0) {
+      displacement += clampf(pm_in[i], -8.0f, 8.0f);
+      displaced = true;
+    }
+    if (feedback != 0.0f) {
+      if (feedback_in != 0) {
+        const float scale = clampf(feedback_in[i], 0.0f, 4.0f);
+        displacement += feedback * scale * 0.5f * (s.hist_a + s.hist_b);
+      } else {
+        displacement += feedback * 0.5f * (s.hist_a + s.hist_b);
+      }
+      displaced = true;
+    }
+    const float read_phase = displaced ? wrap01(s.phase + displacement) : s.phase;
+    out[i] = render(read_phase, increment);
     s.hist_b = s.hist_a;
     s.hist_a = out[i];
     s.phase = wrap01(s.phase + increment);
   }
 }
 
-inline void k_sine(OscState &s, const float *frequency_in, float *out,
-                   float base_frequency, float sample_rate) {
-  k_osc(s, frequency_in, out, base_frequency, sample_rate,
-        [](float phase, float) { return sine01(phase); });
+// The sine's shapes, as SineOscillator::render has them: the table plus fabs and
+// a comparison, so every shape inherits the sine's bit-exactness.
+inline float sine_shape(int shape, float phase) {
+  // No libm here; a sign flip rounds the same way std::fabs does.
+  const float s = sine01(phase);
+  const float magnitude = s < 0.0f ? -s : s;
+  switch (shape) {
+    default:
+    case 0: return s;
+    case 1: return phase < 0.5f ? s : 0.0f;
+    case 2: return magnitude;
+    case 3: {
+      const bool rising = phase < 0.25f || (phase >= 0.5f && phase < 0.75f);
+      return rising ? magnitude : 0.0f;
+    }
+  }
 }
 
-inline void k_saw(OscState &s, const float *frequency_in, float *out,
-                  float base_frequency, float sample_rate) {
-  k_osc(s, frequency_in, out, base_frequency, sample_rate,
+inline void k_sine(OscState &s, const float *frequency_in, const float *fm_in,
+                   const float *pm_in, const float *feedback_in, float *out,
+                   float base_frequency, float feedback, int shape,
+                   float sample_rate) {
+  k_osc(s, frequency_in, fm_in, pm_in, feedback_in, out, base_frequency,
+        feedback, sample_rate,
+        [shape](float phase, float) { return sine_shape(shape, phase); });
+}
+
+inline void k_saw(OscState &s, const float *frequency_in, const float *fm_in,
+                  const float *pm_in, float *out, float base_frequency,
+                  float sample_rate) {
+  k_osc(s, frequency_in, fm_in, pm_in, 0, out, base_frequency, 0.0f, sample_rate,
         [](float phase, float increment) {
           return (2.0f * phase - 1.0f) - poly_blep(phase, increment);
         });
 }
 
-inline void k_square(OscState &s, const float *frequency_in, float *out,
-                     float base_frequency, float width_param,
-                     float sample_rate) {
+inline void k_square(OscState &s, const float *frequency_in, const float *fm_in,
+                     const float *pm_in, float *out, float base_frequency,
+                     float width_param, float sample_rate) {
   // SquareOscillator::render with pulse_width_sweep == 0 (codegen-enforced).
   const float width = clampf(width_param, 0.01f, 0.99f);
-  k_osc(s, frequency_in, out, base_frequency, sample_rate,
+  k_osc(s, frequency_in, fm_in, pm_in, 0, out, base_frequency, 0.0f, sample_rate,
         [width](float phase, float increment) {
           float value = phase < width ? 1.0f : -1.0f;
           value += poly_blep(phase, increment);
@@ -659,15 +710,20 @@ struct NoiseOscState {
 };
 
 inline void k_noise_osc(NoiseOscState &s, const float *frequency_in,
-                        float *out, float base_frequency, float steps_param,
+                        const float *fm_in, const float *pm_in, float *out,
+                        float base_frequency, float steps_param,
                         float sample_rate) {
   const float nyquist = sample_rate * 0.5f;
   const int steps = (int)clampf(steps_param, 2.0f, 64.0f);
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
     float frequency = frequency_in != 0 ? frequency_in[i] : base_frequency;
+    if (fm_in != 0) frequency *= exp2f_approx(fm_in[i]);
     frequency = clampf(frequency, 0.0f, nyquist);
     const float increment = frequency / sample_rate;
-    const float phase = s.osc.phase;
+    // render() is handed the read phase, displaced by pm, and the wrap detection
+    // reads that same phase — as OscillatorBase hands it to NoiseOscillator.
+    const float phase = pm_in != 0
+        ? wrap01(s.osc.phase + clampf(pm_in[i], -8.0f, 8.0f)) : s.osc.phase;
     if (phase < s.last_phase) {
       for (int k = 0; k < steps; ++k) s.table[k] = s.rng.next_bipolar();
     }
@@ -1201,6 +1257,85 @@ inline void k_stereo_output(const float *left_in, const float *right_in,
         sample = tanhf_approx(sample);
       }
       out[i] = sample;
+    }
+  }
+}
+
+// --- MidiCC (sources.cpp MidiCcNode) -----------------------------------------
+// Held, scaled between low and high, and smoothed with the node's own one-pole:
+// coefficient = 1 - exp(-1 / (glide_seconds * sample_rate)), computed on the host.
+
+struct MidiCcState {
+  float current;
+  int primed;
+};
+
+inline void k_midi_cc(MidiCcState &s, float *out, int cc, float low, float high,
+                      float resting, float coefficient) {
+  float position = resting;
+  if (cc >= 0 && cc <= 128) {
+    const float heard = sgaxo_cc[cc];
+    if (heard >= 0.0f) position = heard;
+  }
+  const float target = low + (high - low) * position;
+  if (!s.primed) {
+    s.current = low + (high - low) * resting;
+    s.primed = 1;
+  }
+  for (int i = 0; i < SGAXO_FRAMES; ++i) {
+    s.current += (target - s.current) * coefficient;
+    out[i] = s.current;
+  }
+}
+
+// --- NoteTriggers / TriggerBus (terminals.cpp) --------------------------------
+// Eight one-millisecond pulses from eight chromatic notes above a base, and the
+// bus that carries them as bits; the splitter reads the bus back into lanes.
+
+#define SGAXO_TRIGGER_LANES 8
+
+struct NoteTriggersState {
+  int remaining[SGAXO_TRIGGER_LANES];
+  int base;  // set by the generated init body
+};
+
+inline void note_event(NoteTriggersState &s, int on, int note, float velocity,
+                       float sample_rate) {
+  (void)velocity;
+  if (!on) return;  // a trigger has no other side to let go of
+  const int lane = note - s.base;
+  if (lane >= 0 && lane < SGAXO_TRIGGER_LANES) {
+    const int samples = (int)(sample_rate * 0.001f);
+    s.remaining[lane] = samples > 1 ? samples : 1;
+  }
+}
+
+// outs: the eight lanes then the bus, any of them 0 when nothing listens.
+inline void k_note_triggers(NoteTriggersState &s, const float *bus_in,
+                            float *const *outs, int shift) {
+  shift = shift < 0 ? 0 : (shift > SGAXO_TRIGGER_LANES ? SGAXO_TRIGGER_LANES : shift);
+  for (int i = 0; i < SGAXO_FRAMES; ++i) {
+    int mask = bus_in != 0 ? (int)(bus_in[i] + 0.5f) : 0;
+    for (int lane = 0; lane < SGAXO_TRIGGER_LANES; ++lane) {
+      const bool firing = s.remaining[lane] > 0;
+      if (outs[lane] != 0) outs[lane][i] = firing ? 1.0f : 0.0f;
+      if (firing) {
+        mask |= 1 << (lane + shift);
+        --s.remaining[lane];
+      }
+    }
+    if (outs[SGAXO_TRIGGER_LANES] != 0) {
+      outs[SGAXO_TRIGGER_LANES][i] = (float)(mask & 0xffff);
+    }
+  }
+}
+
+inline void k_trigger_bus(const float *bus, float *const *outs, int shift) {
+  shift = shift < 0 ? 0 : (shift > SGAXO_TRIGGER_LANES ? SGAXO_TRIGGER_LANES : shift);
+  for (int i = 0; i < SGAXO_FRAMES; ++i) {
+    const int mask = bus != 0 ? (((int)(bus[i] + 0.5f) >> shift) & 0xff) : 0;
+    for (int lane = 0; lane < SGAXO_TRIGGER_LANES; ++lane) {
+      if (outs[lane] != 0) outs[lane][i] = (mask & (1 << lane)) != 0 ? 1.0f : 0.0f;
     }
   }
 }
