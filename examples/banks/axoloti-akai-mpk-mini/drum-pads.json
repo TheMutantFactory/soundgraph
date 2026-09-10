@@ -728,6 +728,160 @@
       }
     },
     {
+      "id": "d_pitch_ratio",
+      "type": "MidiCC",
+      "position": {
+        "x": -700.0,
+        "y": -500.0
+      },
+      "parameters": {
+        "cc": 1,
+        "low": 1.0,
+        "high": 1.122462048309373,
+        "resting": 0.0,
+        "glide": 5.0
+      }
+    },
+    {
+      "id": "d_bent",
+      "type": "Multiply",
+      "position": {
+        "x": -400.0,
+        "y": -500.0
+      },
+      "parameters": {
+        "factor": 1.0
+      }
+    },
+    {
+      "id": "d_env",
+      "type": "AdsrCV",
+      "position": {
+        "x": 2400.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "attack": 0.001,
+        "decay": 0.5,
+        "sustain": 1.0,
+        "release": 2.0
+      }
+    },
+    {
+      "id": "d_vca",
+      "type": "Gain",
+      "position": {
+        "x": 2400.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "d_attack",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 2200.0
+      },
+      "parameters": {
+        "cc": 5,
+        "low": 0.001,
+        "high": 1.0,
+        "resting": 0.0,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "d_decay",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 2350.0
+      },
+      "parameters": {
+        "cc": 6,
+        "low": 0.02,
+        "high": 1.5,
+        "resting": 0.32432432432432434,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "d_sustain",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 2500.0
+      },
+      "parameters": {
+        "cc": 7,
+        "low": 0.0,
+        "high": 1.0,
+        "resting": 1.0,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "d_release",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 2650.0
+      },
+      "parameters": {
+        "cc": 8,
+        "low": 0.02,
+        "high": 2.0,
+        "resting": 1.0,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "d_filter",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 2600.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "cutoff": 2000.0,
+        "resonance": 0.2,
+        "mode": 0
+      }
+    },
+    {
+      "id": "d_cutoff",
+      "type": "MidiCC",
+      "position": {
+        "x": 2300.0,
+        "y": 200.0
+      },
+      "parameters": {
+        "cc": 2,
+        "low": -4.0,
+        "high": 2.5,
+        "resting": 1.0,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "d_resonance",
+      "type": "MidiCC",
+      "position": {
+        "x": 2300.0,
+        "y": 350.0
+      },
+      "parameters": {
+        "cc": 3,
+        "low": 0.0,
+        "high": 0.85,
+        "resting": 0.23529411764705885,
+        "glide": 15.0
+      }
+    },
+    {
       "id": "fx_delay",
       "type": "Delay",
       "position": {
@@ -738,36 +892,6 @@
         "time": 0.3,
         "feedback": 0.35,
         "mix": 1.0
-      }
-    },
-    {
-      "id": "fx_time",
-      "type": "MidiCC",
-      "position": {
-        "x": 1700.0,
-        "y": 400.0
-      },
-      "parameters": {
-        "cc": 3,
-        "low": 0.05,
-        "high": 0.6,
-        "resting": 0.42,
-        "glide": 15.0
-      }
-    },
-    {
-      "id": "fx_fb",
-      "type": "MidiCC",
-      "position": {
-        "x": 1700.0,
-        "y": 550.0
-      },
-      "parameters": {
-        "cc": 4,
-        "low": 0.0,
-        "high": 0.7,
-        "resting": 0.5,
-        "glide": 15.0
       }
     },
     {
@@ -789,7 +913,7 @@
         "y": 700.0
       },
       "parameters": {
-        "cc": 5,
+        "cc": 4,
         "low": 0.0,
         "high": 0.8,
         "resting": 0.0,
@@ -805,29 +929,29 @@
       }
     },
     {
-      "id": "master",
+      "id": "d_volume",
+      "type": "MidiCC",
+      "position": {
+        "x": 2700.0,
+        "y": 200.0
+      },
+      "parameters": {
+        "cc": 128,
+        "low": 0.0,
+        "high": 2.0,
+        "resting": 0.5,
+        "glide": 20.0
+      }
+    },
+    {
+      "id": "d_vol",
       "type": "Gain",
       "position": {
-        "x": 3200.0,
+        "x": 3000.0,
         "y": 0.0
       },
       "parameters": {
         "gain": 0.8
-      }
-    },
-    {
-      "id": "master_level",
-      "type": "MidiCC",
-      "position": {
-        "x": 3000.0,
-        "y": 200.0
-      },
-      "parameters": {
-        "cc": 2,
-        "low": 0.0,
-        "high": 1.0,
-        "resting": 0.8,
-        "glide": 15.0
       }
     },
     {
@@ -1533,8 +1657,8 @@
     },
     {
       "from": {
-        "node": "d_key",
-        "port": "frequency"
+        "node": "d_bent",
+        "port": "out"
       },
       "to": {
         "node": "d_k_body_pitch",
@@ -1553,8 +1677,8 @@
     },
     {
       "from": {
-        "node": "d_key",
-        "port": "frequency"
+        "node": "d_bent",
+        "port": "out"
       },
       "to": {
         "node": "d_s_t1_pitch",
@@ -1573,8 +1697,8 @@
     },
     {
       "from": {
-        "node": "d_key",
-        "port": "frequency"
+        "node": "d_bent",
+        "port": "out"
       },
       "to": {
         "node": "d_s_t2_pitch",
@@ -1593,8 +1717,8 @@
     },
     {
       "from": {
-        "node": "d_key",
-        "port": "frequency"
+        "node": "d_bent",
+        "port": "out"
       },
       "to": {
         "node": "d_r_osc_pitch",
@@ -1613,8 +1737,8 @@
     },
     {
       "from": {
-        "node": "d_key",
-        "port": "frequency"
+        "node": "d_bent",
+        "port": "out"
       },
       "to": {
         "node": "d_b_low_pitch",
@@ -1633,8 +1757,8 @@
     },
     {
       "from": {
-        "node": "d_key",
-        "port": "frequency"
+        "node": "d_bent",
+        "port": "out"
       },
       "to": {
         "node": "d_b_high_pitch",
@@ -1653,8 +1777,8 @@
     },
     {
       "from": {
-        "node": "d_key",
-        "port": "frequency"
+        "node": "d_bent",
+        "port": "out"
       },
       "to": {
         "node": "d_v_osc_pitch",
@@ -1673,32 +1797,132 @@
     },
     {
       "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_bent",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pitch_ratio",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_bent",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "gate"
+      },
+      "to": {
+        "node": "d_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
         "node": "d_mix",
         "port": "out"
       },
       "to": {
-        "node": "fx_delay",
+        "node": "d_vca",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "fx_time",
+        "node": "d_env",
         "port": "out"
       },
       "to": {
-        "node": "fx_delay",
-        "port": "time"
+        "node": "d_vca",
+        "port": "gain"
       }
     },
     {
       "from": {
-        "node": "fx_fb",
+        "node": "d_attack",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_env",
+        "port": "attack"
+      }
+    },
+    {
+      "from": {
+        "node": "d_decay",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_env",
+        "port": "decay"
+      }
+    },
+    {
+      "from": {
+        "node": "d_sustain",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_env",
+        "port": "sustain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_release",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_env",
+        "port": "release"
+      }
+    },
+    {
+      "from": {
+        "node": "d_vca",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_filter",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cutoff",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_filter",
+        "port": "cutoff_mod"
+      }
+    },
+    {
+      "from": {
+        "node": "d_resonance",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_filter",
+        "port": "resonance"
+      }
+    },
+    {
+      "from": {
+        "node": "d_filter",
         "port": "out"
       },
       "to": {
         "node": "fx_delay",
-        "port": "feedback"
+        "port": "in"
       }
     },
     {
@@ -1723,7 +1947,7 @@
     },
     {
       "from": {
-        "node": "d_mix",
+        "node": "d_filter",
         "port": "out"
       },
       "to": {
@@ -1743,27 +1967,27 @@
     },
     {
       "from": {
-        "node": "master_level",
-        "port": "out"
-      },
-      "to": {
-        "node": "master",
-        "port": "gain"
-      }
-    },
-    {
-      "from": {
         "node": "final_sum0",
         "port": "out"
       },
       "to": {
-        "node": "master",
+        "node": "d_vol",
         "port": "in"
       }
     },
     {
       "from": {
-        "node": "master",
+        "node": "d_volume",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_vol",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_vol",
         "port": "out"
       },
       "to": {
@@ -1773,7 +1997,7 @@
     },
     {
       "from": {
-        "node": "master",
+        "node": "d_vol",
         "port": "out"
       },
       "to": {

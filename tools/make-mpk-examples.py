@@ -3,16 +3,29 @@
     python tools/make-mpk-examples.py            # writes examples/banks/axoloti-akai-mpk-mini/
                                                  # and examples/banks/axoloti-akai-mpk-mini.json
 
-Every patch here is an existing example with a controller wired in: MidiCC nodes on
-the eight knobs, a NoteTriggers row on the eight pads, and — where the board has room
-for it — the drum kit on those pads beside the instrument. The set is generated rather
-than drawn because the same wiring is repeated across two hundred presets, and a
-change to the knob map has to reach all of them at once.
+Every patch here is an existing example with a controller wired in. The knobs are two
+rows of four, and every entry reads them the same way:
 
-The controller numbers are the MPK mini mk3's factory program: knobs K1–K8 send CC 70
-to 77 and the pads' bank A sends notes 36 to 43. A mk2 or a re-programmed mini differs;
-change CONTROLLER and run this again. The pads' MIDI channel does not matter: the board
-listens on every channel.
+    top row      K1 pitch bend   K2 cutoff   K3 resonance   K4 an effect
+    bottom row   K5 attack       K6 decay    K7 sustain     K8 release
+
+K4 is an echo's level on the presets and the kit, the cutoff wobble on Poly Five and a
+drive on the game sounds. The bottom row reaches the instrument's own envelope where it
+has one (Poly Five, the three synths) and a VCA around the instrument where it does not
+(the DX7 and FM voices, the kit, the game sounds); at rest every knob sits where the
+source patch drew it, so an untouched entry is the example as written.
+
+The pads are eight notes from 36. On the instruments they are an arpeggiator: pads 1
+to 7 each start a different pattern on the last key played, harder for faster, and pad
+8 stops it. On the kit entry they are the drums and on the game entry the six sounds.
+
+The set is generated rather than drawn because the same wiring is repeated across two
+hundred presets, and a change to the knob map has to reach all of them at once.
+
+The controller numbers are what the bench's MPK sends (read off the board's own MIDI
+tally): knobs K1 to K8 on CC 1 to 8, the pads' bank A on notes 36 to 43, the joystick's
+up-down axis on CC 1 too and its left-right axis on the pitch-bend wire. A mk3 on its
+factory program sends CC 70 to 77 from the knobs; change CONTROLLER and run this again.
 
 Program Change is the MPK's PROG CHANGE button plus a pad, which sends program 0 to 7
 (bank B: 8 to 15). The bank asks for "prev-next" navigation, so on the board pad 1 is
@@ -41,44 +54,21 @@ CONTROLLER = {
     # wire's 14 bits, centre at rest), the other is CC 1 (0 at rest, up to 127).
     # Wired here as asked: the CC axis bends the pitch, the bend axis is the
     # volume — left quieter, right louder, the rest position as the knobs left it.
+    # K1 sends CC 1 as well, so K1 *is* the stick's up axis: the pitch bend knob.
     "stick_pitch_cc": 1,
     "stick_volume_cc": 128,  # 128 is where the editor and the board keep the bend
 }
 
 PITCH_RANGE_OCTAVES = 2.0 / 12.0  # the stick bends up two semitones
 
+# The knob rows. K1 is the stick's CC, wired as the pitch bend wherever the stick is.
+KNOB_CUTOFF, KNOB_RESONANCE, KNOB_EFFECT = 2, 3, 4
+KNOB_ATTACK, KNOB_DECAY, KNOB_SUSTAIN, KNOB_RELEASE = 5, 6, 7, 8
 
-def stick(prefix, x=0.0, y=1600.0):
-    """The joystick as two MidiCC nodes: `<prefix>_pitch` in octaves (0 at rest)
-    and `<prefix>_volume`, a gain from 0 (left) through 1 (rest) to 2 (right)."""
-    return [
-        knob_cc(f"{prefix}_pitch", CONTROLLER["stick_pitch_cc"], 0.0, PITCH_RANGE_OCTAVES, 0.0,
-                glide=5.0, x=x, y=y),
-        knob_cc(f"{prefix}_volume", CONTROLLER["stick_volume_cc"], 0.0, 2.0, 0.5,
-                glide=20.0, x=x, y=y + 150),
-    ]
-
-
-def volume_stage(prefix, source, x=3000.0):
-    """A Gain on `source` driven by the stick's volume; returns (nodes, wires, out)."""
-    nodes = [node(f"{prefix}_vol", "Gain", {"gain": 1.0}, x=x, y=0)]
-    wires = [wire(source, f"{prefix}_vol.in"), wire(f"{prefix}_volume.out", f"{prefix}_vol.gain")]
-    return nodes, wires, f"{prefix}_vol.out"
-
-
-def scaled(id, source, factor, x=0.0, y=0.0):
-    """`source` times a constant factor, as a Multiply node."""
-    return node(id, "Multiply", {"factor": factor}, x=x, y=y), wire(source, f"{id}.a")
-
-
-def redirect_sources(connections, old_src, new_src):
-    """Every wire that left old_src now leaves new_src."""
-    a, b = old_src.split("."), new_src.split(".")
-    for c in connections:
-        if c["from"] == {"node": a[0], "port": a[1]}:
-            c["from"] = {"node": b[0], "port": b[1]}
-
-C4 = 261.6256  # the pitch a pad plays a game sound at: the keyboard's middle C
+# The bottom row's reach. Resting positions come from the source patch, so the
+# knobs change nothing until they are turned.
+ENVELOPE_RANGES = {"attack": (0.001, 1.0), "decay": (0.02, 1.5),
+                   "sustain": (0.0, 1.0), "release": (0.02, 2.0)}
 
 
 # ---- pieces ---------------------------------------------------------------------
@@ -106,7 +96,8 @@ def knob(id, index, low, high, resting, glide=15.0, x=0.0, y=0.0):
     """K<index> (1-based) as a MidiCC node scaled between low and high. K1 is refused:
     on this MPK it sends CC 1, which is also the stick's up-down axis, and the stick
     sends 0 when let go — which the patch read as K1 turned all the way down, the
-    cutoff four octaves under, and a bright preset gone silent."""
+    cutoff four octaves under, and a bright preset gone silent. K1 reaches a patch
+    only as the stick does, through stick_pitch()."""
     cc = CONTROLLER["knobs"][index - 1]
     if cc in (CONTROLLER["stick_pitch_cc"], CONTROLLER["stick_volume_cc"]):
         raise SystemExit(f"K{index} sends CC {cc}, which the stick also sends; use another knob")
@@ -116,6 +107,44 @@ def knob(id, index, low, high, resting, glide=15.0, x=0.0, y=0.0):
 def knob_cc(id, cc, low, high, resting, glide=15.0, x=0.0, y=0.0):
     return node(id, "MidiCC", {"cc": cc, "low": low, "high": high, "resting": resting,
                                "glide": glide}, x=x, y=y)
+
+
+def stick_pitch(id, x=0.0, y=1600.0):
+    """The stick's up axis (and K1, the same CC) as a frequency ratio: 1 at rest, two
+    semitones up when pushed. A ratio on the note's frequency rather than octaves into
+    an fm input: an fm input that moves costs an exp2 per sample per oscillator."""
+    return knob_cc(id, CONTROLLER["stick_pitch_cc"], 1.0, 2.0 ** PITCH_RANGE_OCTAVES, 0.0,
+                   glide=5.0, x=x, y=y)
+
+
+def stick_volume(id, x=0.0, y=1750.0):
+    """The stick's left-right axis as a gain: 0 at the left, 1 at rest, 2 at the right."""
+    return knob_cc(id, CONTROLLER["stick_volume_cc"], 0.0, 2.0, 0.5, glide=20.0, x=x, y=y)
+
+
+def volume_stage(prefix, source, x=3000.0):
+    """A Gain on `source` driven by the stick's volume; returns (nodes, wires, out)."""
+    # The 0.8 is the master level; a Gain scales by its parameter and its wire both.
+    nodes = [stick_volume(f"{prefix}_volume", x=x - 300, y=200),
+             node(f"{prefix}_vol", "Gain", {"gain": 0.8}, x=x, y=0)]
+    wires = [wire(source, f"{prefix}_vol.in"), wire(f"{prefix}_volume.out", f"{prefix}_vol.gain")]
+    return nodes, wires, f"{prefix}_vol.out"
+
+
+def redirect_sources(connections, old_src, new_src):
+    """Every wire that left old_src now leaves new_src."""
+    a, b = old_src.split("."), new_src.split(".")
+    for c in connections:
+        if c["from"] == {"node": a[0], "port": a[1]}:
+            c["from"] = {"node": b[0], "port": b[1]}
+
+
+def redirect_sinks(connections, old_dst, new_dst):
+    """Every wire that reached old_dst now reaches new_dst."""
+    a, b = old_dst.split("."), new_dst.split(".")
+    for c in connections:
+        if c["to"] == {"node": a[0], "port": a[1]}:
+            c["to"] = {"node": b[0], "port": b[1]}
 
 
 class Part:
@@ -170,21 +199,19 @@ class Part:
         self.connections = [c for c in self.connections
                             if c["from"]["node"] != full and c["to"]["node"] != full]
 
-    def bound(self, id, port):
-        full = f"{self.prefix}_{id}"
-        return any(c["to"]["node"] == full and c["to"]["port"] == port
-                   for c in self.connections)
+    def note_inputs(self):
+        return [n["id"] for n in self.nodes if n["type"] == "Input" and n.get("host") == "note"]
 
     def rewire_source(self, id, port, new_src):
         """Every wire leaving <id>.<port> now leaves new_src instead."""
-        full = f"{self.prefix}_{id}"
-        for c in self.connections:
-            if c["from"]["node"] == full and c["from"]["port"] == port:
-                a = new_src.split(".")
-                c["from"] = {"node": a[0], "port": a[1]}
+        redirect_sources(self.connections, f"{self.prefix}_{id}.{port}", new_src)
 
 
 NOTE_36_HZ = 65.40639  # the pads' base note, the pitch the kit was drawn at
+
+
+def note_hz(n):
+    return 440.0 * 2.0 ** ((n - 69) / 12.0)
 
 
 def octave_rows(prefix, base, octaves, x=0.0):
@@ -238,9 +265,9 @@ def drum_kit(prefix="d", base=None, lanes=8, octaves=1):
     return kit
 
 
-def assemble(name, parts, extra_nodes, extra_connections, sum_to, level_knob=None):
-    """One patch out of parts: each part's feed summed through Add nodes into
-    `sum_to` (a node.port), then a master Gain into the Output."""
+def assemble(name, parts, extra_nodes, extra_connections, sum_to):
+    """One patch out of parts, `sum_to` (a node.port) into the Output. The master
+    level lives in the volume stage every entry ends with."""
     nodes, connections, modules = [], [], {}
     for part in parts:
         nodes += part.nodes
@@ -248,13 +275,8 @@ def assemble(name, parts, extra_nodes, extra_connections, sum_to, level_knob=Non
         modules.update(part.modules)
     nodes += extra_nodes
     connections += extra_connections
-    nodes.append(node("master", "Gain", {"gain": 0.8}, x=3200, y=0))
-    if level_knob is not None:
-        nodes.append(knob("master_level", level_knob, 0.0, 1.0, 0.8, x=3000, y=200))
-        connections.append(wire("master_level.out", "master.gain"))
-    connections.append(wire(sum_to, "master.in"))
     nodes.append(node("out", "Output", host="stereo", x=3600, y=0))
-    connections += [wire("master.out", "out.left"), wire("master.out", "out.right")]
+    connections += [wire(sum_to, "out.left"), wire(sum_to, "out.right")]
     patch = {"schema_version": 2 if modules else 1,
              "metadata": {"name": name,
                           "controller": CONTROLLER["name"]},
@@ -278,131 +300,405 @@ def summed(feeds, prefix, x=2400):
     return nodes, wires, acc
 
 
-def echo(prefix, source, time_knob, feedback_knob, wet_knob, x=2000):
-    """A Delay on `source` with its time, feedback and wet level on three knobs.
-    Returns (nodes, wires, wet_out)."""
+# ---- the knob rows -----------------------------------------------------------------------
+
+def filter_knobs(prefix, filter_id, x=1200.0, y=200.0):
+    """K2 and K3 on a StateVariableFilter: cutoff as octaves around the filter's own
+    setting through cutoff_mod (a MidiCC's range stops at 1000, so a knob in hertz
+    could not reach the top), and resonance. Resting: as the filter was drawn."""
+    nodes = [knob(f"{prefix}_cutoff", KNOB_CUTOFF, -4.0, 2.5, 1.0, x=x, y=y),
+             knob(f"{prefix}_resonance", KNOB_RESONANCE, 0.0, 0.85, 0.2 / 0.85, x=x, y=y + 150)]
+    wires = [wire(f"{prefix}_cutoff.out", f"{filter_id}.cutoff_mod"),
+             wire(f"{prefix}_resonance.out", f"{filter_id}.resonance")]
+    return nodes, wires
+
+
+def outer_filter(prefix, source, x=1500.0):
+    """A lowpass on `source` with K2 and K3, resting wide open: -4..+2.5 octaves
+    around 2 kHz is 125 Hz to 11 kHz. Returns (nodes, wires, out)."""
+    nodes = [node(f"{prefix}_filter", "StateVariableFilter",
+                  {"cutoff": 2000.0, "resonance": 0.2, "mode": 0}, x=x, y=0)]
+    knob_nodes, knob_wires = filter_knobs(prefix, f"{prefix}_filter", x=x - 300, y=200)
+    wires = [wire(source, f"{prefix}_filter.in")] + knob_wires
+    return nodes + knob_nodes, wires, f"{prefix}_filter.out"
+
+
+def envelope_knobs(prefix, target, attack, decay, sustain, release, x=0.0, y=2200.0):
+    """The bottom row into an AdsrCV: K5 attack, K6 decay, K7 sustain, K8 release,
+    each resting where the source patch had it. Returns (nodes, wires)."""
+    nodes, wires = [], []
+    for k, (name, value, index) in enumerate([("attack", attack, KNOB_ATTACK),
+                                              ("decay", decay, KNOB_DECAY),
+                                              ("sustain", sustain, KNOB_SUSTAIN),
+                                              ("release", release, KNOB_RELEASE)]):
+        low, high = ENVELOPE_RANGES[name]
+        resting = min(max((float(value) - low) / (high - low), 0.0), 1.0)
+        nid = f"{prefix}_{name}"
+        nodes.append(knob(nid, index, low, high, resting, x=x, y=y + 150 * k))
+        wires.append(wire(f"{nid}.out", f"{target}.{name}"))
+    return nodes, wires
+
+
+def knobs_on_own_envelope(part, envelope_id, prefix):
+    """The part's amplitude ADSR becomes an AdsrCV with the bottom row on it."""
+    env = part.find(envelope_id)
+    env["type"] = "AdsrCV"
+    p = env.get("parameters", {})
+    return envelope_knobs(prefix, env["id"], p.get("attack", 0.005), p.get("decay", 0.12),
+                          p.get("sustain", 0.6), p.get("release", 0.25))
+
+
+def vca_with_knobs(prefix, source, gate, x=1200.0):
+    """An AdsrCV-driven Gain around a source that has no envelope of its own to reach:
+    at rest a wall (attack at once, sustain 1, a two-second release under the source's
+    own tails); the bottom row shortens it from there. Returns (nodes, wires, out)."""
+    nodes = [node(f"{prefix}_env", "AdsrCV", {"attack": 0.001, "decay": 0.5, "sustain": 1.0,
+                                              "release": 2.0}, x=x, y=600),
+             node(f"{prefix}_vca", "Gain", {"gain": 1.0}, x=x, y=0)]
+    wires = [wire(gate, f"{prefix}_env.gate"), wire(source, f"{prefix}_vca.in"),
+             wire(f"{prefix}_env.out", f"{prefix}_vca.gain")]
+    knob_nodes, knob_wires = envelope_knobs(prefix, f"{prefix}_env", 0.001, 0.5, 1.0, 2.0)
+    return nodes + knob_nodes, wires + knob_wires, f"{prefix}_vca.out"
+
+
+def echo(prefix, source, x=2000):
+    """A Delay on `source`, its level on K4 (dry at rest). Returns (nodes, wires, wet_out)."""
     nodes = [
         node(f"{prefix}_delay", "Delay", {"time": 0.3, "feedback": 0.35, "mix": 1.0}, x=x, y=300),
-        knob(f"{prefix}_time", time_knob, 0.05, 0.6, 0.42, x=x - 300, y=400),
-        knob(f"{prefix}_fb", feedback_knob, 0.0, 0.7, 0.5, x=x - 300, y=550),
         node(f"{prefix}_wet", "Gain", {"gain": 0.0}, x=x + 300, y=300),
-        knob(f"{prefix}_wet_level", wet_knob, 0.0, 0.8, 0.0, x=x - 300, y=700),
+        knob(f"{prefix}_wet_level", KNOB_EFFECT, 0.0, 0.8, 0.0, x=x - 300, y=700),
     ]
-    wires = [wire(source, f"{prefix}_delay.in"), wire(f"{prefix}_time.out", f"{prefix}_delay.time"),
-             wire(f"{prefix}_fb.out", f"{prefix}_delay.feedback"),
+    wires = [wire(source, f"{prefix}_delay.in"),
              wire(f"{prefix}_delay.out", f"{prefix}_wet.in"),
              wire(f"{prefix}_wet_level.out", f"{prefix}_wet.gain")]
     return nodes, wires, f"{prefix}_wet.out"
 
 
+# ---- the pads as an arpeggiator ------------------------------------------------------------
+
+KEY_FLOOR_HZ = 130.0        # C3 and up are keys; under it are the pads (and a keyboard
+                            # shifted two octaves down, which then plays the pads)
+
+# Semitones over the root, eight steps, one pattern per pad 1..7. In octaves on the
+# oscillator's fm input, which stays within a block, so it costs the oscillator nothing
+# per sample.
+ARP_PATTERNS = [
+    ("major up",          [0, 4, 7, 12, 0, 4, 7, 12]),
+    ("minor up",          [0, 3, 7, 12, 0, 3, 7, 12]),
+    ("major up and down", [0, 4, 7, 12, 16, 12, 7, 4]),
+    ("minor seventh",     [0, 3, 7, 10, 12, 10, 7, 3]),
+    ("fifths",            [0, 7, 12, 19, 12, 7, 0, 7]),
+    ("octave pulse",      [0, 0, 12, 0, 0, 12, 0, 12]),
+    ("pentatonic run",    [0, 3, 5, 7, 10, 12, 15, 19]),
+]
+
+
+def lane(id, semitones, x, y):
+    steps = {f"step{k + 1}": s / 12.0 for k, s in enumerate(semitones)}
+    return node(id, "StepSequencer", {"length": len(semitones), **steps}, x=x, y=y)
+
+
+def pad_machine(prefix, patterns, run_gate=None, x=0.0, y=3000.0):
+    """The pads as an arpeggiator's brain: which pattern, and whether it runs.
+
+    A NoteTriggers row on the pads is the only thing here that hears notes, and it is
+    not a NoteInput, so nothing of this is copied per voice: the engine replicates a
+    NoteInput's whole downstream cone as many times as the patch has voices, and a
+    machine hung off one saw only its own voice's share of the pads. The row's bus is
+    a bitmask of the pads firing, so held at the hit it names the pad as a power of
+    two: pad 1 is 1, pad 7 is 64, the stop pad 128. Pads 1 to 7 start a pattern each
+    (at 120 bpm in sixteenths); pad 8 stops. Feedback-free, since the engine's rule
+    is that a loop holds a delay. The pattern is picked by summing the first lane
+    with the differences to the next, each switched in by a compare on the held pad;
+    the lanes step in lockstep, so the sum is exactly the chosen pattern.
+
+    Returns (nodes, wires, pattern_out, envelope_out); `run_gate`, if given, is a
+    signal that must also be high for the clock to run."""
+    p = lambda i: f"{prefix}_{i}"  # noqa: E731
+    nodes = [
+        node(p("pads"), "NoteTriggers", {"base": CONTROLLER["pads_base"], "shift": 0}, x=x, y=y + 200),
+        node(p("any"), "Compare", {"threshold": 0.5}, x=x + 300, y=y + 200),
+        node(p("last"), "SampleHold", x=x + 600, y=y + 200),
+        node(p("above"), "Compare", {"threshold": 0.5}, x=x + 900, y=y + 100),
+        node(p("ceiling"), "Constant", {"value": 100.0}, x=x + 600, y=y + 400),
+        node(p("below"), "Compare", {"threshold": 0.0}, x=x + 900, y=y + 300),
+        node(p("run"), "Multiply", {"factor": 1.0}, x=x + 1200, y=y + 200),
+        node(p("clock"), "Clock", {"bpm": 120.0, "division": 4, "swing": 0.0, "width": 70.0,
+                                   "beats_per_bar": 4}, x=x + 1500, y=y + 400),
+        node(p("env"), "ADSR", {"attack": 0.003, "decay": 0.12, "sustain": 0.4, "release": 0.15},
+             x=x + 1800, y=y + 400),
+    ]
+    wires = [
+        wire(f"{p('pads')}.bus", f"{p('any')}.a"),
+        wire(f"{p('pads')}.bus", f"{p('last')}.in"), wire(f"{p('any')}.out", f"{p('last')}.trigger"),
+        wire(f"{p('last')}.out", f"{p('above')}.a"),
+        wire(f"{p('ceiling')}.out", f"{p('below')}.a"), wire(f"{p('last')}.out", f"{p('below')}.b"),
+        wire(f"{p('above')}.out", f"{p('run')}.a"), wire(f"{p('below')}.out", f"{p('run')}.b"),
+        wire(f"{p('clock')}.gate", f"{p('env')}.gate"),
+    ]
+    if run_gate:
+        nodes.append(node(p("run_too"), "Multiply", {"factor": 1.0}, x=x + 1200, y=y + 500))
+        wires += [wire(f"{p('run')}.out", f"{p('run_too')}.a"), wire(run_gate, f"{p('run_too')}.b"),
+                  wire(f"{p('run_too')}.out", f"{p('clock')}.run")]
+    else:
+        wires.append(wire(f"{p('run')}.out", f"{p('clock')}.run"))
+    first = patterns[0][1]
+    nodes.append(lane(p("lane1"), first, x + 1800, y + 900))
+    wires += [wire(f"{p('clock')}.gate", f"{p('lane1')}.clock"),
+              wire(f"{p('clock')}.bar", f"{p('lane1')}.reset")]
+    acc = f"{p('lane1')}.out"
+    for k in range(1, len(patterns)):
+        previous, current = patterns[k - 1][1], patterns[k][1]
+        delta = [b - a for a, b in zip(previous, current)]
+        threshold = 1.5 * 2 ** (k - 1)   # between pad k (2^(k-1)) and pad k+1 (2^k)
+        nodes += [lane(p(f"dlane{k}"), delta, x + 1800, y + 900 + 200 * k),
+                  node(p(f"sel{k}"), "Compare", {"threshold": threshold}, x=x + 2100, y=y + 900 + 200 * k),
+                  node(p(f"pick{k}"), "Multiply", {"factor": 1.0}, x=x + 2400, y=y + 900 + 200 * k),
+                  node(p(f"pat{k}"), "Add", x=x + 2700, y=y + 900 + 200 * k)]
+        wires += [wire(f"{p('clock')}.gate", f"{p(f'dlane{k}')}.clock"),
+                  wire(f"{p('clock')}.bar", f"{p(f'dlane{k}')}.reset"),
+                  wire(f"{p('last')}.out", f"{p(f'sel{k}')}.a"),
+                  wire(f"{p(f'dlane{k}')}.out", f"{p(f'pick{k}')}.a"),
+                  wire(f"{p(f'sel{k}')}.out", f"{p(f'pick{k}')}.b"),
+                  wire(acc, f"{p(f'pat{k}')}.a"), wire(f"{p(f'pick{k}')}.out", f"{p(f'pat{k}')}.b")]
+        acc = f"{p(f'pat{k}')}.out"
+    return nodes, wires, acc, f"{p('env')}.out"
+
+
+def arp_voice(prefix, frequency, pattern, envelope, cutoff_mod, resonance, level, x=3000.0, y=3000.0):
+    """The arpeggiator's sound: a saw on `frequency`, the pattern on its fm, a lowpass
+    on the same knobs as the instrument, the machine's envelope on a VCA. Without a
+    cutoff_mod it is a sine pluck and no filter, for the patch that cannot afford one.
+    Returns (nodes, wires, out)."""
+    p = lambda i: f"{prefix}_{i}"  # noqa: E731
+    nodes = [node(p("vca"), "Gain", {"gain": level}, x=x + 600, y=y)]
+    wires = [wire(pattern, f"{p('osc')}.fm"), wire(envelope, f"{p('vca')}.gain")]
+    if cutoff_mod:
+        nodes += [node(p("osc"), "SawOscillator", {"frequency": 220.0}, x=x, y=y),
+                  node(p("filter"), "StateVariableFilter",
+                       {"cutoff": 1200.0, "resonance": 0.3, "mode": 0}, x=x + 300, y=y)]
+        wires += [wire(frequency, f"{p('osc')}.frequency"),
+                  wire(f"{p('osc')}.out", f"{p('filter')}.in"),
+                  wire(cutoff_mod, f"{p('filter')}.cutoff_mod"),
+                  wire(f"{p('filter')}.out", f"{p('vca')}.in")]
+        if resonance:
+            wires.append(wire(resonance, f"{p('filter')}.resonance"))
+    else:
+        nodes.append(node(p("osc"), "SineOscillator", {"frequency": 220.0}, x=x, y=y))
+        wires += [wire(frequency, f"{p('osc')}.frequency"), wire(f"{p('osc')}.out", f"{p('vca')}.in")]
+    return nodes, wires, f"{p('vca')}.out"
+
+
+def latched_arp(prefix, note_input, patterns, pitch_ratio, cutoff_mod, resonance, level=1.0):
+    """The arpeggiator for a one-voice instrument: it plays on the last key pressed
+    and keeps playing after the key is let go, until the stop pad. The root is the
+    note input's frequency held at each key-down (a pad is a note too, and under
+    KEY_FLOOR_HZ; it is not a key), and until a key has been played the clock is
+    held off, since a saw at 0 Hz is a DC level the envelope would pulse.
+    Returns (nodes, wires, out)."""
+    p = lambda i: f"{prefix}_{i}"  # noqa: E731
+    nodes = [
+        node(p("is_key"), "Compare", {"threshold": KEY_FLOOR_HZ}, x=0, y=2600),
+        node(p("key_hit"), "Multiply", {"factor": 1.0}, x=300, y=2600),
+        node(p("root"), "SampleHold", x=600, y=2600),
+        node(p("has_root"), "Compare", {"threshold": 20.0}, x=900, y=2700),
+        node(p("bent"), "Multiply", {"factor": 1.0}, x=900, y=2600),
+    ]
+    wires = [
+        wire(f"{note_input}.frequency", f"{p('is_key')}.a"),
+        wire(f"{p('is_key')}.out", f"{p('key_hit')}.a"), wire(f"{note_input}.gate", f"{p('key_hit')}.b"),
+        wire(f"{note_input}.frequency", f"{p('root')}.in"), wire(f"{p('key_hit')}.out", f"{p('root')}.trigger"),
+        wire(f"{p('root')}.out", f"{p('has_root')}.a"),
+        wire(f"{p('root')}.out", f"{p('bent')}.a"), wire(pitch_ratio, f"{p('bent')}.b"),
+    ]
+    m_nodes, m_wires, pattern, envelope = pad_machine(prefix, patterns, run_gate=f"{p('has_root')}.out")
+    v_nodes, v_wires, out = arp_voice(prefix, f"{p('bent')}.out", pattern, envelope, cutoff_mod,
+                                      resonance, level)
+    return nodes + m_nodes + v_nodes, wires + m_wires + v_wires, out
+
+
+def held_arp(prefix, frequency, key_envelope, patterns, cutoff_mod, resonance, level=1.0):
+    """The arpeggiator for a polyphonic instrument: every held key arpeggiates, in
+    lockstep, so a held chord is a chord arpeggio, and each stops with its key's own
+    envelope. The voice part sits in the instrument's voice cone (its frequency is
+    the voice's, bent), so the engine copies it per voice; the machine does not.
+    Returns (nodes, wires, out)."""
+    p = lambda i: f"{prefix}_{i}"  # noqa: E731
+    m_nodes, m_wires, pattern, envelope = pad_machine(prefix, patterns)
+    v_nodes, v_wires, voice_out = arp_voice(prefix, frequency, pattern, envelope, cutoff_mod,
+                                            resonance, level)
+    nodes = [node(p("held"), "Gain", {"gain": 1.0}, x=3900, y=3000)]
+    wires = [wire(voice_out, f"{p('held')}.in"), wire(key_envelope, f"{p('held')}.gain")]
+    return m_nodes + v_nodes + nodes, m_wires + v_wires + wires, f"{p('held')}.out"
+
+
+def keys_only(prefix, note_input, connections, x=0.0, y=-400.0):
+    """The instrument's gate with the pads taken out of it: a pad is a note like any
+    other to the voice, and without this the synth played a low note under every
+    arpeggio it started. Returns (nodes, wires); rewires the gate's wires."""
+    nodes = [node(f"{prefix}_is_key", "Compare", {"threshold": KEY_FLOOR_HZ}, x=x, y=y),
+             node(f"{prefix}_gate", "Multiply", {"factor": 1.0}, x=x + 300, y=y)]
+    redirect_sources(connections, f"{note_input}.gate", f"{prefix}_gate.out")
+    wires = [wire(f"{note_input}.frequency", f"{prefix}_is_key.a"),
+             wire(f"{note_input}.gate", f"{prefix}_gate.a"),
+             wire(f"{prefix}_is_key.out", f"{prefix}_gate.b")]
+    return nodes, wires
+
+
+def voices_of(part, note_input):
+    for n in part.nodes:
+        if n["id"] == note_input:
+            return int(n.get("parameters", {}).get("voices", 1))
+    return 1
+
+
 # ---- the patches -------------------------------------------------------------------
 
-def poly5_pads(kit_lanes=4):
-    """Poly Five on the keys, the kit on the pads.
-    K2 cutoff  K3 resonance  K4 synth level  K5 detune  K6 wobble rate  K8 drums level
-    (K1 shares CC 1 with the stick's pitch axis, so it is left alone; K7 is free)
+def poly5_pads(patterns):
+    """Poly Five on the keys, the arpeggiator on the pads: hold a chord, hit a pad.
+    K1 pitch bend  K2 cutoff  K3 resonance  K4 wobble rate
+    K5 attack  K6 decay  K7 sustain  K8 release (the voices' own envelope)
     Stick up: pitch bend, two semitones. Stick left/right: volume, quieter to louder.
-    Two drums beside the five voices, kick and snare: the board's own counter puts the
-    voices at 51% of a codec call and each drum at about 6%, and four drums put the
-    whole patch at 95%, which is the chunkiness of a call that overruns.
     No echo here: the engine copies everything after the keyboard once per voice, so
     an echo on Poly Five is five delay lines, and with the stick that is past the
-    board's 44 KB code window."""
+    board's 44 KB code window. The wobble stands in: an LFO is a global modulator,
+    so it exists once however many voices there are."""
     synth = Part(load("synths/poly-five.json"), "p")
+    # Four voices on the board, not five. The engine copies everything after the
+    # keyboard once per voice, and with the arpeggiator's voice in that cone, five
+    # voices and the pads' machine came to 114% of a codec call; four are 80%.
+    synth.find("kb")["parameters"]["voices"] = 4
     extra, wires = [], []
-    # The detune constant becomes the knob, as a frequency ratio on osc_b rather than
-    # octaves into its fm: a moving fm input is an exp2 per sample per voice, and K4
-    # turning put the patch at 99% of a codec call. Up to 3.5% sharp, about a third
-    # of a semitone, which is where the stock 0.007 octaves sat.
-    synth.drop("detune")
-    extra.append(knob("p_detune", 5, 1.0, 1.035, 0.14, x=0, y=600))
-    extra.append(node("p_bent_b", "Multiply", {"factor": 1.0}, x=600, y=300))
-    for c in synth.connections:
-        if c["to"] == {"node": "p_osc_b", "port": "frequency"}:
-            c["from"] = {"node": "p_bent_b", "port": "out"}
-    wires += [wire("p_detune.out", "p_bent_b.b")]
-    # In octaves around the filter's own 900 Hz, through cutoff_mod (which the envelope
-    # sweep already drives; control inputs sum): a MidiCC's range stops at 1000, so a
-    # knob in hertz could not reach the top of the filter.
-    extra.append(knob("p_cutoff", 2, -3.0, 3.0, 0.5, x=0, y=800))
-    # Summed with the envelope sweep by hand: one wire per input is the rule.
-    extra.append(node("p_cm_sum", "Add", x=300, y=800))
-    for c in synth.connections:
-        if c["to"] == {"node": "p_filter", "port": "cutoff_mod"}:
-            c["to"] = {"node": "p_cm_sum", "port": "b"}
-    extra.append(node("p_cm_sum3", "Add", x=900, y=800))
-    wires += [wire("p_cutoff.out", "p_cm_sum.a"), wire("p_cm_sum.out", "p_cm_sum3.a"),
-              wire("p_cm_sum3.out", "p_filter.cutoff_mod")]
-    extra.append(knob("p_resonance", 3, 0.0, 0.9, 0.35 / 0.9, x=0, y=950))
-    wires.append(wire("p_resonance.out", "p_filter.resonance"))
-    extra.append(node("p_level", "Gain", {"gain": 0.8}, x=1800, y=0))
-    extra.append(knob("p_level_knob", 4, 0.0, 1.0, 0.8, x=1500, y=200))
-    wires += [wire(synth.feeds[0], "p_level.in"), wire("p_level_knob.out", "p_level.gain")]
-    # A wobble on the cutoff instead of an echo: the LFO is a global modulator, so it
-    # exists once however many voices there are.
-    extra += [node("p_wobble", "LFO", {"rate": 0.5, "shape": 0, "amount": 0.3, "offset": 0.0}, x=0, y=1100),
-              knob("p_wobble_rate", 6, 0.0, 8.0, 0.0, x=-300, y=1100)]
-    wires += [wire("p_wobble_rate.out", "p_wobble.rate"), wire("p_wobble.out", "p_cm_sum3.b")]
-    # ---- the stick ----------------------------------------------------------------
-    # Pitch as a ratio on the note's frequency, not octaves into fm: an fm input that
-    # moves costs an exp2 per sample per oscillator (five percent of a codec call
-    # each, ten oscillators here), and bending the stick pushed the patch from 86% into
-    # overrun. A Multiply on the frequency is one multiply per sample. The detune knob
-    # stays on osc_b's fm, where it is a Constant-like block and costs one exp2.
-    extra.append(knob_cc("p_pitch_ratio", CONTROLLER["stick_pitch_cc"], 1.0,
-                         2.0 ** PITCH_RANGE_OCTAVES, 0.0, glide=5.0, x=0, y=1600))
-    extra.append(knob_cc("p_volume", CONTROLLER["stick_volume_cc"], 0.0, 2.0, 0.5,
-                         glide=20.0, x=0, y=1750))
+    # The detune stays as drawn; the stick is a ratio on the note's frequency, so
+    # bending is one multiply per sample per oscillator (an fm input that moves is an
+    # exp2 per sample per oscillator, ten of them here, and bending overran the call).
+    extra.append(stick_pitch("p_pitch_ratio", x=0, y=1600))
     extra.append(node("p_bent", "Multiply", {"factor": 1.0}, x=300, y=300))
-    redirect_sources(synth.connections, "p_kb.frequency", "p_bent.out")
-    wires += [wire("p_kb.frequency", "p_bent.a"), wire("p_pitch_ratio.out", "p_bent.b"),
-              wire("p_bent.out", "p_bent_b.a")]
-    kit = drum_kit("d", lanes=kit_lanes)
-    extra.append(node("d_level", "Gain", {"gain": 0.7}, x=1800, y=1200))
-    extra.append(knob("d_level_knob", 8, 0.0, 1.0, 0.7, x=1500, y=1400))
-    wires += [wire(kit.feeds[0], "d_level.in"), wire("d_level_knob.out", "d_level.gain")]
-    sum_nodes, sum_wires, mixed = summed(["p_level.out", "d_level.out"], "mix")
+    synth.rewire_source("kb", "frequency", "p_bent.out")
+    wires += [wire("p_kb.frequency", "p_bent.a"), wire("p_pitch_ratio.out", "p_bent.b")]
+    # Cutoff and resonance on the voices' own filter: the knob's octaves are summed with
+    # the envelope sweep by hand, and with the wobble (one wire per input is the rule).
+    # The knob and the wobble are summed once, outside the voices, and each voice adds
+    # its own envelope sweep to that.
+    extra.append(knob("p_cutoff", KNOB_CUTOFF, -3.0, 3.0, 0.5, x=0, y=800))
+    extra += [node("p_wobble", "LFO", {"rate": 0.5, "shape": 0, "amount": 0.3, "offset": 0.0}, x=0, y=1100),
+              knob("p_wobble_rate", KNOB_EFFECT, 0.0, 8.0, 0.0, x=-300, y=1100),
+              node("p_mod", "Add", x=300, y=950)]
+    wires += [wire("p_wobble_rate.out", "p_wobble.rate"),
+              wire("p_cutoff.out", "p_mod.a"), wire("p_wobble.out", "p_mod.b")]
+    extra.append(node("p_cm_sum", "Add", x=600, y=800))
+    redirect_sinks(synth.connections, "p_filter.cutoff_mod", "p_cm_sum.a")
+    wires += [wire("p_mod.out", "p_cm_sum.b"), wire("p_cm_sum.out", "p_filter.cutoff_mod")]
+    extra.append(knob("p_resonance", KNOB_RESONANCE, 0.0, 0.9, 0.35 / 0.9, x=0, y=950))
+    wires.append(wire("p_resonance.out", "p_filter.resonance"))
+    env_nodes, env_wires = knobs_on_own_envelope(synth, "aenv", "p")
+    key_nodes, key_wires = keys_only("p", "p_kb", synth.connections)
+    # The synth's level, 0.8, folded into its own VCA's parameter (a Gain scales by
+    # its parameter and its wire both) rather than a Gain per voice.
+    synth.find("vca")["parameters"]["gain"] = 0.45 * 0.8
+    # A sine pluck under the voices, with no filter of its own: the filtered saw the
+    # other entries use is copied per voice here, and cost two per cent a voice.
+    arp_nodes, arp_wires, arp_out = held_arp("a", "p_bent.out", "p_aenv.out", patterns,
+                                             None, None, level=0.8)
+    sum_nodes, sum_wires, mixed = summed([synth.feeds[0], arp_out], "mix")
     vol_nodes, vol_wires, out = volume_stage("p", mixed)
-    return assemble("Poly Five, pads", [synth, kit], extra + sum_nodes + vol_nodes,
-                    wires + sum_wires + vol_wires, out)
+    return assemble("Poly Five, pads (four voices)", [synth],
+                    extra + env_nodes + key_nodes + arp_nodes + sum_nodes + vol_nodes,
+                    wires + env_wires + key_wires + arp_wires + sum_wires + vol_wires, out)
 
 
-# Pads 1..6 (eight sounds put the board at 96% of a codec call), each with the gain
+def instrument_with_pads(rel, name, patterns, boost=1.0, own_envelope=None):
+    """A synth, DX7 or FM preset on the keys with the arpeggiator on the pads.
+    K1 pitch bend  K2 cutoff  K3 resonance  K4 echo level
+    K5 attack  K6 decay  K7 sustain  K8 release
+    Stick up: pitch bend, two semitones. Stick left/right: volume, quieter to louder.
+    `own_envelope` names the source's amplitude ADSR when it has one the knobs can
+    take over; otherwise the knobs shape a VCA around the whole voice. On a one-voice
+    instrument the arpeggiator latches to the last key; on a polyphonic one every held
+    key arpeggiates."""
+    # The source's own ids wear "src_"; everything added here wears "v_", so a preset
+    # with a node called "filter" (duo-lead has one) does not collide with ours.
+    voice = Part(load(rel), "src")
+    extra, wires = [], []
+    note_input = voice.note_inputs()[0]
+    # ---- the stick: the operators live inside a module, so the pitch goes in as a
+    # ratio on the note's frequency: 1 at rest, 2^(2/12) with the stick pushed.
+    extra.append(stick_pitch("v_pitch_ratio", x=0, y=1900))
+    extra.append(node("v_bent", "Multiply", {"factor": 1.0}, x=300, y=1900))
+    for inp in voice.note_inputs():
+        redirect_sources(voice.connections, f"{inp}.frequency", "v_bent.out")
+        wires.append(wire(f"{inp}.frequency", "v_bent.a"))
+    wires.append(wire("v_pitch_ratio.out", "v_bent.b"))
+    key_nodes, key_wires = keys_only("v", note_input, voice.connections)
+    if own_envelope:
+        env_nodes, env_wires = knobs_on_own_envelope(voice, own_envelope, "v")
+        shaped = voice.feeds[0]
+        key_envelope = f"src_{own_envelope}.out"
+    else:
+        env_nodes, env_wires, shaped = vca_with_knobs("v", voice.feeds[0], "v_gate.out")
+        key_envelope = "v_env.out"
+    filter_nodes, filter_wires, filtered = outer_filter("v", shaped)
+    extra += [node("v_level", "Gain", {"gain": 0.8 * boost}, x=1800, y=0)]
+    wires += [wire(filtered, "v_level.in")]
+    if voices_of(voice, note_input) > 1:
+        arp_nodes, arp_wires, arp_out = held_arp("a", "v_bent.out", key_envelope, patterns,
+                                                 "v_cutoff.out", "v_resonance.out")
+    else:
+        arp_nodes, arp_wires, arp_out = latched_arp("a", note_input, patterns, "v_pitch_ratio.out",
+                                                    "v_cutoff.out", "v_resonance.out")
+    mix_nodes, mix_wires, mixed = summed(["v_level.out", arp_out], "mix")
+    echo_nodes, echo_wires, wet = echo("v", mixed)
+    sum_nodes, sum_wires, final = summed([mixed, wet], "final", x=2800)
+    vol_nodes, vol_wires, out = volume_stage("v", final)
+    return assemble(name, [voice],
+                    extra + key_nodes + env_nodes + filter_nodes + arp_nodes + mix_nodes
+                    + echo_nodes + sum_nodes + vol_nodes,
+                    wires + key_wires + env_wires + filter_wires + arp_wires + mix_wires
+                    + echo_wires + sum_wires + vol_wires, out)
+
+
+# Pads 1..5 (eight sounds put the board at 96% of a codec call), each with the gain
 # that brings its peak on the card to about 0.4, where Poly Five sits: as drawn, the game
 # sounds peak between 0.05 and 0.14, eleven decibels under the synth, and the pads
 # entry came up quiet on the board while matching the desktop's render exactly.
 GAME_PADS = [
     ("game/coin.json", "coin", 10.0), ("game/jump.json", "jump", 16.0),
     ("game/powerup.json", "powerup", 8.0), ("game/hurt.json", "hurt", 16.0),
-    ("game/explode.json", "explode", 5.6), ("sfxr/explosion.json", "boom", 5.6),
+    ("game/explode.json", "explode", 5.6),
 ]
+# Five, not six: the sfxr explosion doubled the game one, and with the envelope, the
+# filter and the drive around them six sounds put the entry at 96% of a codec call.
 
 
 def game_pads():
-    """Six game sounds on the first six pads and on every octave of the keys, pitched to the key. K2 level"""
+    """Five game sounds on the first five pads and on every octave of the keys, pitched to the key.
+    K1 pitch bend  K2 cutoff  K3 resonance  K4 drive
+    K5 attack  K6 decay  K7 sustain  K8 release (a VCA around the sounds)"""
     parts, extra, wires = [], [], []
     # Every octave of the keys fires the same six sounds, and each sound's pitch
     # follows the key, so the entry plays from wherever the keyboard sits.
     # Four octaves, not five: five rows put this entry at 91% of a codec call.
     rows, row_wires, bus = octave_rows("pads", CONTROLLER["pads_base"], 4)
     extra += rows + [node("split", "TriggerBus", {"shift": 0}, y=1200),
-                     node("key", "Input", host="note", y=-300)]
-    wires += row_wires + [wire(bus, "split.bus")]
+                     node("key", "Input", host="note", y=-300),
+                     stick_pitch("g_pitch_ratio", x=0, y=-500),
+                     node("g_bent", "Multiply", {"factor": 1.0}, x=300, y=-300)]
+    wires += row_wires + [wire(bus, "split.bus"), wire("key.frequency", "g_bent.a"),
+                          wire("g_pitch_ratio.out", "g_bent.b")]
     feeds = []
-    for lane, (rel, prefix, gain) in enumerate(GAME_PADS, start=1):
+    for lane_index, (rel, prefix, gain) in enumerate(GAME_PADS, start=1):
         part = Part(load(rel), prefix)
-        part.nodes.append(node(f"{prefix}_norm", "Gain", {"gain": gain}, x=2000, y=lane * 300))
+        part.nodes.append(node(f"{prefix}_norm", "Gain", {"gain": gain}, x=2000, y=lane_index * 300))
         part.connections.append(wire(part.feeds[0], f"{prefix}_norm.in"))
         part.feeds = [f"{prefix}_norm.out"]
-        inputs = [n for n in part.nodes if n["type"] == "Input" and n.get("host") == "note"]
-        for inp in inputs:
-            short = inp["id"][len(prefix) + 1:]
-            # The pad is the trigger; the pitch is middle C; velocity is full.
-            part.rewire_source(short, "trigger", f"split.t{lane}")
-            part.rewire_source(short, "gate", f"split.t{lane}")
-            part.rewire_source(short, "frequency", "key.frequency")
+        for inp in part.note_inputs():
+            short = inp[len(prefix) + 1:]
+            # The pad is the trigger; the pitch is the key's, bent; velocity is full.
+            part.rewire_source(short, "trigger", f"split.t{lane_index}")
+            part.rewire_source(short, "gate", f"split.t{lane_index}")
+            part.rewire_source(short, "frequency", "g_bent.out")
             vel_id = f"{prefix}_vel"
-            part.nodes.append(node(vel_id, "Constant", {"value": 1.0}, y=lane * 300 + 100))
+            part.nodes.append(node(vel_id, "Constant", {"value": 1.0}, y=lane_index * 300 + 100))
             part.rewire_source(short, "velocity", f"{vel_id}.out")
             part.drop(short)
         # Unused constants would be an error nowhere, but a tidy patch drops them.
@@ -411,83 +707,58 @@ def game_pads():
                       if n["type"] != "Constant" or n["id"] in used]
         parts.append(part)
         feeds.append(part.feeds[0])
-    # No echo here: eight sound effects already fill the board's close memory.
-    sum_nodes, sum_wires, out = summed(feeds, "mix")
-    return assemble("Game pads", parts, extra + sum_nodes, wires + sum_wires, out,
-                    level_knob=2)
+    sum_nodes, sum_wires, mixed = summed(feeds, "mix")
+    env_nodes, env_wires, shaped = vca_with_knobs("g", mixed, "key.gate", x=2600)
+    filter_nodes, filter_wires, filtered = outer_filter("g", shaped, x=2800)
+    # No echo here: six sound effects already fill the board's close memory. A drive
+    # is the effect instead, clean at rest.
+    extra += [node("g_drive", "Drive", {"drive": 1.0}, x=3000, y=0),
+              knob("g_drive_knob", KNOB_EFFECT, 1.0, 12.0, 0.0, x=2800, y=500)]
+    wires += [wire(filtered, "g_drive.in"), wire("g_drive_knob.out", "g_drive.drive")]
+    vol_nodes, vol_wires, out = volume_stage("g", "g_drive.out")
+    return assemble("Game pads", parts,
+                    extra + sum_nodes + env_nodes + filter_nodes + vol_nodes,
+                    wires + sum_wires + env_wires + filter_wires + vol_wires, out)
 
 
 def kit_alone():
     """The kit on the pads and on every octave of the keys, pitched to the key.
-    K2 level  K3 echo time  K4 echo feedback  K5 echo level"""
+    K1 pitch bend  K2 cutoff  K3 resonance  K4 echo level
+    K5 attack  K6 decay  K7 sustain  K8 release (a VCA around the kit)"""
     kit = drum_kit("d", octaves=5)
-    echo_nodes, echo_wires, wet = echo("fx", kit.feeds[0], 3, 4, 5)
-    sum_nodes, sum_wires, out = summed([kit.feeds[0], wet], "final", x=2800)
-    return assemble("Drum pads", [kit], echo_nodes + sum_nodes, echo_wires + sum_wires,
-                    out, level_knob=2)
-
-
-def preset_with_pads(rel, name, kit_lanes, boost=1.0):
-    """A DX7 or FM preset on the keys with a filter, an echo and the kit.
-    K2 cutoff  K3 resonance  K4 level  K5 echo time  K6 echo feedback  K7 echo level
-    K8 drums level (K1 shares CC 1 with the stick's pitch axis, so it is left alone)
-    Stick up: pitch bend, two semitones. Stick left/right: volume, quieter to louder."""
-    # The source's own ids wear "src_"; everything added here wears "v_", so a preset
-    # with a node called "filter" (duo-lead has one) does not collide with ours.
-    voice = Part(load(rel), "src")
     extra, wires = [], []
-    # ---- the stick ----------------------------------------------------------------
-    # The preset's operators live inside a module, so the pitch goes in as a ratio on
-    # the note's frequency: 1 at rest, 2^(2/12) with the stick pushed.
-    extra.append(knob_cc("v_volume", CONTROLLER["stick_volume_cc"], 0.0, 2.0, 0.5,
-                         glide=20.0, x=0, y=1750))
-    extra.append(knob_cc("v_pitch_ratio", CONTROLLER["stick_pitch_cc"], 1.0,
-                         2.0 ** PITCH_RANGE_OCTAVES, 0.0, glide=5.0, x=0, y=1900))
-    extra.append(node("v_bent", "Multiply", {"factor": 1.0}, x=300, y=1900))
-    note_inputs = [n["id"] for n in voice.nodes if n["type"] == "Input" and n.get("host") == "note"]
-    for inp in note_inputs:
-        redirect_sources(voice.connections, f"{inp}.frequency", "v_bent.out")
-        wires.append(wire(f"{inp}.frequency", "v_bent.a"))
-    wires.append(wire("v_pitch_ratio.out", "v_bent.b"))
-    extra += [
-        node("v_filter", "StateVariableFilter", {"cutoff": 2000.0, "resonance": 0.2, "mode": 0}, x=1500, y=0),
-        # -4..+2.5 octaves around 2 kHz: 125 Hz to 11 kHz, resting wide open.
-        knob("v_cutoff", 2, -4.0, 2.5, 1.0, x=1200, y=200),
-        knob("v_resonance", 3, 0.0, 0.85, 0.2 / 0.85, x=1200, y=350),
-        node("v_level", "Gain", {"gain": 0.8}, x=1800, y=0),
-        knob("v_level_knob", 4, 0.0, boost, 0.8, x=1500, y=200),  # boost: a quiet source's headroom
-    ]
-    wires += [wire(voice.feeds[0], "v_filter.in"), wire("v_cutoff.out", "v_filter.cutoff_mod"),
-              wire("v_resonance.out", "v_filter.resonance"),
-              wire("v_filter.out", "v_level.in"),
-              wire("v_level_knob.out", "v_level.gain")]
-    echo_nodes, echo_wires, wet = echo("v", "v_level.out", 5, 6, 7)
-    feeds = ["v_level.out", wet]
-    parts = [voice]
-    if kit_lanes > 0:
-        kit = drum_kit("d", lanes=kit_lanes)
-        extra.append(node("d_level", "Gain", {"gain": 0.7}, x=1800, y=1200))
-        extra.append(knob("d_level_knob", 8, 0.0, 1.0, 0.7, x=1500, y=1400))
-        wires += [wire(kit.feeds[0], "d_level.in"), wire("d_level_knob.out", "d_level.gain")]
-        feeds.append("d_level.out")
-        parts.append(kit)
-    sum_nodes, sum_wires, mixed = summed(feeds, "mix")
-    vol_nodes, vol_wires, out = volume_stage("v", mixed)
-    return assemble(name, parts, extra + echo_nodes + sum_nodes + vol_nodes,
-                    wires + echo_wires + sum_wires + vol_wires, out)
+    # The pitched drums follow the key through their own Multiplies; the bend goes in
+    # between the key and them.
+    extra += [stick_pitch("d_pitch_ratio", x=-700, y=-500),
+              node("d_bent", "Multiply", {"factor": 1.0}, x=-400, y=-500)]
+    kit.rewire_source("key", "frequency", "d_bent.out")
+    wires += [wire("d_key.frequency", "d_bent.a"), wire("d_pitch_ratio.out", "d_bent.b")]
+    env_nodes, env_wires, shaped = vca_with_knobs("d", kit.feeds[0], "d_key.gate", x=2400)
+    filter_nodes, filter_wires, filtered = outer_filter("d", shaped, x=2600)
+    echo_nodes, echo_wires, wet = echo("fx", filtered)
+    sum_nodes, sum_wires, final = summed([filtered, wet], "final", x=2800)
+    vol_nodes, vol_wires, out = volume_stage("d", final)
+    return assemble("Drum pads", [kit],
+                    extra + env_nodes + filter_nodes + echo_nodes + sum_nodes + vol_nodes,
+                    wires + env_wires + filter_wires + echo_wires + sum_wires + vol_wires, out)
 
 
 # ---- the set ---------------------------------------------------------------------------
 
+# The synths whose own amplitude envelope the bottom row takes over, and the level
+# headroom each needs (mallard peaks at 0.13 on the card as drawn, a third of the
+# others; its level reaches three times as far).
+SYNTHS = [("acid-bass", "aenv", 1.0), ("duo-lead", "aenv", 1.0), ("mallard", "aenv", 3.0)]
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kit-lanes", type=int, default=4,
-                        help="drums on the pads beside a DX7/FM preset: 0 for none, 8 for the whole kit")
     parser.add_argument("--only", default=None, help="write just this entry (for a size probe)")
-    parser.add_argument("--poly-kit-lanes", type=int, default=2,
-                        help="drums beside Poly Five: it is the fullest patch and the closest to the 44 KB window")
+    parser.add_argument("--patterns", type=int, default=len(ARP_PATTERNS),
+                        help="how many of the arpeggiator's patterns to wire (fewer for a size probe)")
     args = parser.parse_args()
+    patterns = ARP_PATTERNS[:args.patterns]
 
     OUT.mkdir(parents=True, exist_ok=True)
     entries = []
@@ -502,22 +773,21 @@ def main():
     # reach directly (pads 4 to 8 name entries 3 to 7; pad 3 is entry 0, pads 1 and 2
     # walk). Synths first, the kit fifth, three DX7 voices, then the game sounds and
     # the rest of the presets.
-    emit("poly5-pads", poly5_pads(args.poly_kit_lanes))
-    for stem, boost in (("acid-bass", 1.0), ("duo-lead", 1.0), ("mallard", 3.0)):
-        # mallard peaks at 0.13 on the card as drawn, a third of the others; its level
-        # knob reaches three times as far.
-        emit(f"synth-{stem}", preset_with_pads(f"synths/{stem}.json", f"Synth {stem}", args.kit_lanes, boost))
+    emit("poly5-pads", poly5_pads(patterns))
+    for stem, envelope, boost in SYNTHS:
+        emit(f"synth-{stem}", instrument_with_pads(f"synths/{stem}.json", f"Synth {stem}", patterns,
+                                                   boost, own_envelope=envelope))
     emit("drum-pads", kit_alone())
     for stem in ("ep-road", "bell-glass", "bass-round"):
-        emit(f"dx7-{stem}", preset_with_pads(f"dx7/{stem}.json", f"DX7 {stem}", args.kit_lanes))
+        emit(f"dx7-{stem}", instrument_with_pads(f"dx7/{stem}.json", f"DX7 {stem}", patterns))
     emit("game-pads", game_pads())
     for family in ("dx7", "fm"):
         for path in sorted((EXAMPLES / family).glob("*.json")):
             entry = f"{family}-{path.stem}"
             if any(e["name"] == entry for e in entries):
                 continue  # already placed among the first eight
-            emit(entry, preset_with_pads(f"{family}/{path.name}", f"{family.upper()} {path.stem}",
-                                         args.kit_lanes))
+            emit(entry, instrument_with_pads(f"{family}/{path.name}", f"{family.upper()} {path.stem}",
+                                             patterns))
 
     if args.only:
         print(f"wrote {OUT / (args.only + '.json')}")

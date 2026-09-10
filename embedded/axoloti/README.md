@@ -153,10 +153,12 @@ Supported today: Input(note)/Output seams, Sine/Saw/Square/Noise
 oscillators — with their fm, pm and (the sine's) feedback inputs, the sine's
 four shapes — Noise (white and pink), LFO (all shapes), StateVariableFilter,
 OnePoleFilter, Delay/Comb/Allpass (SDRAM-backed lines, 4 MB budget), Phaser,
-Drive, Crush, Slide, Arpeggio, ADSR, AhdEnvelope, Retrigger, Gain, Constant,
-Add, Multiply, Mixer, MidiCC (the board's CC and pitch-bend table, read once
-a block), NoteTriggers and TriggerBus (pads) — twenty-seven node types,
-every one hardware-verified:
+Drive, Crush, Slide, Arpeggio, ADSR, AdsrCV (the ADSR with its times on
+wires), AhdEnvelope, Retrigger, Clock (positions as 48-bit fixed point:
+the node's doubles are software on this core), StepSequencer, SampleHold,
+Compare, Gain, Constant, Add, Multiply, Mixer, MidiCC (the board's CC and
+pitch-bend table, read once a block), NoteTriggers and TriggerBus (pads) —
+thirty-two node types, every one hardware-verified:
 eleven manifest goldens bit-exact, slide 9e-6, first-synth 2e-6, and three
 fixtures against the native render at or under 1e-5. Editor patches at any
 schema version compile through the patch-io resolver, including Sampler
@@ -215,31 +217,39 @@ block end, and no block is handed to a node that still reads it.
 
 `tools/make-mpk-examples.py` (repository root) writes
 `examples/banks/axoloti-akai-mpk-mini/` and its bank, in set-list order:
-Poly Five with kick and snare on the pads, three synths (acid-bass,
-duo-lead, mallard), the kit alone, three DX7 voices, six game sounds on
-the pads, then one patch per remaining DX7 and FM preset, each with a
-filter, an echo and four drums — 202 entries, knobs K2–K8 on MidiCC nodes (CC 2–8, what this MPK sends; a mk3
-factory program says 70–77 — K1 is left alone, because its CC 1 is also
-the stick's up-down axis, and the stick sends 0 when let go, which the
-patch read as K1 turned all the way down and a bright preset went silent),
-pads on a NoteTriggers row at note 36, and
-the joystick: its CC axis bends the pitch up two semitones, its bend axis
-is the volume, left quieter and right louder. Poly Five carries no echo
-(the engine copies everything after the keyboard once per voice, and an
-echo there is five delay lines) and two drums, kick and snare: the five
-voices are 51% of a codec call and each drum about 6%. Its pitch bend and
-detune are ratios multiplied into the note's frequency rather than octaves
-into fm, because an fm input that moves is an exp2 per sample per
-oscillator and turning a knob pushed the patch from 86% into overrun; it
-sits at 83% with five notes held and 91% with every knob and both stick
-axes moving at once, and matches the native render to 1e-5. The game pads
-carry six sounds; eight were 96%. The kit entry and the game entry repeat
-their pads up the keyboard — a NoteTriggers row per octave, chained bus
-to bus into one TriggerBus — and their pitched voices follow the key
-through a note input, so an octave up plays an octave up: a kit whose
-only triggers sat at one low octave was silent from the keys anywhere
-else, which read at the bench as a dead patch. Five octaves for the kit
-(78%), four for the game sounds (five were 91%). The bank asks for
+Poly Five, three synths (acid-bass, duo-lead, mallard), the kit alone,
+three DX7 voices, five game sounds on the pads, then one patch per
+remaining DX7 and FM preset — 202 entries. Every entry reads the knobs the
+same way: top row K1 pitch bend, K2 cutoff, K3 resonance, K4 an effect
+(the echo's level on the presets and the kit, the cutoff wobble on Poly
+Five, a drive on the game sounds); bottom row K5 attack, K6 decay, K7
+sustain, K8 release, into the instrument's own envelope where it has one
+(as an AdsrCV) and into a VCA around it where it has not, each knob
+resting where the source patch drew it. The knobs are MidiCC nodes on CC
+1–8, what this MPK sends (a mk3 factory program says 70–77); K1's CC 1 is
+also the stick's up-down axis, so K1 *is* the pitch bend, two semitones
+up; the stick's bend axis is the volume, left quieter and right louder.
+On the instruments the pads (a NoteTriggers row at note 36) are an
+arpeggiator: pads 1–7 start a pattern each at 120 bpm in sixteenths (major
+up, minor up, major up and down, minor seventh, fifths, octave pulse, a
+pentatonic run), pad 8 stops. A one-voice instrument latches to the last
+key and keeps going after it is let go; Poly Five and duo-lead arpeggiate
+every held key in lockstep, so a held chord is a chord arpeggio. The brain
+is Clock, StepSequencer, SampleHold and Compare hung off the row's bus
+(a bitmask of the pads firing), never a NoteInput, whose downstream cone
+the engine copies per voice. Poly Five carries no echo (an echo in the
+cone is one delay line per voice) and keeps four voices on the board,
+not five: five with the arpeggiator were 114% of a codec call, four are
+81%. Its pitch bend is a ratio multiplied into the note's frequency
+rather than octaves into fm, because an fm input that moves is an exp2
+per sample per oscillator. Every entry matches the native render: duo-lead
+72%, a DX7 voice about 60%. The kit entry and the game entry repeat their
+pads up the keyboard — a NoteTriggers row per octave, chained bus to bus
+into one TriggerBus — and their pitched voices follow the key through a
+note input, so an octave up plays an octave up: a kit whose only triggers
+sat at one low octave was silent from the keys anywhere else, which read
+at the bench as a dead patch. Five octaves for the kit, four for the game
+sounds: the kit 61%, the game sounds 68%. The bank asks for
 `"program_change": "prev-next"`: on the board program 0 is the previous
 entry, 1 the next, 2 the first, and every other number the entry it names,
 so the MPK's PROG CHANGE pads walk a bank of two hundred: a program number

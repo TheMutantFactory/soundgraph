@@ -85,6 +85,7 @@ golden vector where its output is non-trivial.
 | Gain                 | yes  | yes           | —      |
 | Mixer                | yes  | yes           | —      |
 | ADSR                 | yes  | yes           | yes    |
+| AdsrCV               | yes  | yes           | yes    |
 | LFO                  | yes  | yes           | yes    |
 | StateVariableFilter  | yes  | yes           | yes    |
 | Delay                | yes  | yes           | yes    |

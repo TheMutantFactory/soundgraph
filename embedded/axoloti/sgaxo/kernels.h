@@ -186,6 +186,19 @@ inline bool block_is_flat(const float *block) {
   return true;
 }
 
+// An unwired input is flat too: it reads as one number for the whole block. The
+// fills below are for the control kernels: a Compare, a SampleHold, a lane, a
+// trigger row or an idle envelope on a block that holds still is a fill, to the
+// bit. Add and Multiply are left as loops: their inputs are mostly audio, and the
+// check on the way in cost Poly Five twelve per cent of a codec call.
+inline bool flat_or_absent(const float *block) {
+  return block == 0 || block_is_flat(block);
+}
+
+inline void fill_block(float *out, float value) {
+  for (int i = 0; i < SGAXO_FRAMES; ++i) out[i] = value;
+}
+
 // The oscillator's loop, with the frequency handed in by `frequency_at(i)`.
 template <typename FrequencyFn, typename RenderFn>
 __attribute__((noinline)) inline void k_osc_loop(
@@ -555,6 +568,13 @@ struct AdsrState {
 inline void k_adsr(AdsrState &s, const float *gate, float *out,
                    float attack_step, float decay_coefficient, float sustain,
                    float release_coefficient) {
+  // Idle with the gate down for the whole block: sixteen zeros, and the state
+  // machine would have written nothing else.
+  if (s.stage == 0 && !s.gate_open && (gate == 0 || (gate[0] < 0.5f && block_is_flat(gate)))) {
+    s.level = 0.0f;
+    fill_block(out, 0.0f);
+    return;
+  }
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
     const int gate_now = gate != 0 && gate[i] >= 0.5f;
     if (gate_now && !s.gate_open) s.stage = 1;
@@ -1379,8 +1399,12 @@ inline void k_midi_cc(MidiCcState &s, float *out, int cc, float low, float high,
     s.current = low + (high - low) * resting;
     s.primed = 1;
   }
-  if (s.current == target) {
-    // Settled: the per-sample step adds exactly zero, so the block is a fill.
+  // Settled: the per-sample step adds nothing to the float, so the block is a fill
+  // of the value the loop would have produced sixteen times. Tested on the sum, not
+  // on current == target: a one-pole in float stops a few ulps short of its target
+  // and never arrives, and every knob at rest was running its loop for good.
+  const float step = (target - s.current) * coefficient;
+  if (s.current + step == s.current) {
     for (int i = 0; i < SGAXO_FRAMES; ++i) out[i] = s.current;
     return;
   }
@@ -1416,6 +1440,22 @@ inline void note_event(NoteTriggersState &s, int on, int note, float velocity,
 inline void k_note_triggers(NoteTriggersState &s, const float *bus_in,
                             float *const *outs, int shift) {
   shift = shift < 0 ? 0 : (shift > SGAXO_TRIGGER_LANES ? SGAXO_TRIGGER_LANES : shift);
+  // Nothing firing and nothing arriving on the bus: every lane is zeros and the bus
+  // is the bus in, which is the block the loop below would write.
+  bool quiet = flat_or_absent(bus_in);
+  for (int lane = 0; quiet && lane < SGAXO_TRIGGER_LANES; ++lane) {
+    if (s.remaining[lane] > 0) quiet = false;
+  }
+  if (quiet) {
+    for (int lane = 0; lane < SGAXO_TRIGGER_LANES; ++lane) {
+      if (outs[lane] != 0) fill_block(outs[lane], 0.0f);
+    }
+    if (outs[SGAXO_TRIGGER_LANES] != 0) {
+      const int mask = bus_in != 0 ? (int)(bus_in[0] + 0.5f) : 0;
+      fill_block(outs[SGAXO_TRIGGER_LANES], (float)(mask & 0xffff));
+    }
+    return;
+  }
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
     int mask = bus_in != 0 ? (int)(bus_in[i] + 0.5f) : 0;
     for (int lane = 0; lane < SGAXO_TRIGGER_LANES; ++lane) {
@@ -1439,6 +1479,166 @@ inline void k_trigger_bus(const float *bus, float *const *outs, int shift) {
     for (int lane = 0; lane < SGAXO_TRIGGER_LANES; ++lane) {
       if (outs[lane] != 0) outs[lane][i] = (mask & (1 << lane)) != 0 ? 1.0f : 0.0f;
     }
+  }
+}
+
+// --- AdsrCV (amplitude.cpp AdsrCvNode) ------------------------------------------
+// The ADSR with its four times on wires, each read once per block and clamped to the
+// parameter's range as the node clamps it; unwired, the host's precomputed step and
+// coefficients apply, so the unwired case is the ADSR to the bit. A wired time turns
+// into its coefficient here, through exp2f_approx: exp(-6.907755/n) is 2^(-9.965784/n).
+
+inline float adsr_attack_step(float seconds, float sample_rate) {
+  const float samples = seconds * sample_rate;
+  return samples < 1.0f ? 1.0f : 1.0f / samples;
+}
+
+inline float adsr_coefficient(float seconds, float sample_rate) {
+  const float samples = seconds * sample_rate;
+  if (samples < 1.0f) return 0.0f;
+  return exp2f_approx(-9.965784f / samples);
+}
+
+inline void k_adsr_cv(AdsrState &s, const float *gate, const float *attack_in,
+                      const float *decay_in, const float *sustain_in,
+                      const float *release_in, float *out, float attack_step,
+                      float decay_coefficient, float sustain,
+                      float release_coefficient, float sample_rate) {
+  if (attack_in != 0) attack_step = adsr_attack_step(clampf(attack_in[0], 0.0f, 10.0f), sample_rate);
+  if (decay_in != 0) decay_coefficient = adsr_coefficient(clampf(decay_in[0], 0.0f, 10.0f), sample_rate);
+  if (sustain_in != 0) sustain = clampf(sustain_in[0], 0.0f, 1.0f);
+  if (release_in != 0) release_coefficient = adsr_coefficient(clampf(release_in[0], 0.0f, 10.0f), sample_rate);
+  k_adsr(s, gate, out, attack_step, decay_coefficient, sustain, release_coefficient);
+}
+
+// --- Clock (shaping.cpp ClockNode) ----------------------------------------------
+// The node keeps its two positions in double, and on this core a double is software:
+// two adds, a multiply and four compares per frame came to a sixth of a codec call for
+// one clock. Here the positions are 64-bit integers with 48 fraction bits, which the
+// M4 adds and compares in a couple of instructions each. The increments are computed
+// in double once per block (or once per frame while a wired bpm moves inside the
+// block) and rounded to the same grid, 2^-48 of a step: the rounding drifts the
+// position by under 2e-15 per frame, beside the double's own 1e-16 per add, so a gate
+// edge lands on the same frame as the node's for as long as anybody listens. The
+// thresholds compare exactly: a float's value times 2^48 is an integer.
+
+struct ClockState {
+  int64_t pulse_pos;   // steps, 16.48
+  int64_t bar_pos;     // beats, 16.48
+  int off_step;
+};
+
+inline int64_t clock_q48(double x) { return (int64_t)(x * 281474976710656.0); }
+
+inline void k_clock(ClockState &s, const float *bpm_in, const float *run, float *gate,
+                    float *bar, float bpm_param, float pulses_per_beat, float swing,
+                    float width_s, float beats_per_bar, float sample_rate) {
+  const int64_t one = (int64_t)1 << 48;
+  const int64_t bar_length = clock_q48((double)beats_per_bar);
+  const float swing_start = swing / 3.0f;
+  const int64_t swing_start_q = clock_q48((double)swing_start);
+  const bool bpm_moves = bpm_in != 0 && !block_is_flat(bpm_in);
+  float bpm = clampf(bpm_in != 0 ? bpm_in[0] : bpm_param, 20.0f, 300.0f);
+  int64_t pulse_increment = 0, beat_increment = 0, end_even = 0, end_odd = 0, bar_width = 0;
+  bool fresh = false;
+  for (int i = 0; i < SGAXO_FRAMES; ++i) {
+    if (run != 0 && run[i] < 0.5f) {
+      s.pulse_pos = 0;
+      s.bar_pos = 0;
+      s.off_step = 0;
+      if (gate != 0) gate[i] = 0.0f;
+      if (bar != 0) bar[i] = 0.0f;
+      continue;
+    }
+    if (bpm_moves) bpm = clampf(bpm_in[i], 20.0f, 300.0f);
+    if (!fresh || bpm_moves) {
+      const float beats_per_second = bpm / 60.0f;
+      const float width_steps = width_s * beats_per_second * pulses_per_beat;
+      const float odd_end = swing_start + width_steps;   // float + float, as the node adds them
+      end_even = clock_q48((double)width_steps);
+      end_odd = clock_q48((double)odd_end);
+      bar_width = clock_q48((double)(width_s * beats_per_second));
+      const double increment = (double)beats_per_second / sample_rate;
+      beat_increment = clock_q48(increment);
+      pulse_increment = clock_q48(increment * pulses_per_beat);
+      fresh = true;
+    }
+    const int64_t start = s.off_step ? swing_start_q : 0;
+    const int64_t end = s.off_step ? end_odd : end_even;
+    const float g = (s.pulse_pos >= start && s.pulse_pos < end) ? 1.0f : 0.0f;
+    const float b = s.bar_pos < bar_width ? 1.0f : 0.0f;
+    if (gate != 0) gate[i] = g;
+    if (bar != 0) bar[i] = b;
+    s.pulse_pos += pulse_increment;
+    if (s.pulse_pos >= one) {
+      s.pulse_pos -= one;
+      s.off_step = !s.off_step;
+    }
+    s.bar_pos += beat_increment;
+    if (s.bar_pos >= bar_length) s.bar_pos -= bar_length;
+  }
+}
+
+// --- StepSequencer (shaping.cpp StepSequencerNode) --------------------------------
+
+struct StepSequencerState {
+  int index;  // init to -1 by the generated init body
+  int clock_was_open;
+  int reset_was_open;
+};
+
+inline void k_step_sequencer(StepSequencerState &s, const float *clock,
+                             const float *reset_in, float *out, const float *steps,
+                             int length) {
+  // Inputs that hold still inside the block can only have an edge at its first
+  // frame (against the frame before it), so that frame is stepped and the rest
+  // is a fill of its result.
+  const int frames = (flat_or_absent(clock) && flat_or_absent(reset_in)) ? 1 : SGAXO_FRAMES;
+  for (int i = 0; i < frames; ++i) {
+    const int reset_open = reset_in != 0 && reset_in[i] >= 0.5f;
+    if (reset_open && !s.reset_was_open) s.index = -1;
+    s.reset_was_open = reset_open;
+    const int clock_open = clock != 0 && clock[i] >= 0.5f;
+    if (clock_open && !s.clock_was_open) s.index = (s.index + 1) % length;
+    s.clock_was_open = clock_open;
+    out[i] = steps[s.index < 0 ? 0 : s.index];
+  }
+  for (int i = frames; i < SGAXO_FRAMES; ++i) out[i] = out[0];
+}
+
+// --- SampleHold (maths.cpp SampleHoldNode) ----------------------------------------
+
+struct SampleHoldState {
+  float held;
+  int was_open;
+};
+
+inline void k_sample_hold(SampleHoldState &s, const float *in, const float *trigger,
+                          float *out) {
+  // A trigger that holds still inside the block can only rise at its first frame.
+  const int frames = flat_or_absent(trigger) ? 1 : SGAXO_FRAMES;
+  for (int i = 0; i < frames; ++i) {
+    const int open = trigger != 0 && trigger[i] >= 0.5f;
+    if (open && !s.was_open) s.held = in != 0 ? in[i] : 0.0f;
+    s.was_open = open;
+    out[i] = s.held;
+  }
+  for (int i = frames; i < SGAXO_FRAMES; ++i) out[i] = s.held;
+}
+
+// --- Compare (maths.cpp CompareNode) ----------------------------------------------
+
+inline void k_compare(const float *a, const float *b, float *out, float threshold) {
+  if (flat_or_absent(a) && flat_or_absent(b)) {
+    const float x = a != 0 ? a[0] : 0.0f;
+    const float y = b != 0 ? b[0] : threshold;
+    fill_block(out, x >= y ? 1.0f : 0.0f);
+    return;
+  }
+  for (int i = 0; i < SGAXO_FRAMES; ++i) {
+    const float x = a != 0 ? a[i] : 0.0f;
+    const float y = b != 0 ? b[i] : threshold;
+    out[i] = x >= y ? 1.0f : 0.0f;
   }
 }
 

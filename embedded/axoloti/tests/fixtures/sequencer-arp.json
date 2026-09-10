@@ -1,0 +1,504 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "name": "Sequencer arp, pads start and stop it"
+  },
+  "nodes": [
+    {
+      "id": "kb",
+      "type": "Input",
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "host": "note"
+    },
+    {
+      "id": "pads",
+      "type": "NoteTriggers",
+      "position": {
+        "x": 0.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "base": 36,
+        "shift": 0
+      }
+    },
+    {
+      "id": "any_pad",
+      "type": "Compare",
+      "position": {
+        "x": 300.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "threshold": 0.5
+      }
+    },
+    {
+      "id": "last_pad",
+      "type": "SampleHold",
+      "position": {
+        "x": 600.0,
+        "y": 300.0
+      }
+    },
+    {
+      "id": "floor",
+      "type": "Constant",
+      "position": {
+        "x": 600.0,
+        "y": 500.0
+      },
+      "parameters": {
+        "value": 60.0
+      }
+    },
+    {
+      "id": "ceiling",
+      "type": "Constant",
+      "position": {
+        "x": 600.0,
+        "y": 650.0
+      },
+      "parameters": {
+        "value": 95.0
+      }
+    },
+    {
+      "id": "above",
+      "type": "Compare",
+      "position": {
+        "x": 900.0,
+        "y": 500.0
+      },
+      "parameters": {
+        "threshold": 0.0
+      }
+    },
+    {
+      "id": "below",
+      "type": "Compare",
+      "position": {
+        "x": 900.0,
+        "y": 650.0
+      },
+      "parameters": {
+        "threshold": 0.0
+      }
+    },
+    {
+      "id": "run",
+      "type": "Multiply",
+      "position": {
+        "x": 1200.0,
+        "y": 550.0
+      },
+      "parameters": {
+        "factor": 1.0
+      }
+    },
+    {
+      "id": "tempo",
+      "type": "Multiply",
+      "position": {
+        "x": 900.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "factor": 2.0
+      }
+    },
+    {
+      "id": "is_key",
+      "type": "Compare",
+      "position": {
+        "x": 300.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "threshold": 130.0
+      }
+    },
+    {
+      "id": "key_hit",
+      "type": "Multiply",
+      "position": {
+        "x": 600.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 1.0
+      }
+    },
+    {
+      "id": "root",
+      "type": "SampleHold",
+      "position": {
+        "x": 900.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "clock",
+      "type": "Clock",
+      "position": {
+        "x": 1500.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "bpm": 120,
+        "division": 4,
+        "swing": 0.0,
+        "width": 40.0,
+        "beats_per_bar": 4
+      }
+    },
+    {
+      "id": "lane",
+      "type": "StepSequencer",
+      "position": {
+        "x": 1800.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "length": 6,
+        "step1": 0.0,
+        "step2": 0.3333333,
+        "step3": 0.5833333,
+        "step4": 1.0,
+        "step5": 0.5833333,
+        "step6": 0.3333333
+      }
+    },
+    {
+      "id": "osc",
+      "type": "SawOscillator",
+      "position": {
+        "x": 2100.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "frequency": 220.0
+      }
+    },
+    {
+      "id": "env",
+      "type": "AdsrCV",
+      "position": {
+        "x": 2100.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "attack": 0.005,
+        "decay": 0.1,
+        "sustain": 0.3,
+        "release": 0.4
+      }
+    },
+    {
+      "id": "rel",
+      "type": "Constant",
+      "position": {
+        "x": 1800.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "value": 0.05
+      }
+    },
+    {
+      "id": "amp",
+      "type": "Gain",
+      "position": {
+        "x": 2400.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "gain": 0.5
+      }
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "position": {
+        "x": 2800.0,
+        "y": 0.0
+      },
+      "host": "stereo"
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "pads",
+        "port": "bus"
+      },
+      "to": {
+        "node": "any_pad",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "kb",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "last_pad",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "any_pad",
+        "port": "out"
+      },
+      "to": {
+        "node": "last_pad",
+        "port": "trigger"
+      }
+    },
+    {
+      "from": {
+        "node": "last_pad",
+        "port": "out"
+      },
+      "to": {
+        "node": "above",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "floor",
+        "port": "out"
+      },
+      "to": {
+        "node": "above",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "ceiling",
+        "port": "out"
+      },
+      "to": {
+        "node": "below",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "last_pad",
+        "port": "out"
+      },
+      "to": {
+        "node": "below",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "above",
+        "port": "out"
+      },
+      "to": {
+        "node": "run",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "below",
+        "port": "out"
+      },
+      "to": {
+        "node": "run",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "last_pad",
+        "port": "out"
+      },
+      "to": {
+        "node": "tempo",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "kb",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "is_key",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "is_key",
+        "port": "out"
+      },
+      "to": {
+        "node": "key_hit",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "kb",
+        "port": "gate"
+      },
+      "to": {
+        "node": "key_hit",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "kb",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "root",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "key_hit",
+        "port": "out"
+      },
+      "to": {
+        "node": "root",
+        "port": "trigger"
+      }
+    },
+    {
+      "from": {
+        "node": "run",
+        "port": "out"
+      },
+      "to": {
+        "node": "clock",
+        "port": "run"
+      }
+    },
+    {
+      "from": {
+        "node": "tempo",
+        "port": "out"
+      },
+      "to": {
+        "node": "clock",
+        "port": "bpm"
+      }
+    },
+    {
+      "from": {
+        "node": "clock",
+        "port": "gate"
+      },
+      "to": {
+        "node": "lane",
+        "port": "clock"
+      }
+    },
+    {
+      "from": {
+        "node": "clock",
+        "port": "bar"
+      },
+      "to": {
+        "node": "lane",
+        "port": "reset"
+      }
+    },
+    {
+      "from": {
+        "node": "root",
+        "port": "out"
+      },
+      "to": {
+        "node": "osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "lane",
+        "port": "out"
+      },
+      "to": {
+        "node": "osc",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
+        "node": "clock",
+        "port": "gate"
+      },
+      "to": {
+        "node": "env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "rel",
+        "port": "out"
+      },
+      "to": {
+        "node": "env",
+        "port": "release"
+      }
+    },
+    {
+      "from": {
+        "node": "osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "env",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "left"
+      }
+    },
+    {
+      "from": {
+        "node": "amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "right"
+      }
+    }
+  ]
+}

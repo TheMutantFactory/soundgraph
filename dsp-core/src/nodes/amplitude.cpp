@@ -526,6 +526,136 @@ const NodeTypeDescriptor kMixer = {
     &make<MixerNode>,
 };
 
+// ---- AdsrCV: the envelope with its shape on wires ---------------------------------------
+// The same envelope as ADSR, with attack, decay, sustain and release as control inputs
+// that replace the parameters while connected, read once per block like a filter's
+// cutoff. A separate type rather than four more ports on ADSR, so no existing patch's
+// node grows on screen; it exists for a hardware knob to reach an envelope.
+
+constexpr PortDescriptor kAdsrCvInputs[] = {
+    {"gate", SignalType::Control, "", true, false,
+     "High while the note is held. Rising starts the attack; falling starts the release."},
+    {"attack", SignalType::Control, "s", false, false,
+     "Attack time. Replaces the parameter while connected; read once per block."},
+    {"decay", SignalType::Control, "s", false, false,
+     "Decay time. Replaces the parameter while connected; read once per block."},
+    {"sustain", SignalType::Control, "", false, false,
+     "Sustain level, 0 to 1. Replaces the parameter while connected; read once per block."},
+    {"release", SignalType::Control, "s", false, false,
+     "Release time. Replaces the parameter while connected; read once per block."},
+};
+
+class AdsrCvNode final : public DspNode {
+public:
+    enum Param { kAttack = 0, kDecay = 1, kSustain = 2, kRelease = 3 };
+
+    void prepare(const PrepareContext& context) override {
+        sample_rate_ = static_cast<float>(context.sample_rate);
+        reset();
+    }
+
+    void reset() override {
+        stage_ = Stage::Idle;
+        level_ = 0.0f;
+        gate_open_ = false;
+    }
+
+    void process(const ProcessContext& context) override {
+        const float* gate = context.inputs[0];
+        float* out = context.outputs[0];
+
+        // Each time from its wire when there is one, clamped to the parameter's own
+        // range, else from the parameter — sampled at the block's first frame.
+        const float attack = wired_or(context.inputs[1], parameter(kAttack), 0.0f, 10.0f);
+        const float decay = wired_or(context.inputs[2], parameter(kDecay), 0.0f, 10.0f);
+        const float sustain = wired_or(context.inputs[3], parameter(kSustain), 0.0f, 1.0f);
+        const float release = wired_or(context.inputs[4], parameter(kRelease), 0.0f, 10.0f);
+        const float attack_step = step_for(attack);
+        const float decay_coefficient = coefficient_for(decay);
+        const float release_coefficient = coefficient_for(release);
+
+        for (int i = 0; i < context.frames; ++i) {
+            const bool gate_now = gate != nullptr && gate[i] >= 0.5f;
+            if (gate_now && !gate_open_) {
+                stage_ = Stage::Attack;
+            } else if (!gate_now && gate_open_) {
+                stage_ = Stage::Release;
+            }
+            gate_open_ = gate_now;
+
+            switch (stage_) {
+                case Stage::Idle:
+                    level_ = 0.0f;
+                    break;
+                case Stage::Attack:
+                    level_ += attack_step;
+                    if (level_ >= 1.0f) {
+                        level_ = 1.0f;
+                        stage_ = Stage::Decay;
+                    }
+                    break;
+                case Stage::Decay:
+                    level_ = sustain + (level_ - sustain) * decay_coefficient;
+                    if (std::fabs(level_ - sustain) < 1.0e-4f) {
+                        level_ = sustain;
+                        stage_ = Stage::Sustain;
+                    }
+                    break;
+                case Stage::Sustain:
+                    level_ = sustain;
+                    break;
+                case Stage::Release:
+                    level_ *= release_coefficient;
+                    if (level_ < 1.0e-5f) {
+                        level_ = 0.0f;
+                        stage_ = Stage::Idle;
+                    }
+                    break;
+            }
+            out[i] = level_;
+        }
+    }
+
+private:
+    enum class Stage { Idle, Attack, Decay, Sustain, Release };
+
+    static float wired_or(const float* wire, float fallback, float low, float high) {
+        return wire != nullptr ? dsp::clampf(wire[0], low, high) : fallback;
+    }
+
+    float step_for(float seconds) const {
+        const float samples = seconds * sample_rate_;
+        return samples < 1.0f ? 1.0f : 1.0f / samples;
+    }
+
+    float coefficient_for(float seconds) const {
+        const float samples = seconds * sample_rate_;
+        if (samples < 1.0f) {
+            return 0.0f;
+        }
+        return std::exp(-6.907755f / samples);
+    }
+
+    float sample_rate_ = 48000.0f;
+    Stage stage_ = Stage::Idle;
+    float level_ = 0.0f;
+    bool gate_open_ = false;
+};
+
+const NodeTypeDescriptor kAdsrCv = {
+    "AdsrCV", "Envelope CV", "Modulation",
+    "An envelope whose attack, decay, sustain and release sit on wires: a knob, a "
+    "sequencer lane or a MIDI controller can shape every note.",
+    "adsr|envelope|cv|control voltage|knob envelope|attack knob|release knob|modulate "
+    "attack|modulate release|mpk|hardware envelope|eg cv|envelope inputs",
+    Slice<PortDescriptor>(kAdsrCvInputs),
+    Slice<PortDescriptor>(kAdsrOutputs),
+    Slice<ParameterDescriptor>(kAdsrParameters),
+    false, NodeRole::Processor, false,
+    ResourceCost{2.0f, 12, 0},
+    &make<AdsrCvNode>,
+};
+
 const NodeTypeDescriptor kAdsr = {
     "ADSR", "Envelope", "Modulation",
     "Shapes how a sound starts, holds and fades when a note is played.",

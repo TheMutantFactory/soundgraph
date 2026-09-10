@@ -494,6 +494,30 @@ const DEMOS = {
       ],
     }),
   },
+  AdsrCV: {
+    summary: 'An ADSR whose shape sits on wires: a knob or a lane can set every note.',
+    try: 'Turn the knob on the attack wire. The same envelope as ADSR, but its four '
+      + 'times are inputs, which is what lets a MIDI knob reach them.',
+    build: () => ({
+      nodes: [
+        keyboard(),
+        node('osc', 'SawOscillator', { frequency: 220 }, 1, 0),
+        node('demo', 'AdsrCV', { attack: 0.15, decay: 0.25, sustain: 0.5, release: 0.6 }, 1, 1),
+        node('attack', 'Constant', { value: 0.02 }, 0, 2),
+        amp(2),
+        out(3),
+      ],
+      connections: [
+        wire('kb', 'frequency', 'osc', 'frequency'),
+        wire('kb', 'gate', 'demo', 'gate'),
+        wire('attack', 'out', 'demo', 'attack'),
+        wire('demo', 'out', 'amp', 'gain'),
+        wire('osc', 'out', 'amp', 'in'),
+        wire('amp', 'out', 'out', 'left'),
+        wire('amp', 'out', 'out', 'right'),
+      ],
+    }),
+  },
   AhdEnvelope: {
     summary: 'A one-shot: over before you let go. Hits, coins, jumps.',
     try: 'Hold a key for as long as you like — it makes no difference, which is the point. '
@@ -1206,6 +1230,7 @@ const PROBES = {
   Mixer: { parameter: 'level2', value: 0 },
 
   ADSR: { parameter: 'attack', value: 2.0 },
+  AdsrCV: { node: 'attack', parameter: 'value', value: 2.0 },
   AhdEnvelope: { parameter: 'decay', value: 1.5 },
   Slide: { parameter: 'slide', value: 600 },
   Arpeggio: { parameter: 'interval', value: 12 },

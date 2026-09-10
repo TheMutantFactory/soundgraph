@@ -144,6 +144,7 @@ NodeRegistry::NodeRegistry() {
         &nodes::kStereoLevel,
         &nodes::kMixer,
         &nodes::kAdsr,
+        &nodes::kAdsrCv,
         &nodes::kAhdEnvelope,
         &nodes::kSlide,
         &nodes::kArpeggio,

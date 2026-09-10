@@ -45,6 +45,7 @@ extern const NodeTypeDescriptor kLevel;
 extern const NodeTypeDescriptor kStereoLevel;
 extern const NodeTypeDescriptor kMixer;
 extern const NodeTypeDescriptor kAdsr;
+extern const NodeTypeDescriptor kAdsrCv;
 extern const NodeTypeDescriptor kAdd;
 extern const NodeTypeDescriptor kMultiply;
 extern const NodeTypeDescriptor kCrush;

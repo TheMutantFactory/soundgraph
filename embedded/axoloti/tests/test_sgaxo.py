@@ -302,6 +302,11 @@ def _mirror_schedule(total_frames, notes, gate=0.7, velocity=0.9):
     ("examples/patches/dx7/algo-01.json", [60, 67], 0.5, 5e-4),
     # The editor's boot patch: five voices, the square detuned through fm.
     ("examples/patches/synths/poly-five.json", [48, 52, 55], 0.6, 1e-3),
+    # A clock walking a sequencer lane into an oscillator's fm, started and stopped by a
+    # pad through a sample-and-hold fed one minus its own value (a toggle in cables),
+    # the pad's bus made a gate by Compare, the envelope's release on a wire. Note 36 is
+    # the pad (on, then the toggle's second press turns it off); 48 plays the keys.
+    ("embedded/axoloti/tests/fixtures/sequencer-arp.json", [60, 36, 43], 1.5, 5e-4),
 ])
 def test_editor_patch_matches_native_render(board, toolchain, tmp_path, rel,
                                             notes, seconds, tolerance):

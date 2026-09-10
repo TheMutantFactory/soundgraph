@@ -200,6 +200,38 @@ SUPPORTED = {
         "fixed": {},
         "outputs": ["out"],
     },
+    "AdsrCV": {
+        "inputs": ["gate", "attack", "decay", "sustain", "release"],
+        "connectable": {"gate", "attack", "decay", "sustain", "release"},
+        "params": {"attack": 0.005, "decay": 0.12, "sustain": 0.6, "release": 0.25},
+        "fixed": {},
+        "outputs": ["out"],
+    },
+    "Clock": {
+        "inputs": ["bpm", "run"], "connectable": {"bpm", "run"},
+        "params": {"bpm": 120.0, "division": 4.0, "swing": 0.0, "width": 5.0,
+                   "beats_per_bar": 4.0},
+        "fixed": {},
+        "outputs": ["gate", "bar"],
+    },
+    "StepSequencer": {
+        "inputs": ["clock", "reset"], "connectable": {"clock", "reset"},
+        "params": {"length": 8.0, "step1": 0.0, "step2": 0.0, "step3": 0.0, "step4": 0.0, "step5": 0.0, "step6": 0.0, "step7": 0.0, "step8": 0.0, "step9": 0.0, "step10": 0.0, "step11": 0.0, "step12": 0.0, "step13": 0.0, "step14": 0.0, "step15": 0.0, "step16": 0.0},
+        "fixed": {},
+        "outputs": ["out"],
+    },
+    "SampleHold": {
+        "inputs": ["in", "trigger"], "connectable": {"in", "trigger"},
+        "params": {},
+        "fixed": {},
+        "outputs": ["out"],
+    },
+    "Compare": {
+        "inputs": ["a", "b"], "connectable": {"a", "b"},
+        "params": {"threshold": 0.0},
+        "fixed": {},
+        "outputs": ["out"],
+    },
     "MidiCC": {
         "inputs": [], "connectable": set(),
         "params": {"cc": 1.0, "low": 0.0, "high": 1.0, "resting": 0.0, "glide": 15.0},
@@ -666,8 +698,15 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
         elif t == "Crush":
             L.append(f"static sgaxo::CrushState st_{c};")
             init.append(f"st_{c}.phase = 1.0f;")
-        elif t == "ADSR":
+        elif t == "ADSR" or t == "AdsrCV":
             L.append(f"static sgaxo::AdsrState st_{c};")
+        elif t == "Clock":
+            L.append(f"static sgaxo::ClockState st_{c};")
+        elif t == "StepSequencer":
+            L.append(f"static sgaxo::StepSequencerState st_{c};")
+            init.append(f"st_{c}.index = -1;")
+        elif t == "SampleHold":
+            L.append(f"static sgaxo::SampleHoldState st_{c};")
         elif t == "AhdEnvelope":
             L.append(f"static sgaxo::AhdState st_{c};")
         elif t == "Retrigger":
@@ -845,6 +884,31 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
                      f"{_lit(_attack_step(p['attack']))}, "
                      f"{_lit(_exp_coeff(p['decay']))}, {_lit(p['sustain'])}, "
                      f"{_lit(_exp_coeff(p['release']))});")
+        elif t == "AdsrCV":
+            L.append(f"  sgaxo::k_adsr_cv(st_{c}, {src(i, 'gate')}, {src(i, 'attack')}, "
+                     f"{src(i, 'decay')}, {src(i, 'sustain')}, {src(i, 'release')}, "
+                     f"{buf(i, 'out')}, {_lit(_attack_step(p['attack']))}, "
+                     f"{_lit(_exp_coeff(p['decay']))}, {_lit(p['sustain'])}, "
+                     f"{_lit(_exp_coeff(p['release']))}, {_lit(SAMPLE_RATE)});")
+        elif t == "Clock":
+            division = int(min(max(f32(p["division"]) + 0.5, 0.0), 9.0))
+            pulses = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 3.0, 6.0, 4.0 / 3.0, 8.0 / 3.0][division]
+            L.append(f"  sgaxo::k_clock(st_{c}, {src(i, 'bpm')}, {src(i, 'run')}, "
+                     f"{buf(i, 'gate')}, {buf(i, 'bar')}, {_lit(p['bpm'])}, {_lit(pulses)}, "
+                     f"{_lit(p['swing'])}, {_lit(f32(p['width']) * 0.001)}, "
+                     f"{_lit(p['beats_per_bar'])}, {_lit(SAMPLE_RATE)});")
+        elif t == "StepSequencer":
+            values = ", ".join(_lit(p[f"step{k}"]) for k in range(1, 17))
+            length = int(min(max(f32(p["length"]) + 0.5, 1.0), 16.0))
+            L.append(f"  {{ static const float steps[16] = {{{values}}}; "
+                     f"sgaxo::k_step_sequencer(st_{c}, {src(i, 'clock')}, {src(i, 'reset')}, "
+                     f"{buf(i, 'out')}, steps, {length}); }}")
+        elif t == "SampleHold":
+            L.append(f"  sgaxo::k_sample_hold(st_{c}, {src(i, 'in')}, {src(i, 'trigger')}, "
+                     f"{buf(i, 'out')});")
+        elif t == "Compare":
+            L.append(f"  sgaxo::k_compare({src(i, 'a')}, {src(i, 'b')}, {buf(i, 'out')}, "
+                     f"{_lit(p['threshold'])});")
         elif t == "AhdEnvelope":
             dt = f32(1.0 / SAMPLE_RATE)
             L.append(f"  sgaxo::k_ahd(st_{c}, {src(i, 'gate')}, {buf(i, 'out')}, "

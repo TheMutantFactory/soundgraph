@@ -523,6 +523,59 @@ TEST(adsr_without_a_gate_stays_silent) {
     CHECK_NEAR(testing::peak(harness.output()), 0.0, 1e-9);
 }
 
+// ---- AdsrCV: the same envelope, its times on wires ---------------------------------
+
+TEST(adsr_cv_unwired_is_the_adsr_to_the_bit) {
+    const int frames = 24000;
+    NodeHarness plain("ADSR", frames, kSampleRate);
+    NodeHarness wired("AdsrCV", frames, kSampleRate);
+    for (NodeHarness* h : {&plain, &wired}) {
+        h->set("attack", 0.02f);
+        h->set("decay", 0.05f);
+        h->set("sustain", 0.4f);
+        h->set("release", 0.1f);
+        std::vector<float>& gate = h->input("gate");
+        for (int i = 0; i < frames; ++i) {
+            gate[static_cast<std::size_t>(i)] = i < frames / 2 ? 1.0f : 0.0f;
+        }
+        h->process();
+    }
+    for (int i = 0; i < frames; i += 97) {
+        CHECK_NEAR(wired.output()[static_cast<std::size_t>(i)],
+                   plain.output()[static_cast<std::size_t>(i)], 0.0);
+    }
+}
+
+TEST(adsr_cv_attack_wire_replaces_the_parameter) {
+    const int frames = 48000;
+    NodeHarness harness("AdsrCV", frames, kSampleRate);
+    harness.set("attack", 0.001f);   // the parameter says instant
+    harness.set("decay", 0.05f);
+    harness.set("sustain", 0.5f);
+    harness.set("release", 0.05f);
+    harness.connect("gate", 1.0f);
+    harness.connect("attack", 0.5f);  // the wire says half a second, and the wire wins
+    harness.process();
+    const std::vector<float>& out = harness.output();
+    // Half a second of attack: at 0.1 s the envelope is still climbing, at 0.6 s it has
+    // arrived and decayed to the sustain.
+    CHECK(out[4800] > 0.1f);
+    CHECK(out[4800] < 0.3f);
+    CHECK_NEAR(out[28800], 0.5, 0.01);
+}
+
+TEST(adsr_cv_sustain_wire_is_clamped_to_the_parameter_range) {
+    const int frames = 24000;
+    NodeHarness harness("AdsrCV", frames, kSampleRate);
+    harness.set("attack", 0.001f);
+    harness.set("decay", 0.01f);
+    harness.set("release", 0.05f);
+    harness.connect("gate", 1.0f);
+    harness.connect("sustain", 4.0f);  // out of range: held at 1
+    harness.process();
+    CHECK_NEAR(harness.output()[frames - 1], 1.0, 0.01);
+}
+
 // ---- LFO ----------------------------------------------------------------------------
 
 TEST(lfo_applies_amount_and_offset) {

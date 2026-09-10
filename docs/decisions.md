@@ -1839,3 +1839,77 @@ Consequences:
 Any key plays something on those two entries, pitched to where it is.
 Noise drums keep their pitch. A synth entry's pads stay at the base
 octave only.
+
+## 2026-09-10 — Two knob rows, and the pads as an arpeggiator
+
+Decision:
+Every entry of the MPK set reads the knobs the same way: the top row is
+K1 pitch bend, K2 cutoff, K3 resonance, K4 an effect (the echo's level on
+the presets and the kit, the cutoff wobble on Poly Five, a drive on the
+game sounds); the bottom row is attack, decay, sustain, release. The
+bottom row reaches the instrument's own amplitude envelope where it has
+one (Poly Five, acid-bass, duo-lead, mallard) through a new engine node,
+AdsrCV — the ADSR with its four times as control inputs, read once a
+block and clamped — and a VCA of the same node around the instrument
+where it has none (the DX7 and FM voices, the kit, the game sounds),
+resting as a wall: attack at once, sustain 1, a two-second release under
+the source's own tails. On the instruments the pads are an arpeggiator:
+pads 1 to 7 each start a pattern, pad 8 stops it. The drums beside the
+synths are gone; the kit has its own entry.
+
+Reason:
+Knobs that reach an envelope and pads that do more than play a note were
+the ask, and with two hundred entries the map has to be one map. The
+arpeggiator's brain is built from Clock, StepSequencer, SampleHold and
+Compare — four more node types the board's codegen now carries — and it
+hears the pads through a NoteTriggers row only, never a NoteInput: the
+engine copies a NoteInput's whole downstream cone once per voice, and a
+first draft hung off a second, one-voice NoteInput saw only its own
+voice's share of the pads inside Poly Five. The row's bus is a bitmask of
+the pads firing, so held at the hit it names the pad as a power of two,
+and seven patterns are picked without a loop (the engine's rule is that a
+loop holds a delay): the first lane plus the differences to the next,
+each switched in by one compare on the held pad. The lanes step in
+lockstep, so the sum is exactly the chosen pattern. A one-voice
+instrument latches the arpeggio to the last key and keeps playing after
+the key is let go; a polyphonic one arpeggiates every held key in
+lockstep — a held chord is a chord arpeggio — and each stops with its
+key's own envelope, because the voice part sits in the cone and is copied
+per voice while the brain is not. A pad is a note too, and the
+instrument's gate is multiplied by "the note is C3 or above" so the synth
+does not play a low note under every arpeggio it starts.
+
+The brain is forty small nodes, and each cost the board about 0.3% of a
+codec call in call overhead alone; the Clock's two double positions,
+software arithmetic on this core, cost 18% by themselves. The clock now
+keeps its positions as 64-bit integers with 48 fraction bits, the
+increments computed in double once a block and rounded to that grid
+(under 2e-15 of a step per frame, beside the double's own rounding), and
+costs under 2%. Compare, SampleHold, StepSequencer, NoteTriggers and an
+idle ADSR fill their block when their inputs hold still inside it, to the
+bit; the same check on Add and Multiply, whose inputs are mostly audio,
+cost Poly Five twelve per cent and was taken back out. A knob at rest
+was also running its smoothing loop for good — a one-pole in float stops
+a few ulps short of its target — and now settles when the step adds
+nothing. With all of that, Poly Five keeps four voices on the board, not
+five (five and the arpeggiator were 114% of a codec call; four are 81%),
+and its arpeggio is a sine pluck without a filter of its own, since the
+filtered saw the other entries use is copied per voice there. The game
+entry drops the sfxr explosion, a double of the game one: six sounds with
+the envelope, the filter and the drive around them were 96%.
+
+Alternatives:
+Reprogramming the MPK so K1 sends a free number: not from here, and the
+set has to work on the unit as it is. Pattern per pad by a lane per pad
+with a gated clock: the unselected lanes freeze where they were rather
+than at zero. Latching on Poly Five: needs a global mono note source the
+engine does not have; a node for it is a later decision.
+
+Consequences:
+K1 and the stick's up axis are the same wire, so K1 is the pitch bend
+knob. Hitting a pad on a one-voice instrument while holding a key steals
+the note (the pad is the newer note); start the arpeggio first. A keyboard
+shifted two octaves down plays the pads. 202 entries, every one rendered
+on the board and matched to the native render: Poly Five 81% of a codec
+call, duo-lead 72%, a DX7 voice about 60%, the kit 61%, the game sounds
+68%. The arpeggio's tempo is fixed at 120 bpm in sixteenths.
