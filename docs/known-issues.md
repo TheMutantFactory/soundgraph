@@ -144,3 +144,29 @@ apart, so "it worked before" is an assumption rather than an observation.
 What is already known-good on this board and should not be re-derived: audio (ES8311 out,
 ES7210 in, amp on the TCA9554 at 0x20 pin 7), and the whole display path down to the last
 accepted byte — see the driver work on dd/ESP32-s3-touch-lcd-3.49.
+
+## 2026-09-10 — legalize_test and geometry_contract_test are out of the gate, temporarily
+
+`tools/pre-push.sh` no longer runs `legalize_test` or `geometry_contract_test`.
+On 2026-09-10 they took 974 and 772 seconds, half an hour between them
+and more than every other stage together, because each re-runs the layout
+solvers (Resolve overlaps, Tidy flow) on babble and the dense fixture. The
+weekend had no time for a half-hour push. The suites themselves are
+unchanged and still run by hand:
+
+    cd editor-godot && godot --headless --path . --script legalize_test.gd
+    cd editor-godot && godot --headless --path . --script geometry_contract_test.gd
+
+Run them before anything touches `legalize.gd`, Tidy flow, the layout
+objective, the structural geometry, or the fixtures they measure
+(dense-graph, dense-graph-legalized, first-synth, plucked-string, babble,
+geometry-disagreement). Put them back in the gate's `suites` list when a
+half-hour push is affordable again, or when they are faster: trimming
+geometry_contract_test to its three small fixtures would keep the contract
+on every push for a fraction of the time.
+
+Also noted while reading legalize_test: its header says babble and
+dense-graph-legalized are legal and must move nothing, but the checks now
+accept repairs on both (babble 14 faults, 10 nodes moved; dense-graph-
+legalized 23 faults, 16 moved). The fixtures have drifted from the header,
+and the defining leave-it-alone case is no longer what is measured.

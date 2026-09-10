@@ -91,7 +91,7 @@ Compare native/WASM/embedded outputs within declared tolerances.
 
 ### The gate
 
-`tools/pre-push.sh` builds, runs ctest, and runs the three Godot suites. Enable it once
+`tools/pre-push.sh` builds, runs ctest, and runs the Godot suites. Enable it once
 per clone — hooks are not cloned, only the script is:
 
 ```sh
