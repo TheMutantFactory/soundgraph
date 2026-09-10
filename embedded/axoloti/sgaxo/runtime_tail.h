@@ -222,10 +222,17 @@ static void sgaxo_dsp(int32_t *inbuf, int32_t *outbuf) {
     const float cr = r < -0.999969f ? -0.999969f : (r > 0.999969f ? 0.999969f : r);
     outbuf[i * 2] = ((int32_t)(cl * 134217728.0f)) << 4;
     outbuf[i * 2 + 1] = ((int32_t)(cr * 134217728.0f)) << 4;
-    // Golden capture: the unclamped left channel, bit for bit.
+    // Golden capture: the unclamped left channel, bit for bit — or, with
+    // SGAXO_CAPTURE_INPUT, what the codec heard on its left input this cycle:
+    // with a cable from the headphone jack to the line in, that is the patch's
+    // own output after the amp, the jack and the ADC, which is the loopback test.
 #if SGAXO_FRAMES_TARGET > 0
     if (done < SGAXO_FRAMES_TARGET) {
+#ifdef SGAXO_CAPTURE_INPUT
+      SGX_CAP[done] = sgaxo_in_l[sgaxo_fifo_pos - 1];  // this frame, already advanced past
+#else
       SGX_CAP[done] = l;
+#endif
       done++;
     }
 #endif

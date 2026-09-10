@@ -76,6 +76,15 @@ A controller plugged into the board's host port never reaches the computer,
 so this is the only place to read it; a controller plugged into the computer
 shows in the editor's right-hand panel under "MIDI in".
 
+## Hearing it back: the loopback
+
+With a cable from the headphone jack to the line in, a capture build with
+`capture_input=True` records what the codec heard instead of what the
+patch rendered — the patch's own output after the amp, the jack and the
+ADC. Measured on the bench rig: 48 frames of lag, -12 dB, a noise floor of
+0.0014. Rendering an entry twice, once each way, and comparing the two
+RMS levels is the whole-set test that a silent jack cannot hide from.
+
 ## From the editor
 
 Scan and Flash sit beside Add node in the Godot editor. Scan runs
