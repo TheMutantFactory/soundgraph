@@ -4143,6 +4143,10 @@ func _rebuild_view() -> void:
 				var tap := _engine_signal_source(node_id, str(outlet.get("name", "")))
 				var entry := {"node": node_id, "port": str(outlet.get("name", "")),
 					"tap_node": str(tap[0]), "tap_port": str(tap[1])}
+				# What leaves the graph is what a probe wants first: an Output seam's
+				# host side is the wire the scope points at until somebody picks another.
+				if str(outlet.get("name", "")) == Seams.HOST_PORT 						and str(node.get("type", "")) == "Output":
+					entry["preferred"] = true
 				probe_sources.append(entry)
 				if str(outlet.get("type", "")) != "audio":
 					probe_gates.append(entry)

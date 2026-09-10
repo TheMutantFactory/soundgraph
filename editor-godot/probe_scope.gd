@@ -253,9 +253,19 @@ func refresh_sources(sources: Array, gates: Array) -> void:
 		if not probe.is_empty() and entry["node"] == probe.get("node") \
 				and entry["port"] == probe.get("port"):
 			keep_probe = index + 1
+	# Nothing kept: the preferred wire, when the list names one — the graph's own
+	# output — so the scope shows the sound the moment a patch opens rather than a
+	# panel that says to point it at a wire.
+	if keep_probe == 0:
+		for index in sources.size():
+			if bool((sources[index] as Dictionary).get("preferred", false)):
+				keep_probe = index + 1
+				break
 	source_pick.selected = keep_probe
 	if keep_probe == 0:
 		probe = {}
+	else:
+		probe = (sources[keep_probe - 1] as Dictionary).duplicate()
 	gate_pick.clear()
 	gate_pick.add_item("trigger: the signal itself")
 	var keep_gate := 0

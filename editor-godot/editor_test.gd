@@ -3098,6 +3098,15 @@ func _initialize() -> void:
 		"picking out.host in the scope taps out.left, which the engine accepts (%s)"
 			% str(host_picked))
 	main.scope_probe._on_source_picked(0)
+	# And it is the default: a patch opening with nothing picked points the scope at
+	# its own output.
+	await main._load_example("Plucked String")
+	for i in 8:
+		await process_frame
+	check(str(main.scope_probe.probe.get("port", "")) == Seams.HOST_PORT
+			and main.scope_probe.source_pick.selected > 0,
+		"a freshly opened patch probes its output's host side by default (%s)"
+			% str(main.scope_probe.probe.get("node", "")))
 	# Fresh routes for what follows. The router keeps a route once made for as long as
 	# it stays legal, and a route made around nodes four times the size is legal and
 	# strange at a desk size — a crossing site left sitting on a port. A real reader
