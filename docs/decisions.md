@@ -1541,3 +1541,21 @@ Consequences:
 The gate keeps the console binary, which is where its output comes from.
 The launcher's minimise is best effort through user32 and does nothing
 when it cannot; the editor launches either way.
+
+## 2026-09-10 — The rack-display check pins the filter's cutoff
+
+Decision:
+The editor suite's "the filter shows something different from its own
+input" check sets the filter's cutoff to 200 Hz in the engine before it
+counts, and puts 900 Hz back after.
+
+Reason:
+First Synth sweeps the cutoff with an LFO. At the top of the sweep the
+filtered saw trails the raw one by less than the hundredth the count asks
+for, and where the sweep is when the count is taken depends on how much
+audio the wall clock drained since the load. The check was a coin toss
+weighted by machine load: 380 of 384 at a desk, 26 of 384 behind a build.
+
+Consequences:
+The check measures what it claims whatever the LFO is doing. The document
+is untouched; only the engine is told.
