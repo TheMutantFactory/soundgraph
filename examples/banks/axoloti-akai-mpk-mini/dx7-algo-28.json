@@ -525,6 +525,100 @@
       }
     },
     {
+      "id": "v_pitch",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 1600.0
+      },
+      "parameters": {
+        "cc": 1,
+        "low": 0.0,
+        "high": 0.16666666666666666,
+        "resting": 0.0,
+        "glide": 5.0
+      }
+    },
+    {
+      "id": "v_morph",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 1750.0
+      },
+      "parameters": {
+        "cc": 128,
+        "low": -1.0,
+        "high": 1.0,
+        "resting": 0.5,
+        "glide": 20.0
+      }
+    },
+    {
+      "id": "v_pitch_ratio",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 1900.0
+      },
+      "parameters": {
+        "cc": 1,
+        "low": 1.0,
+        "high": 1.122462048309373,
+        "resting": 0.0,
+        "glide": 5.0
+      }
+    },
+    {
+      "id": "v_bent",
+      "type": "Multiply",
+      "position": {
+        "x": 300.0,
+        "y": 1900.0
+      },
+      "parameters": {
+        "factor": 1.0
+      }
+    },
+    {
+      "id": "v_m_cut",
+      "type": "Multiply",
+      "position": {
+        "x": 300.0,
+        "y": 2100.0
+      },
+      "parameters": {
+        "factor": 1.5
+      }
+    },
+    {
+      "id": "v_m_wet",
+      "type": "Multiply",
+      "position": {
+        "x": 300.0,
+        "y": 2250.0
+      },
+      "parameters": {
+        "factor": 0.3
+      }
+    },
+    {
+      "id": "v_cm_sum2",
+      "type": "Add",
+      "position": {
+        "x": 1400.0,
+        "y": 550.0
+      }
+    },
+    {
+      "id": "v_wet_sum",
+      "type": "Add",
+      "position": {
+        "x": 1700.0,
+        "y": 700.0
+      }
+    },
+    {
       "id": "v_filter",
       "type": "StateVariableFilter",
       "position": {
@@ -765,8 +859,8 @@
   "connections": [
     {
       "from": {
-        "node": "v_note",
-        "port": "frequency"
+        "node": "v_bent",
+        "port": "out"
       },
       "to": {
         "node": "v_op6",
@@ -785,8 +879,8 @@
     },
     {
       "from": {
-        "node": "v_note",
-        "port": "frequency"
+        "node": "v_bent",
+        "port": "out"
       },
       "to": {
         "node": "v_op5",
@@ -805,8 +899,8 @@
     },
     {
       "from": {
-        "node": "v_note",
-        "port": "frequency"
+        "node": "v_bent",
+        "port": "out"
       },
       "to": {
         "node": "v_op4",
@@ -825,8 +919,8 @@
     },
     {
       "from": {
-        "node": "v_note",
-        "port": "frequency"
+        "node": "v_bent",
+        "port": "out"
       },
       "to": {
         "node": "v_op3",
@@ -845,8 +939,8 @@
     },
     {
       "from": {
-        "node": "v_note",
-        "port": "frequency"
+        "node": "v_bent",
+        "port": "out"
       },
       "to": {
         "node": "v_op2",
@@ -865,8 +959,8 @@
     },
     {
       "from": {
-        "node": "v_note",
-        "port": "frequency"
+        "node": "v_bent",
+        "port": "out"
       },
       "to": {
         "node": "v_op1",
@@ -1455,6 +1549,66 @@
     },
     {
       "from": {
+        "node": "v_note",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "v_bent",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "v_pitch_ratio",
+        "port": "out"
+      },
+      "to": {
+        "node": "v_bent",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "v_morph",
+        "port": "out"
+      },
+      "to": {
+        "node": "v_m_cut",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "v_morph",
+        "port": "out"
+      },
+      "to": {
+        "node": "v_m_wet",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "v_m_cut",
+        "port": "out"
+      },
+      "to": {
+        "node": "v_cm_sum2",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "v_m_wet",
+        "port": "out"
+      },
+      "to": {
+        "node": "v_wet_sum",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
         "node": "v_mix",
         "port": "out"
       },
@@ -1486,6 +1640,16 @@
     {
       "from": {
         "node": "v_cm_sum",
+        "port": "out"
+      },
+      "to": {
+        "node": "v_cm_sum2",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "v_cm_sum2",
         "port": "out"
       },
       "to": {
@@ -1531,6 +1695,16 @@
       "to": {
         "node": "v_level",
         "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "v_wet_level",
+        "port": "out"
+      },
+      "to": {
+        "node": "v_wet_sum",
+        "port": "a"
       }
     },
     {
@@ -1595,7 +1769,7 @@
     },
     {
       "from": {
-        "node": "v_wet_level",
+        "node": "v_wet_sum",
         "port": "out"
       },
       "to": {

@@ -31,6 +31,7 @@ Usage as a library (the tests do this):
 
 import json
 import math
+import os
 import pathlib
 import struct
 import subprocess
@@ -102,7 +103,13 @@ NM = find_tool("arm-none-eabi-nm") or "arm-none-eabi-nm"
 
 CXXFLAGS = [
     "-nostdlib", "-ffreestanding", "-fno-exceptions", "-fno-rtti",
-    "-mcpu=cortex-m4", "-O3", "-fomit-frame-pointer", "-falign-functions=16",
+    # -O2, not -O3: the board's code window is 44 KB, and at -O3 the inliner's
+    # choices made a smaller graph *larger* (Poly Five with four drums overflowed
+    # by 4 KB while the same patch with eight fit). -O2 is a fifth smaller and, on
+    # a Cortex-M4 with nothing to vectorise, not measurably slower; SGAXO_OPT
+    # overrides it for a measurement.
+    "-mcpu=cortex-m4", os.environ.get("SGAXO_OPT", "-O2"), "-fomit-frame-pointer",
+    "-falign-functions=16",
     "-mfloat-abi=hard", "-mfpu=fpv4-sp-d16", "-mthumb", "-std=c++17",
     "-fno-math-errno", "-fno-threadsafe-statics", "-fno-use-cxa-atexit",
     "-fno-reorder-functions",

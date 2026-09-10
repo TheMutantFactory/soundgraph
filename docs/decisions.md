@@ -1736,3 +1736,29 @@ Patches built before this carry no tally; the scan says nothing about
 MIDI for them rather than guessing. Four words per message, the same on
 the board and in the editor, so a number read in one place is the number
 to type in the other.
+
+## 2026-09-10 — The stick, and -O2 for the board
+
+Decision:
+The MPK set wires the joystick: its CC axis (CC 1) bends the pitch up two
+semitones — into the oscillators' fm on Poly Five, as a frequency ratio
+on the note going into a DX7/FM module — and its bend axis (128) morphs
+around the knobs: Poly Five from Dark Pad (left) to Brass (right), a
+preset from dark and dry to bright and wet. Poly Five drops its echo for
+a wobble and carries the whole kit. The codegen compiles at -O2.
+
+Reason:
+The stick's few nodes put Poly Five over the 44 KB code window, and the
+cause was two things at once: the engine copies everything after the
+keyboard once per voice until a host sink (only NoteInput and NoteTriggers
+are voice boundaries; a Mixer is not), so Poly Five's echo was five delay
+lines; and at -O3 the inliner made a smaller graph larger — four drums
+overflowed by 4 KB while eight fit. Making the Mixer a voice boundary
+would change the engine's meaning for every patch with a non-linear node
+after a mixer, so the echo went instead. -O2 is a fifth smaller for six
+percent more DSP load, measured on the board.
+
+Consequences:
+Poly Five with the whole kit idles at 62% DSP: five voices run whether or
+not they sound. Board fidelity is unchanged at -O2, 31 cases. The stick's
+axes are whichever the MPK sends; the tally names them.

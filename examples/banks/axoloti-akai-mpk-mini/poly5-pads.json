@@ -170,6 +170,38 @@
       }
     },
     {
+      "id": "d_cl_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 3800
+      }
+    },
+    {
+      "id": "d_r_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 4600
+      }
+    },
+    {
+      "id": "d_b_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 5400
+      }
+    },
+    {
+      "id": "d_v_gate",
+      "type": "Add",
+      "position": {
+        "x": 660,
+        "y": 6200
+      }
+    },
+    {
       "id": "d_k_penv",
       "type": "ADSR",
       "position": {
@@ -436,6 +468,216 @@
       }
     },
     {
+      "id": "d_cl_noise",
+      "type": "Noise",
+      "position": {
+        "x": 880,
+        "y": 4000
+      },
+      "parameters": {
+        "colour": 0
+      }
+    },
+    {
+      "id": "d_cl_bp",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 4000
+      },
+      "parameters": {
+        "cutoff": 1100,
+        "resonance": 0.55,
+        "mode": 2
+      }
+    },
+    {
+      "id": "d_cl_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 4400
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.09,
+        "sustain": 0.0,
+        "release": 0.09
+      }
+    },
+    {
+      "id": "d_cl_amp",
+      "type": "Gain",
+      "position": {
+        "x": 1760,
+        "y": 4000
+      },
+      "parameters": {
+        "gain": 2.5
+      }
+    },
+    {
+      "id": "d_cl_stut",
+      "type": "Delay",
+      "position": {
+        "x": 2200,
+        "y": 4000
+      },
+      "parameters": {
+        "time": 0.011,
+        "feedback": 0.45,
+        "mix": 0.5
+      }
+    },
+    {
+      "id": "d_r_osc",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 880,
+        "y": 4800
+      },
+      "parameters": {
+        "frequency": 505,
+        "pulse_width": 0.5
+      }
+    },
+    {
+      "id": "d_r_bp",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 4800
+      },
+      "parameters": {
+        "cutoff": 1200,
+        "resonance": 0.6,
+        "mode": 2
+      }
+    },
+    {
+      "id": "d_r_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 5200
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.03,
+        "sustain": 0.0,
+        "release": 0.03
+      }
+    },
+    {
+      "id": "d_r_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 4800
+      },
+      "parameters": {
+        "gain": 0.9
+      }
+    },
+    {
+      "id": "d_b_low",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 880,
+        "y": 5600
+      },
+      "parameters": {
+        "frequency": 540,
+        "pulse_width": 0.5
+      }
+    },
+    {
+      "id": "d_b_high",
+      "type": "SquareOscillator",
+      "position": {
+        "x": 880,
+        "y": 6000
+      },
+      "parameters": {
+        "frequency": 800,
+        "pulse_width": 0.5
+      }
+    },
+    {
+      "id": "d_b_bp",
+      "type": "StateVariableFilter",
+      "position": {
+        "x": 1320,
+        "y": 5600
+      },
+      "parameters": {
+        "cutoff": 850,
+        "resonance": 0.4,
+        "mode": 2
+      }
+    },
+    {
+      "id": "d_b_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 6000
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.3,
+        "sustain": 0.0,
+        "release": 0.3
+      }
+    },
+    {
+      "id": "d_b_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 5600
+      },
+      "parameters": {
+        "gain": 0.7
+      }
+    },
+    {
+      "id": "d_v_osc",
+      "type": "SineOscillator",
+      "position": {
+        "x": 880,
+        "y": 6400
+      },
+      "parameters": {
+        "frequency": 2500
+      }
+    },
+    {
+      "id": "d_v_env",
+      "type": "ADSR",
+      "position": {
+        "x": 1320,
+        "y": 6400
+      },
+      "parameters": {
+        "attack": 0.0005,
+        "decay": 0.045,
+        "sustain": 0.0,
+        "release": 0.045
+      }
+    },
+    {
+      "id": "d_v_amp",
+      "type": "Gain",
+      "position": {
+        "x": 2200,
+        "y": 6400
+      },
+      "parameters": {
+        "gain": 0.6
+      }
+    },
+    {
       "id": "d_mix",
       "type": "Mixer",
       "position": {
@@ -487,6 +729,14 @@
       }
     },
     {
+      "id": "p_cm_sum3",
+      "type": "Add",
+      "position": {
+        "x": 900.0,
+        "y": 800.0
+      }
+    },
+    {
       "id": "p_resonance",
       "type": "MidiCC",
       "position": {
@@ -528,6 +778,149 @@
       }
     },
     {
+      "id": "p_wobble",
+      "type": "LFO",
+      "position": {
+        "x": 0.0,
+        "y": 1100.0
+      },
+      "parameters": {
+        "rate": 0.5,
+        "shape": 0,
+        "amount": 0.3,
+        "offset": 0.0
+      }
+    },
+    {
+      "id": "p_wobble_rate",
+      "type": "MidiCC",
+      "position": {
+        "x": -300.0,
+        "y": 1100.0
+      },
+      "parameters": {
+        "cc": 5,
+        "low": 0.0,
+        "high": 8.0,
+        "resting": 0.0,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "p_pitch",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 1600.0
+      },
+      "parameters": {
+        "cc": 1,
+        "low": 0.0,
+        "high": 0.16666666666666666,
+        "resting": 0.0,
+        "glide": 5.0
+      }
+    },
+    {
+      "id": "p_morph",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 1750.0
+      },
+      "parameters": {
+        "cc": 128,
+        "low": -1.0,
+        "high": 1.0,
+        "resting": 0.5,
+        "glide": 20.0
+      }
+    },
+    {
+      "id": "p_fm_b",
+      "type": "Add",
+      "position": {
+        "x": 300.0,
+        "y": 600.0
+      }
+    },
+    {
+      "id": "p_m_cut",
+      "type": "Multiply",
+      "position": {
+        "x": 300.0,
+        "y": 1000.0
+      },
+      "parameters": {
+        "factor": 1.5
+      }
+    },
+    {
+      "id": "p_m_res",
+      "type": "Multiply",
+      "position": {
+        "x": 300.0,
+        "y": 1150.0
+      },
+      "parameters": {
+        "factor": -0.25
+      }
+    },
+    {
+      "id": "p_m_det",
+      "type": "Multiply",
+      "position": {
+        "x": 300.0,
+        "y": 1300.0
+      },
+      "parameters": {
+        "factor": -0.01
+      }
+    },
+    {
+      "id": "p_m_lvl",
+      "type": "Multiply",
+      "position": {
+        "x": 300.0,
+        "y": 1450.0
+      },
+      "parameters": {
+        "factor": -0.1
+      }
+    },
+    {
+      "id": "p_cm_sum2",
+      "type": "Add",
+      "position": {
+        "x": 600.0,
+        "y": 800.0
+      }
+    },
+    {
+      "id": "p_res_sum",
+      "type": "Add",
+      "position": {
+        "x": 600.0,
+        "y": 1150.0
+      }
+    },
+    {
+      "id": "p_fm_b2",
+      "type": "Add",
+      "position": {
+        "x": 600.0,
+        "y": 600.0
+      }
+    },
+    {
+      "id": "p_lvl_sum",
+      "type": "Add",
+      "position": {
+        "x": 1500.0,
+        "y": 400.0
+      }
+    },
+    {
       "id": "d_level",
       "type": "Gain",
       "position": {
@@ -554,87 +947,10 @@
       }
     },
     {
-      "id": "p_delay",
-      "type": "Delay",
-      "position": {
-        "x": 2000.0,
-        "y": 300.0
-      },
-      "parameters": {
-        "time": 0.3,
-        "feedback": 0.35,
-        "mix": 1.0
-      }
-    },
-    {
-      "id": "p_time",
-      "type": "MidiCC",
-      "position": {
-        "x": 1700.0,
-        "y": 400.0
-      },
-      "parameters": {
-        "cc": 5,
-        "low": 0.05,
-        "high": 0.6,
-        "resting": 0.42,
-        "glide": 15.0
-      }
-    },
-    {
-      "id": "p_fb",
-      "type": "MidiCC",
-      "position": {
-        "x": 1700.0,
-        "y": 550.0
-      },
-      "parameters": {
-        "cc": 6,
-        "low": 0.0,
-        "high": 0.7,
-        "resting": 0.5,
-        "glide": 15.0
-      }
-    },
-    {
-      "id": "p_wet",
-      "type": "Gain",
-      "position": {
-        "x": 2300.0,
-        "y": 300.0
-      },
-      "parameters": {
-        "gain": 0.0
-      }
-    },
-    {
-      "id": "p_wet_level",
-      "type": "MidiCC",
-      "position": {
-        "x": 1700.0,
-        "y": 700.0
-      },
-      "parameters": {
-        "cc": 7,
-        "low": 0.0,
-        "high": 0.8,
-        "resting": 0.0,
-        "glide": 15.0
-      }
-    },
-    {
       "id": "mix_sum0",
       "type": "Add",
       "position": {
         "x": 2400.0,
-        "y": 0.0
-      }
-    },
-    {
-      "id": "mix_sum1",
-      "type": "Add",
-      "position": {
-        "x": 2600.0,
         "y": 0.0
       }
     },
@@ -678,16 +994,6 @@
       "to": {
         "node": "p_osc_b",
         "port": "frequency"
-      }
-    },
-    {
-      "from": {
-        "node": "p_detune",
-        "port": "out"
-      },
-      "to": {
-        "node": "p_osc_b",
-        "port": "fm"
       }
     },
     {
@@ -812,6 +1118,46 @@
     },
     {
       "from": {
+        "node": "d_pads",
+        "port": "t5"
+      },
+      "to": {
+        "node": "d_cl_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t6"
+      },
+      "to": {
+        "node": "d_r_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t7"
+      },
+      "to": {
+        "node": "d_b_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_pads",
+        "port": "t8"
+      },
+      "to": {
+        "node": "d_v_gate",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
         "node": "d_k_gate",
         "port": "out"
       },
@@ -867,6 +1213,46 @@
       },
       "to": {
         "node": "d_o_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_gate",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_v_env",
         "port": "gate"
       }
     },
@@ -1092,6 +1478,176 @@
     },
     {
       "from": {
+        "node": "d_cl_noise",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_bp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_cl_stut",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_cl_stut",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in1"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_bp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in2"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_low",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_high",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_bp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_bp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in3"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_v_amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_env",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_v_amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_mix2",
+        "port": "in4"
+      }
+    },
+    {
+      "from": {
         "node": "p_cutoff",
         "port": "out"
       },
@@ -1106,18 +1662,28 @@
         "port": "out"
       },
       "to": {
-        "node": "p_filter",
-        "port": "cutoff_mod"
+        "node": "p_cm_sum2",
+        "port": "a"
       }
     },
     {
       "from": {
-        "node": "p_resonance",
+        "node": "p_cm_sum2",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_cm_sum3",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_cm_sum3",
         "port": "out"
       },
       "to": {
         "node": "p_filter",
-        "port": "resonance"
+        "port": "cutoff_mod"
       }
     },
     {
@@ -1132,7 +1698,187 @@
     },
     {
       "from": {
+        "node": "p_wobble_rate",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_wobble",
+        "port": "rate"
+      }
+    },
+    {
+      "from": {
+        "node": "p_wobble",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_cm_sum3",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "p_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_osc_a",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
+        "node": "p_detune",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_fm_b",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_fm_b",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "p_morph",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_m_cut",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_morph",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_m_res",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_morph",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_m_det",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_morph",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_m_lvl",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_m_cut",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_cm_sum2",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "p_resonance",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_res_sum",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_m_res",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_res_sum",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "p_res_sum",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_filter",
+        "port": "resonance"
+      }
+    },
+    {
+      "from": {
+        "node": "p_fm_b",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_fm_b2",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_m_det",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_fm_b2",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "p_fm_b2",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_osc_b",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
         "node": "p_level_knob",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_lvl_sum",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "p_m_lvl",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_lvl_sum",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
+        "node": "p_lvl_sum",
         "port": "out"
       },
       "to": {
@@ -1166,77 +1912,7 @@
         "port": "out"
       },
       "to": {
-        "node": "p_delay",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "p_time",
-        "port": "out"
-      },
-      "to": {
-        "node": "p_delay",
-        "port": "time"
-      }
-    },
-    {
-      "from": {
-        "node": "p_fb",
-        "port": "out"
-      },
-      "to": {
-        "node": "p_delay",
-        "port": "feedback"
-      }
-    },
-    {
-      "from": {
-        "node": "p_delay",
-        "port": "out"
-      },
-      "to": {
-        "node": "p_wet",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "p_wet_level",
-        "port": "out"
-      },
-      "to": {
-        "node": "p_wet",
-        "port": "gain"
-      }
-    },
-    {
-      "from": {
-        "node": "p_level",
-        "port": "out"
-      },
-      "to": {
         "node": "mix_sum0",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "p_wet",
-        "port": "out"
-      },
-      "to": {
-        "node": "mix_sum0",
-        "port": "b"
-      }
-    },
-    {
-      "from": {
-        "node": "mix_sum0",
-        "port": "out"
-      },
-      "to": {
-        "node": "mix_sum1",
         "port": "a"
       }
     },
@@ -1246,13 +1922,13 @@
         "port": "out"
       },
       "to": {
-        "node": "mix_sum1",
+        "node": "mix_sum0",
         "port": "b"
       }
     },
     {
       "from": {
-        "node": "mix_sum1",
+        "node": "mix_sum0",
         "port": "out"
       },
       "to": {

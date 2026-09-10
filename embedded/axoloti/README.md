@@ -171,6 +171,13 @@ python3 sgaxo/codegen.py path/to/patch.json   # -> sgaxo/build/patch.bin
 Toolchain output is captured: a failure comes back as the compiler's own
 words, and warnings are counted and kept quiet unless `SGAXO_VERBOSE=1`.
 
+Patches compile at -O2. The board's code window is 44 KB, and at -O3 the
+inliner's choices made a smaller graph *larger* (Poly Five with four drums
+overflowed by 4 KB while the same patch with eight fit); -O2 is a fifth
+smaller for about six percent more DSP load (Poly Five with the whole kit:
+58.6% at -O3, 62.5% at -O2, five notes and a pad held). `SGAXO_OPT=-O3`
+overrides it for a measurement.
+
 Block buffers are pooled by lifetime: an output's block is free once its last
 consumer has run, so a patch's close memory scales with how many signals are
 alive at once rather than how many nodes it has (eight game sounds on one
@@ -183,8 +190,13 @@ block end, and no block is handed to a node that still reads it.
 `examples/banks/axoloti-akai-mpk-mini/` and its bank: Poly Five with the
 kit on the pads, eight game sounds on the pads, the kit alone, and one
 patch per DX7 and FM preset with a filter, an echo and four drums — 199
-entries, knobs K1–K8 on MidiCC nodes (CC 70–77, the mk3's factory
-program), pads on a NoteTriggers row at note 36. The bank asks for
+entries, knobs K1–K8 on MidiCC nodes (CC 1–8, what this MPK sends; a mk3
+factory program says 70–77), pads on a NoteTriggers row at note 36, and
+the joystick: its CC axis bends the pitch up two semitones, its bend axis
+morphs — Poly Five from Dark Pad to Brass around the knobs, a preset from
+dark and dry to bright and wet. Poly Five carries no echo: the engine
+copies everything after the keyboard once per voice, and an echo there is
+five delay lines. The bank asks for
 `"program_change": "prev-next"`: on the board program 0 is the previous
 entry, 1 the next, 2 the first, and every other number the entry it names,
 so the MPK's PROG CHANGE pads walk a bank of two hundred. A mk2 or a
