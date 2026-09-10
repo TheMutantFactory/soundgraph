@@ -4137,7 +4137,12 @@ func _rebuild_view() -> void:
 		for node in patch.get("nodes", []):
 			var node_id := str(node.get("id", ""))
 			for outlet: Dictionary in _port_list(node_id, "outputs"):
-				var entry := {"node": node_id, "port": str(outlet.get("name", ""))}
+				# The name the reader sees, and the name the engine answers to: an
+				# Output seam's host side is the terminal's own output in the engine,
+				# and a module's seam is a node inside it.
+				var tap := _engine_signal_source(node_id, str(outlet.get("name", "")))
+				var entry := {"node": node_id, "port": str(outlet.get("name", "")),
+					"tap_node": str(tap[0]), "tap_port": str(tap[1])}
 				probe_sources.append(entry)
 				if str(outlet.get("type", "")) != "audio":
 					probe_gates.append(entry)

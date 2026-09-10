@@ -286,14 +286,18 @@ func _on_gate_picked(index: int) -> void:
 func _point_probes() -> void:
 	if engine == null:
 		return
+	# The engine's names, when the list carried them: the port the reader picked and
+	# the port the engine has are not always the same word.
 	if probe.is_empty():
 		engine.set_scope_tap("", "")
 	else:
-		engine.set_scope_tap(str(probe["node"]), str(probe["port"]))
+		engine.set_scope_tap(str(probe.get("tap_node", probe["node"])),
+			str(probe.get("tap_port", probe["port"])))
 	if gate.is_empty():
 		engine.set_scope_gate("", "")
 	else:
-		engine.set_scope_gate(str(gate["node"]), str(gate["port"]))
+		engine.set_scope_gate(str(gate.get("tap_node", gate["node"])),
+			str(gate.get("tap_port", gate["port"])))
 
 
 func _process(_delta: float) -> void:

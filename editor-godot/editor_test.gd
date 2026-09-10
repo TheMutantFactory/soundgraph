@@ -3083,6 +3083,21 @@ func _initialize() -> void:
 	var host_tap: Array = main._engine_signal_source("out", Seams.HOST_PORT)
 	check(host_tap.size() == 2 and str(host_tap[0]) == "out" and str(host_tap[1]) == "left",
 		"the Output's host side probes as the terminal's left out (%s)" % str(host_tap))
+	# Through the scope's own dropdown, and into the engine: picking out.host must set
+	# a tap the engine accepts, which it did not - "host" is not a port it has.
+	var host_index := -1
+	for probe_source_index in main.scope_probe._sources.size():
+		var probe_source: Dictionary = main.scope_probe._sources[probe_source_index]
+		if str(probe_source["node"]) == "out" and str(probe_source["port"]) == Seams.HOST_PORT:
+			host_index = probe_source_index + 1
+	main.scope_probe._on_source_picked(host_index)
+	var host_picked: Dictionary = main.scope_probe.probe
+	check(host_index > 0 and str(host_picked.get("tap_port", "")) == "left"
+			and main.engine.set_scope_tap(str(host_picked.get("tap_node", "")),
+				str(host_picked.get("tap_port", ""))),
+		"picking out.host in the scope taps out.left, which the engine accepts (%s)"
+			% str(host_picked))
+	main.scope_probe._on_source_picked(0)
 	# Fresh routes for what follows. The router keeps a route once made for as long as
 	# it stays legal, and a route made around nodes four times the size is legal and
 	# strange at a desk size — a crossing site left sitting on a port. A real reader
