@@ -184,16 +184,52 @@ class Part:
                 c["from"] = {"node": a[0], "port": a[1]}
 
 
-def drum_kit(prefix="d", base=None, lanes=8):
+NOTE_36_HZ = 65.40639  # the pads' base note, the pitch the kit was drawn at
+
+
+def octave_rows(prefix, base, octaves, x=0.0):
+    """NoteTriggers rows at base, base+12, ... chained bus to bus, so every octave
+    of the keyboard lands on the same eight lanes; returns (nodes, wires, bus_out).
+    A kit whose only triggers sat at one low octave was silent from the keys at any
+    other, which read at the bench as a dead patch."""
+    nodes, wires = [], []
+    previous = None
+    for o in range(octaves - 1, -1, -1):
+        rid = f"{prefix}_row{o}"
+        nodes.append(node(rid, "NoteTriggers", {"base": base + 12 * o, "shift": 0}, x=x, y=200 * o))
+        if previous is not None:
+            wires.append(wire(f"{previous}.bus", f"{rid}.bus"))
+        previous = rid
+    return nodes, wires, f"{previous}.bus"
+
+
+def drum_kit(prefix="d", base=None, lanes=8, octaves=1):
     """The 808-style kit from drums/kit.json on the pads. `lanes` keeps the first
     n drums (kick, snare, closed hat, open hat, clap, rim, cowbell, tom) for boards
-    with less room."""
+    with less room. With `octaves` above one the kit repeats up the keyboard, an
+    octave per row, and its pitched drums follow the key: a kick on the row above
+    plays an octave up."""
     kit = Part(load("drums/kit.json"), prefix)
     kit.drop("bus")     # the trigger-bus input another card would feed
-    kit.drop("split")   # and the splitter that read it
+    base = base if base is not None else CONTROLLER["pads_base"]
     pads = kit.find("pads")
-    pads["parameters"] = {"base": base if base is not None else CONTROLLER["pads_base"],
-                          "shift": 0}
+    pads["parameters"] = {"base": base, "shift": 0}
+    if octaves > 1:
+        rows, wires, bus = octave_rows(prefix, base + 12, octaves - 1, x=-400)
+        kit.nodes += rows
+        kit.connections += wires + [wire(bus, f"{prefix}_split.bus")]
+        # The key's frequency, scaled to each pitched drum's own tuning, so the row
+        # an octave up plays an octave up. Noise drums stay as they are.
+        kit.nodes.append(node(f"{prefix}_key", "Input", host="note", x=-400, y=-300))
+        for n in list(kit.nodes):
+            if n["type"] in ("SineOscillator", "SquareOscillator") and "frequency" in n.get("parameters", {}):
+                short = n["id"][len(prefix) + 1:]
+                factor = float(n["parameters"]["frequency"]) / NOTE_36_HZ
+                kit.nodes.append(node(f"{prefix}_{short}_pitch", "Multiply", {"factor": factor}, x=-200, y=0))
+                kit.connections += [wire(f"{prefix}_key.frequency", f"{prefix}_{short}_pitch.a"),
+                                    wire(f"{prefix}_{short}_pitch.out", f"{n['id']}.frequency")]
+    else:
+        kit.drop("split")   # the splitter that read the bus another card would feed
     groups = ["k", "s", "c", "o", "cl", "r", "b", "v"]
     for group in groups[lanes:]:
         for n in list(kit.nodes):
@@ -343,9 +379,15 @@ GAME_PADS = [
 
 
 def game_pads():
-    """Six game sounds on the first six pads, at middle C. K2 level"""
+    """Six game sounds on the first six pads and on every octave of the keys, pitched to the key. K2 level"""
     parts, extra, wires = [], [], []
-    extra.append(node("pads", "NoteTriggers", {"base": CONTROLLER["pads_base"], "shift": 0}))
+    # Every octave of the keys fires the same six sounds, and each sound's pitch
+    # follows the key, so the entry plays from wherever the keyboard sits.
+    # Four octaves, not five: five rows put this entry at 91% of a codec call.
+    rows, row_wires, bus = octave_rows("pads", CONTROLLER["pads_base"], 4)
+    extra += rows + [node("split", "TriggerBus", {"shift": 0}, y=1200),
+                     node("key", "Input", host="note", y=-300)]
+    wires += row_wires + [wire(bus, "split.bus")]
     feeds = []
     for lane, (rel, prefix, gain) in enumerate(GAME_PADS, start=1):
         part = Part(load(rel), prefix)
@@ -356,11 +398,9 @@ def game_pads():
         for inp in inputs:
             short = inp["id"][len(prefix) + 1:]
             # The pad is the trigger; the pitch is middle C; velocity is full.
-            part.rewire_source(short, "trigger", f"pads.t{lane}")
-            part.rewire_source(short, "gate", f"pads.t{lane}")
-            pitch_id = f"{prefix}_pitch"
-            part.nodes.append(node(pitch_id, "Constant", {"value": C4}, y=lane * 300))
-            part.rewire_source(short, "frequency", f"{pitch_id}.out")
+            part.rewire_source(short, "trigger", f"split.t{lane}")
+            part.rewire_source(short, "gate", f"split.t{lane}")
+            part.rewire_source(short, "frequency", "key.frequency")
             vel_id = f"{prefix}_vel"
             part.nodes.append(node(vel_id, "Constant", {"value": 1.0}, y=lane * 300 + 100))
             part.rewire_source(short, "velocity", f"{vel_id}.out")
@@ -378,8 +418,9 @@ def game_pads():
 
 
 def kit_alone():
-    """The kit on the pads and nothing else. K2 level  K3 echo time  K4 echo feedback  K5 echo level"""
-    kit = drum_kit("d")
+    """The kit on the pads and on every octave of the keys, pitched to the key.
+    K2 level  K3 echo time  K4 echo feedback  K5 echo level"""
+    kit = drum_kit("d", octaves=5)
     echo_nodes, echo_wires, wet = echo("fx", kit.feeds[0], 3, 4, 5)
     sum_nodes, sum_wires, out = summed([kit.feeds[0], wet], "final", x=2800)
     return assemble("Drum pads", [kit], echo_nodes + sum_nodes, echo_wires + sum_wires,

@@ -81,17 +81,6 @@
       }
     },
     {
-      "id": "coin_pitch",
-      "type": "Constant",
-      "position": {
-        "x": 0.0,
-        "y": 300.0
-      },
-      "parameters": {
-        "value": 261.6256
-      }
-    },
-    {
       "id": "jump_slide",
       "type": "Slide",
       "position": {
@@ -164,17 +153,6 @@
       },
       "parameters": {
         "gain": 16.0
-      }
-    },
-    {
-      "id": "jump_pitch",
-      "type": "Constant",
-      "position": {
-        "x": 0.0,
-        "y": 600.0
-      },
-      "parameters": {
-        "value": 261.6256
       }
     },
     {
@@ -261,17 +239,6 @@
       }
     },
     {
-      "id": "powerup_pitch",
-      "type": "Constant",
-      "position": {
-        "x": 0.0,
-        "y": 900.0
-      },
-      "parameters": {
-        "value": 261.6256
-      }
-    },
-    {
       "id": "hurt_slide",
       "type": "Slide",
       "position": {
@@ -347,17 +314,6 @@
       }
     },
     {
-      "id": "hurt_pitch",
-      "type": "Constant",
-      "position": {
-        "x": 0.0,
-        "y": 1200.0
-      },
-      "parameters": {
-        "value": 261.6256
-      }
-    },
-    {
       "id": "explode_slide",
       "type": "Slide",
       "position": {
@@ -430,17 +386,6 @@
       },
       "parameters": {
         "gain": 5.6
-      }
-    },
-    {
-      "id": "explode_pitch",
-      "type": "Constant",
-      "position": {
-        "x": 0.0,
-        "y": 1500.0
-      },
-      "parameters": {
-        "value": 261.6256
       }
     },
     {
@@ -577,18 +522,43 @@
       }
     },
     {
-      "id": "boom_pitch",
-      "type": "Constant",
+      "id": "pads_row3",
+      "type": "NoteTriggers",
       "position": {
         "x": 0.0,
-        "y": 1800.0
+        "y": 600.0
       },
       "parameters": {
-        "value": 261.6256
+        "base": 72,
+        "shift": 0
       }
     },
     {
-      "id": "pads",
+      "id": "pads_row2",
+      "type": "NoteTriggers",
+      "position": {
+        "x": 0.0,
+        "y": 400.0
+      },
+      "parameters": {
+        "base": 60,
+        "shift": 0
+      }
+    },
+    {
+      "id": "pads_row1",
+      "type": "NoteTriggers",
+      "position": {
+        "x": 0.0,
+        "y": 200.0
+      },
+      "parameters": {
+        "base": 48,
+        "shift": 0
+      }
+    },
+    {
+      "id": "pads_row0",
       "type": "NoteTriggers",
       "position": {
         "x": 0.0,
@@ -598,6 +568,26 @@
         "base": 36,
         "shift": 0
       }
+    },
+    {
+      "id": "split",
+      "type": "TriggerBus",
+      "position": {
+        "x": 0.0,
+        "y": 1200.0
+      },
+      "parameters": {
+        "shift": 0
+      }
+    },
+    {
+      "id": "key",
+      "type": "Input",
+      "position": {
+        "x": 0.0,
+        "y": -300.0
+      },
+      "host": "note"
     },
     {
       "id": "mix_sum0",
@@ -698,8 +688,8 @@
     },
     {
       "from": {
-        "node": "coin_pitch",
-        "port": "out"
+        "node": "key",
+        "port": "frequency"
       },
       "to": {
         "node": "coin_slide",
@@ -708,7 +698,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t1"
       },
       "to": {
@@ -738,7 +728,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t1"
       },
       "to": {
@@ -778,8 +768,8 @@
     },
     {
       "from": {
-        "node": "jump_pitch",
-        "port": "out"
+        "node": "key",
+        "port": "frequency"
       },
       "to": {
         "node": "jump_slide",
@@ -788,7 +778,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t2"
       },
       "to": {
@@ -818,7 +808,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t2"
       },
       "to": {
@@ -858,8 +848,8 @@
     },
     {
       "from": {
-        "node": "powerup_pitch",
-        "port": "out"
+        "node": "key",
+        "port": "frequency"
       },
       "to": {
         "node": "powerup_slide",
@@ -868,7 +858,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t3"
       },
       "to": {
@@ -938,8 +928,8 @@
     },
     {
       "from": {
-        "node": "hurt_pitch",
-        "port": "out"
+        "node": "key",
+        "port": "frequency"
       },
       "to": {
         "node": "hurt_slide",
@@ -948,7 +938,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t4"
       },
       "to": {
@@ -978,7 +968,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t4"
       },
       "to": {
@@ -1018,8 +1008,8 @@
     },
     {
       "from": {
-        "node": "explode_pitch",
-        "port": "out"
+        "node": "key",
+        "port": "frequency"
       },
       "to": {
         "node": "explode_slide",
@@ -1028,7 +1018,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t5"
       },
       "to": {
@@ -1058,7 +1048,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t5"
       },
       "to": {
@@ -1118,8 +1108,8 @@
     },
     {
       "from": {
-        "node": "boom_pitch",
-        "port": "out"
+        "node": "key",
+        "port": "frequency"
       },
       "to": {
         "node": "boom_slide",
@@ -1128,7 +1118,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t6"
       },
       "to": {
@@ -1168,7 +1158,7 @@
     },
     {
       "from": {
-        "node": "pads",
+        "node": "split",
         "port": "t6"
       },
       "to": {
@@ -1214,6 +1204,46 @@
       "to": {
         "node": "boom_norm",
         "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "pads_row3",
+        "port": "bus"
+      },
+      "to": {
+        "node": "pads_row2",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "pads_row2",
+        "port": "bus"
+      },
+      "to": {
+        "node": "pads_row1",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "pads_row1",
+        "port": "bus"
+      },
+      "to": {
+        "node": "pads_row0",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "pads_row0",
+        "port": "bus"
+      },
+      "to": {
+        "node": "split",
+        "port": "bus"
       }
     },
     {

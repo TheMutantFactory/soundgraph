@@ -1817,3 +1817,25 @@ Consequences:
 K1 does nothing in this set. Program numbers are seven bits, so entries
 past 127 are reached by walking. Poly Five sits at 83% of a codec call
 still and 91% with everything moving.
+
+## 2026-09-10 — The pads repeat up the keyboard
+
+Decision:
+The kit entry and the game entry of the MPK set carry a NoteTriggers row
+per octave, chained bus to bus into one TriggerBus, and their pitched
+voices take the key's frequency through a note input scaled to each
+drum's own tuning. Five octaves for the kit, four for the game sounds.
+The synth entries keep one row at the pads, where the keys are the synth.
+
+Reason:
+A pads-only entry answered eight notes at one low octave and nothing
+else; from the keys at any other octave it was silent, and at the bench
+that read as a dead patch. The rows cost load — the kit went from 54% to
+78% of a codec call, the game sounds to 91% with five rows, 86% with four
+— and both still match the native render; the kick's zero crossings in
+its first 50 ms go 6, 13, 26, 53, 105 up the rows.
+
+Consequences:
+Any key plays something on those two entries, pitched to where it is.
+Noise drums keep their pitch. A synth entry's pads stay at the base
+octave only.

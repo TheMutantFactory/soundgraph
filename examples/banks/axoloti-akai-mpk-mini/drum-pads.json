@@ -18,6 +18,14 @@
       }
     },
     {
+      "id": "d_split",
+      "type": "TriggerBus",
+      "position": {
+        "x": 440,
+        "y": 400
+      }
+    },
+    {
       "id": "d_k_gate",
       "type": "Add",
       "position": {
@@ -586,6 +594,140 @@
       }
     },
     {
+      "id": "d_row3",
+      "type": "NoteTriggers",
+      "position": {
+        "x": -400.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "base": 84,
+        "shift": 0
+      }
+    },
+    {
+      "id": "d_row2",
+      "type": "NoteTriggers",
+      "position": {
+        "x": -400.0,
+        "y": 400.0
+      },
+      "parameters": {
+        "base": 72,
+        "shift": 0
+      }
+    },
+    {
+      "id": "d_row1",
+      "type": "NoteTriggers",
+      "position": {
+        "x": -400.0,
+        "y": 200.0
+      },
+      "parameters": {
+        "base": 60,
+        "shift": 0
+      }
+    },
+    {
+      "id": "d_row0",
+      "type": "NoteTriggers",
+      "position": {
+        "x": -400.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "base": 48,
+        "shift": 0
+      }
+    },
+    {
+      "id": "d_key",
+      "type": "Input",
+      "position": {
+        "x": -400.0,
+        "y": -300.0
+      },
+      "host": "note"
+    },
+    {
+      "id": "d_k_body_pitch",
+      "type": "Multiply",
+      "position": {
+        "x": -200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 0.7950293541655487
+      }
+    },
+    {
+      "id": "d_s_t1_pitch",
+      "type": "Multiply",
+      "position": {
+        "x": -200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 2.828469817704356
+      }
+    },
+    {
+      "id": "d_s_t2_pitch",
+      "type": "Multiply",
+      "position": {
+        "x": -200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 5.045378593742905
+      }
+    },
+    {
+      "id": "d_r_osc_pitch",
+      "type": "Multiply",
+      "position": {
+        "x": -200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 7.720958151030809
+      }
+    },
+    {
+      "id": "d_b_low_pitch",
+      "type": "Multiply",
+      "position": {
+        "x": -200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 8.25607406248839
+      }
+    },
+    {
+      "id": "d_b_high_pitch",
+      "type": "Multiply",
+      "position": {
+        "x": -200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 12.231220833316133
+      }
+    },
+    {
+      "id": "d_v_osc_pitch",
+      "type": "Multiply",
+      "position": {
+        "x": -200.0,
+        "y": 0.0
+      },
+      "parameters": {
+        "factor": 38.22256510411292
+      }
+    },
+    {
       "id": "fx_delay",
       "type": "Delay",
       "position": {
@@ -711,12 +853,32 @@
     },
     {
       "from": {
+        "node": "d_split",
+        "port": "t1"
+      },
+      "to": {
+        "node": "d_k_gate",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
         "node": "d_pads",
         "port": "t2"
       },
       "to": {
         "node": "d_s_gate",
         "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_split",
+        "port": "t2"
+      },
+      "to": {
+        "node": "d_s_gate",
+        "port": "b"
       }
     },
     {
@@ -731,12 +893,32 @@
     },
     {
       "from": {
+        "node": "d_split",
+        "port": "t3"
+      },
+      "to": {
+        "node": "d_c_gate",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
         "node": "d_pads",
         "port": "t4"
       },
       "to": {
         "node": "d_o_gate",
         "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_split",
+        "port": "t4"
+      },
+      "to": {
+        "node": "d_o_gate",
+        "port": "b"
       }
     },
     {
@@ -751,12 +933,32 @@
     },
     {
       "from": {
+        "node": "d_split",
+        "port": "t5"
+      },
+      "to": {
+        "node": "d_cl_gate",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
         "node": "d_pads",
         "port": "t6"
       },
       "to": {
         "node": "d_r_gate",
         "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_split",
+        "port": "t6"
+      },
+      "to": {
+        "node": "d_r_gate",
+        "port": "b"
       }
     },
     {
@@ -771,12 +973,32 @@
     },
     {
       "from": {
+        "node": "d_split",
+        "port": "t7"
+      },
+      "to": {
+        "node": "d_b_gate",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
         "node": "d_pads",
         "port": "t8"
       },
       "to": {
         "node": "d_v_gate",
         "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_split",
+        "port": "t8"
+      },
+      "to": {
+        "node": "d_v_gate",
+        "port": "b"
       }
     },
     {
@@ -1267,6 +1489,186 @@
       "to": {
         "node": "d_mix2",
         "port": "in4"
+      }
+    },
+    {
+      "from": {
+        "node": "d_row3",
+        "port": "bus"
+      },
+      "to": {
+        "node": "d_row2",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "d_row2",
+        "port": "bus"
+      },
+      "to": {
+        "node": "d_row1",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "d_row1",
+        "port": "bus"
+      },
+      "to": {
+        "node": "d_row0",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "d_row0",
+        "port": "bus"
+      },
+      "to": {
+        "node": "d_split",
+        "port": "bus"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_k_body_pitch",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_k_body_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_k_body",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_s_t1_pitch",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_t1_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_t1",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_s_t2_pitch",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_s_t2_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_s_t2",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_r_osc_pitch",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_r_osc_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_r_osc",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_b_low_pitch",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_low_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_low",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_b_high_pitch",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_b_high_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_b_high",
+        "port": "frequency"
+      }
+    },
+    {
+      "from": {
+        "node": "d_key",
+        "port": "frequency"
+      },
+      "to": {
+        "node": "d_v_osc_pitch",
+        "port": "a"
+      }
+    },
+    {
+      "from": {
+        "node": "d_v_osc_pitch",
+        "port": "out"
+      },
+      "to": {
+        "node": "d_v_osc",
+        "port": "frequency"
       }
     },
     {

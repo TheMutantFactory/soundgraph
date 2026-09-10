@@ -233,7 +233,13 @@ into fm, because an fm input that moves is an exp2 per sample per
 oscillator and turning a knob pushed the patch from 86% into overrun; it
 sits at 83% with five notes held and 91% with every knob and both stick
 axes moving at once, and matches the native render to 1e-5. The game pads
-carry six sounds; eight were 96%. The bank asks for
+carry six sounds; eight were 96%. The kit entry and the game entry repeat
+their pads up the keyboard — a NoteTriggers row per octave, chained bus
+to bus into one TriggerBus — and their pitched voices follow the key
+through a note input, so an octave up plays an octave up: a kit whose
+only triggers sat at one low octave was silent from the keys anywhere
+else, which read at the bench as a dead patch. Five octaves for the kit
+(78%), four for the game sounds (five were 91%). The bank asks for
 `"program_change": "prev-next"`: on the board program 0 is the previous
 entry, 1 the next, 2 the first, and every other number the entry it names,
 so the MPK's PROG CHANGE pads walk a bank of two hundred: a program number
