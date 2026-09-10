@@ -3428,7 +3428,8 @@ func _show_schematic(on: bool) -> void:
 		# is a different shape and usually a different size from the drawing it replaces
 		# - so without this it opens wherever the old layout happened to leave the camera,
 		# which at any zoom but the one you were on is off the side of the window.
-		graph_edit.fit_to(Rect2(face_anchor, schematic.content_size()))
+		graph_edit.fit_to(Rect2(face_anchor, schematic.content_size()),
+			Design.canvas_factor())
 		_place_face()
 		_say("schematic: %d nodes on the grid" % (patch.get("nodes", []) as Array).size())
 	else:

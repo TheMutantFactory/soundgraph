@@ -2928,7 +2928,11 @@ func fit_graph() -> void:
 ## Split out of fit_graph so that something which is not a node can be framed too - the
 ## schematic is a single mounted control, so "fit the visible nodes" has nothing to
 ## measure while it is up.
-func fit_to(bounds: Rect2) -> void:
+## `ceiling` is how far past 100% the fit may go. The graph's own fit stops at real
+## size — a photograph is not enlarged to fill a wall — but the schematic is a
+## reading drawn in fixed pixels, and on a 4K screen a ten-card reading at 100% is a
+## corner of the window with 18px words in it. Its fit goes up to the canvas factor.
+func fit_to(bounds: Rect2, ceiling: float = 1.0) -> void:
 	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		return
 	var view := usable_rect()
@@ -2940,7 +2944,7 @@ func fit_to(bounds: Rect2) -> void:
 	# Never magnifies. Fitting a two-node patch to the window would blow it up to 200% and
 	# call that framing; the request is to see the whole graph, and once you can, there is
 	# nothing further to satisfy.
-	zoom = clampf(wanted, zoom_min, minf(zoom_max, 1.0))
+	zoom = clampf(wanted, zoom_min, minf(zoom_max, maxf(1.0, ceiling)))
 	centre_on(bounds)
 
 

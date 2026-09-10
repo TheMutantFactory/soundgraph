@@ -3294,6 +3294,18 @@ func _initialize() -> void:
 		await process_frame
 	check(not map_in_schematic and main.graph_edit.minimap_enabled,
 		"the graph's map is put away in the schematic lens and comes back in the graph")
+	# The schematic's fit may go past real size, up to the canvas factor; the graph's
+	# own fit still stops at 100%. Asked directly with a small box, so the window's
+	# size does not decide the answer.
+	var small_box := Rect2(Vector2.ZERO, Vector2(200.0, 100.0))
+	main.graph_edit.fit_to(small_box, 3.0)
+	var fit_up: float = main.graph_edit.zoom
+	main.graph_edit.fit_to(small_box)
+	var fit_flat: float = main.graph_edit.zoom
+	check(fit_up > 1.0 and fit_up <= 3.0 and is_equal_approx(fit_flat, 1.0),
+		"a fit with a ceiling goes past real size, and without one stops there "
+			+ "(%.2f, %.2f)" % [fit_up, fit_flat])
+	main.graph_edit.fit_graph()
 
 	# The rack can be panned beyond its frame, and has a map. The rackmap_holder is the case
 	# plus half a window of rack_slack on every side, the rack sits in the middle of it,
