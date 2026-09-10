@@ -3276,12 +3276,16 @@ func _initialize() -> void:
 	# the line: a 4K canvas size comes down to the header's line, and a long name comes
 	# down further to its width.
 	var card_font: Font = Design.font(Design.WEIGHT_SEMIBOLD)
-	var card_title: int = main.schematic.fitted_size(card_font, "Osc", 32, 250.0, 18)
+	var card_title: int = main.schematic.fitted_size(card_font, "Osc", 32, 250.0,
+		main.schematic.TITLE_SIZE, main.schematic.KIND_SIZE)
 	var card_long: int = main.schematic.fitted_size(card_font,
-		"A very long module title indeed", 32, 120.0, 18)
-	check(card_title == 18 and card_long < 18 and card_long >= 9,
-		"a schematic card's title fits its line and its width (%d, %d)"
-			% [card_title, card_long])
+		"A very long module title indeed", 32, 120.0, main.schematic.TITLE_SIZE,
+		main.schematic.KIND_SIZE)
+	check(card_title == main.schematic.TITLE_SIZE and card_long == main.schematic.KIND_SIZE
+			and main.schematic.TITLE_SIZE > main.schematic.KIND_SIZE,
+		"a schematic card's title is its biggest word: %d at most, never under the kind "
+			+ "line's %d, elided past that (%d, %d)" % [main.schematic.TITLE_SIZE,
+			main.schematic.KIND_SIZE, card_title, card_long])
 	# The graph's map goes away with the schematic and comes back with the graph: its
 	# nodes are hidden there and its camera is parked on the cards, so the map drew a
 	# frame around nothing over them.
