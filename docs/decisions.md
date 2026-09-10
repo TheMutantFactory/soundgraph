@@ -1762,3 +1762,35 @@ Consequences:
 Poly Five with the whole kit idles at 62% DSP: five voices run whether or
 not they sound. Board fidelity is unchanged at -O2, 31 cases. The stick's
 axes are whichever the MPK sends; the tally names them.
+
+## 2026-09-10 — The board renders 16-frame blocks, and counts its own cycles
+
+Decision:
+Baked patches run the graph at 16-frame blocks; captures for the golden
+tests stay at 64. Every patch keeps a cycle counter on its render in the
+shared block, `hw.py scan` reports the mean as a share of the codec call,
+and the hardware panel says "load n% of a codec call". Oscillators, the
+note input and MidiCC take a per-block path when their inputs do not move
+inside the block, with the same values to the bit. The stick's left-right
+is the volume. Poly Five carries two drums; the game pads carry six sounds.
+
+Reason:
+The codec calls the patch every 16 frames, and a 64-frame block rendered
+inside one call has a peak load four times its mean. Poly Five at a 74%
+mean overran every call: that was the chunkiness. The firmware's own load
+figure could not say so (it read 2% for one patch that overran and 626%
+for another), so the patch counts its own cycles. A second ladder found
+the per-node costs, and the oscillators' per-sample exp2 for an fm input
+that did not move was six times the oscillator itself.
+
+Alternatives:
+Keeping 64 with the block rendered across four calls (the kernels are
+whole-block); making the render a lower-priority thread (the patch ABI
+does not offer one); the firmware's load figure (wrong in both directions).
+
+Consequences:
+Per-block modulation updates four times as often on the board as on the
+desktop, which is finer, not coarser; the 64-frame fidelity suite still
+passes. Loads at 16: Poly Five's five voices 51%, a drum about 6%, a DX7
+preset with four drums and an echo 66%. Five voices plus eight drums is
+123% and will not run; four voices plus four drums, or five plus two, will.

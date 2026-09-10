@@ -132,7 +132,7 @@ def toolchain_report():
 
 SHM_ADDR = 0x2001C000
 SHM_MAGIC = 0x53475831  # "SGX1": an sgaxo patch is running and keeps its block
-SHM_WORDS = 16          # magic..status (6), midi_count, midi_cc_count, ring[8]
+SHM_WORDS = 21          # magic..status (6), midi tally (10), block cycles (4)
 
 
 def describe_midi(packed):
@@ -160,14 +160,35 @@ def read_board_midi(board):
     """The running patch's MIDI tally, or None when what is running is not
     one of ours (or was built before the tally existed)."""
     import struct
-    words = struct.unpack("<16I", board.read_mem(SHM_ADDR, SHM_WORDS * 4))
+    words = struct.unpack("<21I", board.read_mem(SHM_ADDR, SHM_WORDS * 4))
     if words[0] != SHM_MAGIC:
         return None
-    count, cc_count, ring = words[6], words[7], words[8:16]
+    count, cc_count, ring, pc_count = words[6], words[7], words[8:16], words[16]
     recent = []
     for k in range(min(count, 8)):
         recent.append(describe_midi(ring[(count - 1 - k) & 7]))
-    return {"count": count, "cc_count": cc_count, "recent": recent}
+    return {"count": count, "cc_count": cc_count, "pc_count": pc_count, "recent": recent}
+
+
+CYCLES_PER_CALL = 56000  # 16 frames at 48 kHz on a 168 MHz core: one codec call
+
+
+def read_board_load(board):
+    """Cycles per rendered block off the board's own counter, as a share of the
+    codec call the block has to fit in. None when the running patch is not ours
+    or predates the counter."""
+    import struct
+    words = struct.unpack("<21I", board.read_mem(SHM_ADDR, SHM_WORDS * 4))
+    if words[0] != SHM_MAGIC:
+        return None
+    last, worst, total, blocks = words[17], words[18], words[19], words[20]
+    if blocks == 0:
+        return None
+    mean = total / blocks
+    return {"block_cycles_mean": mean, "block_cycles_max": worst, "block_cycles_last": last,
+            "blocks": blocks,
+            "load_mean_pct": 100.0 * mean / CYCLES_PER_CALL,
+            "load_max_pct": 100.0 * worst / CYCLES_PER_CALL}
 
 
 def scan(status):
@@ -193,6 +214,7 @@ def scan(status):
             fwid = f"0x{fw.fwid:08x}"
             try:
                 report["midi"] = read_board_midi(board)
+                report["load"] = read_board_load(board)
             except Exception as error:  # noqa: BLE001 — a tally is optional
                 report["midi_error"] = f"{type(error).__name__}: {error}"
             report.update(

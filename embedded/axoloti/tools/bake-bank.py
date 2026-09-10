@@ -54,7 +54,7 @@ def bake(out_dir, patches, names, to_board, nav=False):
         binary, _pid, buffers = codegen.build_patch(
             pathlib.Path(path), frames=0, name=name, zero_input=False,
             sd_bank_name=name, bank_index=len(entries), bank_count=len(patches),
-            program_change="prev-next" if nav else "midi")
+            program_change="prev-next" if nav else "midi", block_frames=16)
         assert len(binary) <= MAX_SD_PATCH
         files = [(sd_name, blob) for _addr, blob, sd_name in buffers]
         entries.append((name, binary, files))

@@ -40,6 +40,15 @@ typedef struct {
   uint32_t midi_count;
   uint32_t midi_cc_count;
   uint32_t midi_ring[8];
+  uint32_t midi_pc_count;  // program changes: the pads that should switch entries
+  // How long a block takes, in CPU cycles off the DWT counter: the last one, the
+  // worst one, and a running sum with its count for the mean. The codec calls the
+  // patch every 16 frames (56,000 cycles at 168 MHz); the graph renders 64 frames
+  // in one of those calls, so a block over 56,000 cycles is a call that overran.
+  uint32_t block_cycles_last;
+  uint32_t block_cycles_max;
+  uint32_t block_cycles_sum;
+  uint32_t block_count;
 } sgaxo_shm_t;
 
 static volatile sgaxo_shm_t *const SGX = (volatile sgaxo_shm_t *)SGAXO_SHM_ADDR;
@@ -102,6 +111,7 @@ static void sgaxo_midi_in(midi_device_t dev, uint8_t port, uint8_t b0,
     SGX->midi_ring[n & 7] = ((uint32_t)b0 << 16) | ((uint32_t)b1 << 8) | b2;
     SGX->midi_count = n + 1;
     if (status == 0xB0) SGX->midi_cc_count = SGX->midi_cc_count + 1;
+    if (status == 0xC0) SGX->midi_pc_count = SGX->midi_pc_count + 1;
   }
 #ifdef SGAXO_BANK
   // Program Change walks the SD bank: the firmware stops this patch, reads
@@ -155,7 +165,24 @@ static uint32_t sgaxo_position;   // absolute frame count of rendered blocks
 // compiler imagine the loop running at index -1 and warn about it on every build.
 static uint32_t sgaxo_next_event;
 
+// The Cortex-M4's cycle counter, enabled here if the firmware left it off.
+#define SGAXO_DWT_CTRL (*(volatile uint32_t *)0xE0001000u)
+#define SGAXO_DWT_CYCCNT (*(volatile uint32_t *)0xE0001004u)
+#define SGAXO_DEMCR (*(volatile uint32_t *)0xE000EDFCu)
+
+static void sgaxo_render_block_body(void);
+
 static void sgaxo_render_block(void) {
+  const uint32_t started = SGAXO_DWT_CYCCNT;
+  sgaxo_render_block_body();
+  const uint32_t took = SGAXO_DWT_CYCCNT - started;
+  SGX->block_cycles_last = took;
+  if (took > SGX->block_cycles_max) SGX->block_cycles_max = took;
+  SGX->block_cycles_sum = SGX->block_cycles_sum + took;
+  SGX->block_count = SGX->block_count + 1;
+}
+
+static void sgaxo_render_block_body(void) {
   // Scheduled events land before the block containing their frame, exactly
   // like the golden runner's loop; live MIDI joins at the same boundary.
   while (sgaxo_next_event < sg_event_count &&
@@ -217,6 +244,8 @@ static void sgaxo_dispose(void) {}
 AXO_PATCH_MIDI(SGAXO_PATCH_ID, sgaxo_dsp, sgaxo_dispose, sgaxo_midi_in, {
   volatile uint32_t *p = (volatile uint32_t *)SGAXO_SHM_ADDR;
   for (unsigned i = 0; i < sizeof(sgaxo_shm_t) / 4; i++) p[i] = 0;
+  SGAXO_DEMCR |= (1u << 24);   // TRCENA: the DWT is reachable
+  SGAXO_DWT_CTRL |= 1u;        // CYCCNTENA: and counting
   sgaxo_fifo_pos = SGAXO_FRAMES;  // .bss is zeroed; mark the FIFO empty
   for (int j = 0; j < 129; j++) sgaxo_cc[j] = -1.0f;  // nothing heard yet
 #ifdef SGAXO_SD_BUFFERS

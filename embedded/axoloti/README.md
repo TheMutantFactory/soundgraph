@@ -171,6 +171,20 @@ python3 sgaxo/codegen.py path/to/patch.json   # -> sgaxo/build/patch.bin
 Toolchain output is captured: a failure comes back as the compiler's own
 words, and warnings are counted and kept quiet unless `SGAXO_VERBOSE=1`.
 
+Baked patches run at 16-frame blocks; captures for the golden tests at 64.
+The codec calls the patch every 16 frames, and a 64-frame block rendered
+inside one of those calls has a peak load four times its mean: Poly Five at
+a 74% mean overran every call and sounded chunky. At 16 the peak is the
+mean; per-block modulation (an SVF's sweep) then updates four times as
+often, finer than the desktop rather than coarser. Every patch keeps a cycle
+counter on its render (`block_cycles_*` in the shared block): `hw.py scan`
+reports the mean as a share of the codec call, the editor's hardware panel
+says "load n% of a codec call", and over 100 is the chunkiness of an
+overrun. Measured per node at 16-frame blocks: a saw about 1%, a square
+1.4%, an SVF 0.6% (2.5% with its cutoff moving), an ADSR 1.2%, an
+oscillator with a *moving* fm input 5.5% - so Poly Five's five voices are
+about 51%, and each drum of the kit about 6%.
+
 Patches compile at -O2. The board's code window is 44 KB, and at -O3 the
 inliner's choices made a smaller graph *larger* (Poly Five with four drums
 overflowed by 4 KB while the same patch with eight fit); -O2 is a fifth
@@ -193,10 +207,11 @@ patch per DX7 and FM preset with a filter, an echo and four drums — 199
 entries, knobs K1–K8 on MidiCC nodes (CC 1–8, what this MPK sends; a mk3
 factory program says 70–77), pads on a NoteTriggers row at note 36, and
 the joystick: its CC axis bends the pitch up two semitones, its bend axis
-morphs — Poly Five from Dark Pad to Brass around the knobs, a preset from
-dark and dry to bright and wet. Poly Five carries no echo: the engine
-copies everything after the keyboard once per voice, and an echo there is
-five delay lines. The bank asks for
+is the volume, left quieter and right louder. Poly Five carries no echo
+(the engine copies everything after the keyboard once per voice, and an
+echo there is five delay lines) and two drums, kick and snare: the five
+voices are 51% of a codec call and each drum about 6%. The game pads carry
+six sounds; eight were 96%. The bank asks for
 `"program_change": "prev-next"`: on the board program 0 is the previous
 entry, 1 the next, 2 the first, and every other number the entry it names,
 so the MPK's PROG CHANGE pads walk a bank of two hundred. A mk2 or a

@@ -23,7 +23,12 @@
 #include "sine_table.h"          // dsp-core's committed table, via -I
 #include "nodes/speech_tables.h" // the TMS5220 ROM, same single source
 
+// The block: 64 is dsp-core's kBlockSize and what the golden captures are
+// recorded at; a baked patch defines 16 first, so its block is one codec call
+// and its peak load is its mean (see runtime_tail.h).
+#ifndef SGAXO_FRAMES
 #define SGAXO_FRAMES 64  // == soundgraph::kBlockSize
+#endif
 
 // What the hardware has said so far, by controller number: 0..127 are CCs, 128 is
 // the pitch bend, and -1 means it has not spoken yet — ProcessContext::cc_values,
@@ -166,20 +171,28 @@ struct OscState {
   float hist_b;
 };
 
-template <typename RenderFn>
-inline void k_osc(OscState &s, const float *frequency_in, const float *fm_in,
-                  const float *pm_in, const float *feedback_in, float *out,
-                  float base_frequency, float feedback, float sample_rate,
-                  RenderFn render) {
-  const float nyquist = sample_rate * 0.5f;
+// A block of fm that does not move — a Constant, a knob at rest, a settled glide
+// — is one exp2, not one per sample: the same input gives the same output, so
+// this is the per-sample path to the bit, at a sixth of its cost. Measured: an
+// oscillator with anything on its fm cost 15% of a codec call against 3% without.
+inline bool block_is_flat(const float *block) {
+  const float first = block[0];
+  for (int i = 1; i < SGAXO_FRAMES; ++i) {
+    if (block[i] != first) return false;
+  }
+  return true;
+}
+
+// The oscillator's loop, with the frequency handed in by `frequency_at(i)`.
+template <typename FrequencyFn, typename RenderFn>
+__attribute__((noinline)) inline void k_osc_loop(
+    OscState &s, const float *pm_in, const float *feedback_in, float *out,
+    float feedback, float nyquist, float sample_rate, FrequencyFn frequency_at,
+    RenderFn render) {
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
-    float frequency = frequency_in != 0 ? frequency_in[i] : base_frequency;
-    if (fm_in != 0) frequency *= exp2f_approx(fm_in[i]);
+    float frequency = frequency_at(i);
     frequency = clampf(frequency, 0.0f, nyquist);
     const float increment = frequency / sample_rate;
-    // The phase being read this sample, as distinct from the free-running phase
-    // underneath: modulation displaces one and never touches the other. With
-    // nothing modulating, read_phase is s.phase to the bit.
     float displacement = 0.0f;
     bool displaced = false;
     if (pm_in != 0) {
@@ -201,6 +214,69 @@ inline void k_osc(OscState &s, const float *frequency_in, const float *fm_in,
     s.hist_a = out[i];
     s.phase = wrap01(s.phase + increment);
   }
+}
+
+// The same loop when the increment is one number for the whole block: no clamp,
+// no divide, no exp2 per sample. A block whose frequency input and fm input do
+// not move inside it — a note that has arrived, a knob at rest, a Constant — is
+// the common case, and per sample it computed the same frequency sixteen times
+// over, dividing each time. Same values to the bit: the per-sample path would
+// have produced this increment on every frame.
+template <typename RenderFn>
+__attribute__((noinline)) inline void k_osc_loop_fixed(
+    OscState &s, const float *pm_in, const float *feedback_in, float *out,
+    float feedback, float increment, RenderFn render) {
+  for (int i = 0; i < SGAXO_FRAMES; ++i) {
+    float displacement = 0.0f;
+    bool displaced = false;
+    if (pm_in != 0) {
+      displacement += clampf(pm_in[i], -8.0f, 8.0f);
+      displaced = true;
+    }
+    if (feedback != 0.0f) {
+      if (feedback_in != 0) {
+        const float scale = clampf(feedback_in[i], 0.0f, 4.0f);
+        displacement += feedback * scale * 0.5f * (s.hist_a + s.hist_b);
+      } else {
+        displacement += feedback * 0.5f * (s.hist_a + s.hist_b);
+      }
+      displaced = true;
+    }
+    const float read_phase = displaced ? wrap01(s.phase + displacement) : s.phase;
+    out[i] = render(read_phase, increment);
+    s.hist_b = s.hist_a;
+    s.hist_a = out[i];
+    s.phase = wrap01(s.phase + increment);
+  }
+}
+
+template <typename RenderFn>
+inline void k_osc(OscState &s, const float *frequency_in, const float *fm_in,
+                  const float *pm_in, const float *feedback_in, float *out,
+                  float base_frequency, float feedback, float sample_rate,
+                  RenderFn render) {
+  const float nyquist = sample_rate * 0.5f;
+  const bool frequency_flat = frequency_in == 0 || block_is_flat(frequency_in);
+  const bool fm_flat = fm_in == 0 || block_is_flat(fm_in);
+  if (frequency_flat && fm_flat) {
+    float frequency = frequency_in != 0 ? frequency_in[0] : base_frequency;
+    if (fm_in != 0) frequency *= exp2f_approx(fm_in[0]);
+    frequency = clampf(frequency, 0.0f, nyquist);
+    k_osc_loop_fixed(s, pm_in, feedback_in, out, feedback, frequency / sample_rate,
+                     render);
+    return;
+  }
+  if (fm_flat) {
+    const float fm_scale = fm_in != 0 ? exp2f_approx(fm_in[0]) : 1.0f;
+    k_osc_loop(s, pm_in, feedback_in, out, feedback, nyquist, sample_rate,
+               [=](int i) { return frequency_in[i] * fm_scale; }, render);
+    return;
+  }
+  k_osc_loop(s, pm_in, feedback_in, out, feedback, nyquist, sample_rate,
+             [=](int i) {
+               const float f = frequency_in != 0 ? frequency_in[i] : base_frequency;
+               return f * exp2f_approx(fm_in[i]);
+             }, render);
 }
 
 // The sine's shapes, as SineOscillator::render has them: the table plus fabs and
@@ -552,6 +628,22 @@ inline void note_event(NoteState &s, int on, int note, float velocity,
 inline void k_note_input(NoteState &s, float *frequency_out, float *gate_out,
                          float *velocity_out, float *trigger_out,
                          float glide_coefficient, float transpose) {
+  // A note that has arrived (no glide, or a glide that has settled) is one
+  // exp2 per block rather than one per sample: the per-sample update leaves
+  // current_note exactly where it is, so the frequency is the same every frame.
+  const bool settled = glide_coefficient == 0.0f || s.current_note == s.target_note;
+  if (settled) {
+    s.current_note = s.target_note;
+    const float frequency = frequency_out ? note_to_frequency(s.current_note + transpose) : 0.0f;
+    for (int i = 0; i < SGAXO_FRAMES; ++i) {
+      if (frequency_out) frequency_out[i] = frequency;
+      if (gate_out) gate_out[i] = s.gate;
+      if (velocity_out) velocity_out[i] = s.velocity;
+      if (trigger_out) trigger_out[i] = s.trigger_remaining > 0 ? 1.0f : 0.0f;
+      if (s.trigger_remaining > 0) --s.trigger_remaining;
+    }
+    return;
+  }
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
     s.current_note =
         s.target_note + (s.current_note - s.target_note) * glide_coefficient;
@@ -715,9 +807,11 @@ inline void k_noise_osc(NoiseOscState &s, const float *frequency_in,
                         float sample_rate) {
   const float nyquist = sample_rate * 0.5f;
   const int steps = (int)clampf(steps_param, 2.0f, 64.0f);
+  const bool fm_flat = fm_in != 0 && block_is_flat(fm_in);
+  const float fm_scale = fm_flat ? exp2f_approx(fm_in[0]) : 1.0f;
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
     float frequency = frequency_in != 0 ? frequency_in[i] : base_frequency;
-    if (fm_in != 0) frequency *= exp2f_approx(fm_in[i]);
+    if (fm_in != 0) frequency *= fm_flat ? fm_scale : exp2f_approx(fm_in[i]);
     frequency = clampf(frequency, 0.0f, nyquist);
     const float increment = frequency / sample_rate;
     // render() is handed the read phase, displaced by pm, and the wrap detection
@@ -1281,6 +1375,11 @@ inline void k_midi_cc(MidiCcState &s, float *out, int cc, float low, float high,
   if (!s.primed) {
     s.current = low + (high - low) * resting;
     s.primed = 1;
+  }
+  if (s.current == target) {
+    // Settled: the per-sample step adds exactly zero, so the block is a fill.
+    for (int i = 0; i < SGAXO_FRAMES; ++i) out[i] = s.current;
+    return;
   }
   for (int i = 0; i < SGAXO_FRAMES; ++i) {
     s.current += (target - s.current) * coefficient;

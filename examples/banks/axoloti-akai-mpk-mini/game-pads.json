@@ -389,178 +389,6 @@
       }
     },
     {
-      "id": "select_slide",
-      "type": "Slide",
-      "position": {
-        "x": 0,
-        "y": 0
-      },
-      "parameters": {
-        "slide": 0,
-        "acceleration": 0,
-        "limit": 3.528,
-        "frequency": 1212.88
-      }
-    },
-    {
-      "id": "select_osc",
-      "type": "SawOscillator",
-      "position": {
-        "x": 560,
-        "y": 0
-      }
-    },
-    {
-      "id": "select_highpass",
-      "type": "OnePoleFilter",
-      "position": {
-        "x": 1120,
-        "y": 0
-      },
-      "parameters": {
-        "cutoff": 56.1499,
-        "mode": 1,
-        "cutoff_sweep": 0
-      }
-    },
-    {
-      "id": "select_phaser",
-      "type": "Phaser",
-      "position": {
-        "x": 1680,
-        "y": 0
-      },
-      "parameters": {
-        "offset": 0,
-        "sweep": 0,
-        "depth": 1
-      }
-    },
-    {
-      "id": "select_envelope",
-      "type": "AhdEnvelope",
-      "position": {
-        "x": 1680,
-        "y": 360
-      },
-      "parameters": {
-        "attack": 0,
-        "hold": 0.0444571,
-        "decay": 0.0186871,
-        "punch": 0
-      }
-    },
-    {
-      "id": "select_amp",
-      "type": "Gain",
-      "position": {
-        "x": 2240,
-        "y": 0
-      },
-      "parameters": {
-        "gain": 0.05
-      }
-    },
-    {
-      "id": "select_pitch",
-      "type": "Constant",
-      "position": {
-        "x": 0.0,
-        "y": 1800.0
-      },
-      "parameters": {
-        "value": 261.6256
-      }
-    },
-    {
-      "id": "jump2_slide",
-      "type": "Slide",
-      "position": {
-        "x": 0,
-        "y": 0
-      },
-      "parameters": {
-        "slide": 11.1336,
-        "acceleration": 0,
-        "limit": 3.528,
-        "frequency": 901.511
-      }
-    },
-    {
-      "id": "jump2_osc",
-      "type": "SquareOscillator",
-      "position": {
-        "x": 560,
-        "y": 0
-      },
-      "parameters": {
-        "pulse_width": 0.22973,
-        "pulse_width_sweep": 0
-      }
-    },
-    {
-      "id": "jump2_highpass",
-      "type": "OnePoleFilter",
-      "position": {
-        "x": 1120,
-        "y": 0
-      },
-      "parameters": {
-        "cutoff": 151.537,
-        "mode": 1,
-        "cutoff_sweep": 0
-      }
-    },
-    {
-      "id": "jump2_phaser",
-      "type": "Phaser",
-      "position": {
-        "x": 1680,
-        "y": 0
-      },
-      "parameters": {
-        "offset": 0,
-        "sweep": 0,
-        "depth": 1
-      }
-    },
-    {
-      "id": "jump2_envelope",
-      "type": "AhdEnvelope",
-      "position": {
-        "x": 1680,
-        "y": 360
-      },
-      "parameters": {
-        "attack": 0,
-        "hold": 0.219266,
-        "decay": 0.0234994,
-        "punch": 0
-      }
-    },
-    {
-      "id": "jump2_amp",
-      "type": "Gain",
-      "position": {
-        "x": 2240,
-        "y": 0
-      },
-      "parameters": {
-        "gain": 0.025
-      }
-    },
-    {
-      "id": "jump2_pitch",
-      "type": "Constant",
-      "position": {
-        "x": 0.0,
-        "y": 2100.0
-      },
-      "parameters": {
-        "value": 261.6256
-      }
-    },
-    {
       "id": "boom_slide",
       "type": "Slide",
       "position": {
@@ -687,7 +515,7 @@
       "type": "Constant",
       "position": {
         "x": 0.0,
-        "y": 2400.0
+        "y": 1800.0
       },
       "parameters": {
         "value": 261.6256
@@ -742,22 +570,6 @@
       "type": "Add",
       "position": {
         "x": 3200.0,
-        "y": 0.0
-      }
-    },
-    {
-      "id": "mix_sum5",
-      "type": "Add",
-      "position": {
-        "x": 3400.0,
-        "y": 0.0
-      }
-    },
-    {
-      "id": "mix_sum6",
-      "type": "Add",
-      "position": {
-        "x": 3600.0,
         "y": 0.0
       }
     },
@@ -1150,166 +962,6 @@
     },
     {
       "from": {
-        "node": "select_slide",
-        "port": "frequency"
-      },
-      "to": {
-        "node": "select_osc",
-        "port": "frequency"
-      }
-    },
-    {
-      "from": {
-        "node": "select_osc",
-        "port": "out"
-      },
-      "to": {
-        "node": "select_highpass",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "select_highpass",
-        "port": "out"
-      },
-      "to": {
-        "node": "select_phaser",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "select_pitch",
-        "port": "out"
-      },
-      "to": {
-        "node": "select_slide",
-        "port": "frequency"
-      }
-    },
-    {
-      "from": {
-        "node": "pads",
-        "port": "t6"
-      },
-      "to": {
-        "node": "select_envelope",
-        "port": "gate"
-      }
-    },
-    {
-      "from": {
-        "node": "select_phaser",
-        "port": "out"
-      },
-      "to": {
-        "node": "select_amp",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "select_envelope",
-        "port": "out"
-      },
-      "to": {
-        "node": "select_amp",
-        "port": "gain"
-      }
-    },
-    {
-      "from": {
-        "node": "pads",
-        "port": "t6"
-      },
-      "to": {
-        "node": "select_slide",
-        "port": "gate"
-      }
-    },
-    {
-      "from": {
-        "node": "jump2_slide",
-        "port": "frequency"
-      },
-      "to": {
-        "node": "jump2_osc",
-        "port": "frequency"
-      }
-    },
-    {
-      "from": {
-        "node": "jump2_osc",
-        "port": "out"
-      },
-      "to": {
-        "node": "jump2_highpass",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "jump2_highpass",
-        "port": "out"
-      },
-      "to": {
-        "node": "jump2_phaser",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "jump2_pitch",
-        "port": "out"
-      },
-      "to": {
-        "node": "jump2_slide",
-        "port": "frequency"
-      }
-    },
-    {
-      "from": {
-        "node": "pads",
-        "port": "t7"
-      },
-      "to": {
-        "node": "jump2_envelope",
-        "port": "gate"
-      }
-    },
-    {
-      "from": {
-        "node": "jump2_phaser",
-        "port": "out"
-      },
-      "to": {
-        "node": "jump2_amp",
-        "port": "in"
-      }
-    },
-    {
-      "from": {
-        "node": "jump2_envelope",
-        "port": "out"
-      },
-      "to": {
-        "node": "jump2_amp",
-        "port": "gain"
-      }
-    },
-    {
-      "from": {
-        "node": "pads",
-        "port": "t7"
-      },
-      "to": {
-        "node": "jump2_slide",
-        "port": "gate"
-      }
-    },
-    {
-      "from": {
         "node": "boom_slide",
         "port": "frequency"
       },
@@ -1361,7 +1013,7 @@
     {
       "from": {
         "node": "pads",
-        "port": "t8"
+        "port": "t6"
       },
       "to": {
         "node": "boom_envelope",
@@ -1401,7 +1053,7 @@
     {
       "from": {
         "node": "pads",
-        "port": "t8"
+        "port": "t6"
       },
       "to": {
         "node": "boom_restart",
@@ -1530,51 +1182,11 @@
     },
     {
       "from": {
-        "node": "select_amp",
-        "port": "out"
-      },
-      "to": {
-        "node": "mix_sum4",
-        "port": "b"
-      }
-    },
-    {
-      "from": {
-        "node": "mix_sum4",
-        "port": "out"
-      },
-      "to": {
-        "node": "mix_sum5",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "jump2_amp",
-        "port": "out"
-      },
-      "to": {
-        "node": "mix_sum5",
-        "port": "b"
-      }
-    },
-    {
-      "from": {
-        "node": "mix_sum5",
-        "port": "out"
-      },
-      "to": {
-        "node": "mix_sum6",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
         "node": "boom_amp",
         "port": "out"
       },
       "to": {
-        "node": "mix_sum6",
+        "node": "mix_sum4",
         "port": "b"
       }
     },
@@ -1590,7 +1202,7 @@
     },
     {
       "from": {
-        "node": "mix_sum6",
+        "node": "mix_sum4",
         "port": "out"
       },
       "to": {
