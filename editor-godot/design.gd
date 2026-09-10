@@ -62,7 +62,7 @@ const PALETTES := [
 		"text": "f4f7fa", "text_muted": "b7c0cc", "text_disabled": "6e7887",
 		"accent": "57e3b4", "on_accent": "0f1318", "focus": "ffffff",
 		"audio": "57e3b4", "control": "8fb8ff", "trigger": "f6c85f",
-		"warning": "f6c85f", "danger": "ff7a7a",
+		"warning": "f6c85f", "danger": "ff7a7a", "live": "5fd38a",
 	},
 	{   # Night Flight — colder blue-black, for OLEDs and for sitting beside a DAW without
 		# looking like one.
@@ -71,7 +71,7 @@ const PALETTES := [
 		"text": "f7f9ff", "text_muted": "b9c3d6", "text_disabled": "6d778c",
 		"accent": "63e6be", "on_accent": "0b1020", "focus": "ffffff",
 		"audio": "63e6be", "control": "8cb4ff", "trigger": "ffd166",
-		"warning": "ffd166", "danger": "ff808e",
+		"warning": "ffd166", "danger": "ff808e", "live": "62dd8f",
 	},
 	{   # Tape — brown-black rather than blue-black, creamy text, amber triggers. An old
 		# laboratory instrument without the skeuomorphism.
@@ -80,7 +80,7 @@ const PALETTES := [
 		"text": "fff8f1", "text_muted": "cdbeb0", "text_disabled": "8a7768",
 		"accent": "70e0c1", "on_accent": "171311", "focus": "fff8f1",
 		"audio": "70e0c1", "control": "93b8ff", "trigger": "ffca66",
-		"warning": "ffca66", "danger": "ff8585",
+		"warning": "ffca66", "danger": "ff8585", "live": "66e096",
 	},
 	{   # Paper — not "light mode" but a legibility mode for daylight, classrooms,
 		# screenshots and projectors. The signal colours are dark here on purpose: the
@@ -90,7 +90,7 @@ const PALETTES := [
 		"text": "15171a", "text_muted": "3a3e44", "text_disabled": "767c85",
 		"accent": "00543f", "on_accent": "ffffff", "focus": "15171a",
 		"audio": "00543f", "control": "0053b3", "trigger": "7a4a00",
-		"warning": "8a5400", "danger": "a61b29",
+		"warning": "8a5400", "danger": "a61b29", "live": "1e8a4a",
 	},
 	{   # Maximum contrast — an accessibility mode rather than a look. Minimal gradients,
 		# no reliance on subtle borders, very strong focus.
@@ -163,6 +163,9 @@ static var BLACK_KEY_INK := Color("ffffff")
 
 static var WARNING := Color("f6c85f")
 static var ERROR := Color("ff7a7a")
+## Something is there and answering: a board on USB. Green, and only ever green, so the
+## one filled green control in the chrome means the same thing everywhere it appears.
+static var LIVE := Color("5fd38a")
 ## Panic is not an error and does not borrow the colour of one: red on a control promises
 ## deletion or reports a fault, and silence is the loud thing stopping.
 static var PANIC := Color("f6c85f")
@@ -193,8 +196,55 @@ static func use_palette(index: int) -> void:
 	TRIGGER = Color(set["trigger"])
 	WARNING = Color(set["warning"])
 	ERROR = Color(set["danger"])
+	LIVE = Color(set.get("live", "5fd38a"))
+	_dialog_theme = null
 	PANIC = Color(set["warning"])
 	_faces.erase(&"numeric")
+
+
+## The theme a dialog wears: furniture type, capped at XL like the rest of the chrome.
+##
+## At the 4K size the work area doubles and the editor theme's fonts double with it,
+## and a FileDialog that inherits those fonts has a minimum size taller than a 1080p
+## window — it opened with its buttons off the bottom of the screen. A dialog is
+## furniture: it is read once and dismissed, and it has to fit whatever window it is
+## in. Only type is defined here, so colours and boxes still come from the editor theme.
+static var _dialog_theme: Theme
+
+
+static func dialog_theme() -> Theme:
+	if _dialog_theme != null:
+		return _dialog_theme
+	var theme := Theme.new()
+	theme.default_font = font(WEIGHT_REGULAR)
+	theme.default_font_size = furniture_type(SIZE_BODY)
+	for reading in ["Label", "RichTextLabel", "ItemList", "Tree", "LineEdit", "PopupMenu",
+			"OptionButton", "CheckBox", "CheckButton", "TextEdit"]:
+		theme.set_font_size("font_size", reading, furniture_type(SIZE_BODY))
+	for pressable in ["Button", "OptionButton", "CheckBox", "CheckButton", "MenuButton"]:
+		theme.set_font_size("font_size", pressable, furniture_type(SIZE_CONTROL))
+		theme.set_font("font", pressable, font(WEIGHT_MEDIUM))
+	_dialog_theme = theme
+	return theme
+
+
+## Shows a window at `wanted` when that fits its parent, and at `ratio` of the parent
+## when it does not, in the dialog theme either way.
+##
+## Measured against the parent viewport's visible rect rather than through Godot's own
+## popup_centered_clamped: with the canvas_items stretch mode an embedded window's size
+## is in the parent's canvas space, which is what the visible rect reports, while the
+## engine's clamp reads the OS window — and headless that is 64 pixels square.
+static func show_fitted(window: Window, wanted: Vector2i, ratio: float = 0.85) -> void:
+	window.theme = dialog_theme()
+	var room := Vector2(wanted)
+	var host := window.get_parent()
+	if host != null and host.get_viewport() != null:
+		room = host.get_viewport().get_visible_rect().size
+	var fitted := Vector2i(mini(wanted.x, int(room.x * ratio)), mini(wanted.y, int(room.y * ratio)))
+	window.size = fitted
+	window.position = Vector2i((room - Vector2(fitted)) * 0.5)
+	window.popup()
 
 
 ## The colour a signal type is drawn in, so no component keeps its own copy of the map.
@@ -578,6 +628,39 @@ static func make_primary(button: Button, compact: bool = false) -> Button:
 	button.add_theme_color_override("font_hover_color", ON_ACCENT)
 	button.add_theme_color_override("font_pressed_color", ON_ACCENT)
 	button.add_theme_font_override("font", font(WEIGHT_SEMIBOLD))
+	return button
+
+
+## A button filled with a colour of the caller's: the primary treatment with the fill
+## chosen. The scan button wears LIVE when a board is answering.
+static func make_lit(button: Button, fill: Color, compact: bool = false) -> Button:
+	var normal := furniture_box(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON, false) \
+		if compact else padded_panel(Surface.RAISED, SPACE_M, SPACE_S, RADIUS_BUTTON)
+	normal.bg_color = fill
+	normal.border_color = fill
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = fill.lightened(0.12)
+	hover.border_color = hover.bg_color
+	button.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = fill.darkened(0.12)
+	pressed.border_color = pressed.bg_color
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_color_override("font_color", ON_ACCENT)
+	button.add_theme_color_override("font_hover_color", ON_ACCENT)
+	button.add_theme_color_override("font_pressed_color", ON_ACCENT)
+	button.add_theme_font_override("font", font(WEIGHT_SEMIBOLD))
+	return button
+
+
+## Takes a filled treatment off again, back to the theme's own button.
+static func make_plain(button: Button) -> Button:
+	for state in ["normal", "hover", "pressed"]:
+		button.remove_theme_stylebox_override(state)
+	for colour in ["font_color", "font_hover_color", "font_pressed_color"]:
+		button.remove_theme_color_override(colour)
+	button.remove_theme_font_override("font")
 	return button
 
 

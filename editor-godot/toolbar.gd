@@ -61,6 +61,9 @@ var toolbar_identity: VBoxContainer
 var toolbar_title: Label
 var toolbar_edit_group: HBoxContainer
 var toolbar_hardware_group: HBoxContainer
+var toolbar_scan_button: Button
+## Whether the last scan found a board: the scan button says Connected, in green.
+var connected := false
 var toolbar_menu_button: MenuButton
 var toolbar_identity_margin: MarginContainer
 var toolbar_menu_popup: PopupMenu
@@ -296,12 +299,12 @@ func _build() -> void:
 	var hardware_group := _toolbar_group(bar)
 	toolbar_hardware_group = hardware_group
 	var scan_button := Button.new()
-	scan_button.text = "Scan"
-	scan_button.tooltip_text = "Look for an Axoloti on USB, and what it is running"
+	toolbar_scan_button = scan_button
 	scan_button.icon = _icon(Icons.Kind.PLUG, Design.INK_NORMAL)
 	_icon_kinds[scan_button] = Icons.Kind.PLUG
 	scan_button.pressed.connect(func() -> void: scan_requested.emit())
 	hardware_group.add_child(_defocus(scan_button))
+	_dress_scan_button()
 	var flash_button := Button.new()
 	flash_button.text = "Flash"
 	flash_button.tooltip_text = "Write the chosen bank of patches to the board's card"
@@ -1005,6 +1008,41 @@ func set_condensed(on: bool) -> void:
 					Design.furniture_type(Design.SIZE_SECONDARY))
 			else:
 				(node as Control).remove_theme_font_size_override("font_size")
+	_dress_scan_button()
+
+
+## The scan button is the board's light. Green and "Connected" while the last scan found
+## one, and pressing it scans again; "Scan" otherwise. Dressed after the condensed pass
+## too, because that pass re-boxes every button in the bar.
+func show_connected(on: bool) -> void:
+	connected = on
+	_dress_scan_button()
+
+
+func _dress_scan_button() -> void:
+	var button := toolbar_scan_button
+	if button == null:
+		return
+	if connected:
+		button.text = "Connected"
+		button.tooltip_text = "An Axoloti is on USB; press to scan again"
+		Design.make_lit(button, Design.LIVE, condensed)
+		button.icon = Icons.get_icon(Icons.Kind.PLUG,
+			Design.furniture_scale(14) if condensed else Design.scale(Design.SIZE_CONTROL),
+			Design.ON_ACCENT)
+		return
+	button.text = "Scan"
+	button.tooltip_text = "Look for an Axoloti on USB, and what it is running"
+	Design.make_plain(button)
+	if condensed:
+		for state in ["normal", "hover", "pressed", "disabled"]:
+			button.add_theme_stylebox_override(state, Design.furniture_box(
+				Design.Surface.ACTIVE if state in ["hover", "pressed"]
+				else Design.Surface.RAISED, Design.SPACE_S, Design.SPACE_XS))
+		button.icon = Icons.get_icon(Icons.Kind.PLUG, Design.furniture_scale(14),
+			Design.INK_NORMAL)
+	else:
+		button.icon = _icon(Icons.Kind.PLUG, Design.INK_NORMAL)
 
 
 func _fit_toolbar(width: float = -1.0) -> void:

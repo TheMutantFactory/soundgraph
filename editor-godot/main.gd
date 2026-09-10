@@ -1451,12 +1451,14 @@ func _build_ui() -> void:
 	add_child(node_browser)
 
 	file_dialog = FileDialog.new()
+	file_dialog.theme = Design.dialog_theme()
 	file_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	file_dialog.add_filter("*.json", "SoundGraph patch")
 	file_dialog.file_selected.connect(_on_file_selected)
 	add_child(file_dialog)
 
 	midi_dialog = FileDialog.new()
+	midi_dialog.theme = Design.dialog_theme()
 	midi_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	# Opening, not saving — which has to be said: a fresh FileDialog is a save
 	# dialog, and an importer wearing a Save button reads as a trap.
@@ -1467,6 +1469,7 @@ func _build_ui() -> void:
 	add_child(midi_dialog)
 
 	songs_dialog = FileDialog.new()
+	songs_dialog.theme = Design.dialog_theme()
 	songs_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	songs_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	songs_dialog.title = "Choose the songs folder"
@@ -1474,6 +1477,7 @@ func _build_ui() -> void:
 	add_child(songs_dialog)
 
 	audio_dialog = FileDialog.new()
+	audio_dialog.theme = Design.dialog_theme()
 	audio_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	audio_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	for filter in Transcribe.FILTERS:
@@ -3906,6 +3910,7 @@ func _quit_by_hand() -> void:
 		dialog.queue_free())
 	quit_dialog = dialog
 	add_child(dialog)
+	dialog.theme = Design.dialog_theme()
 	dialog.popup_centered()
 
 
@@ -3939,7 +3944,7 @@ func _open_hardware_panel() -> void:
 	hardware_panel.show_bank()
 	hardware_panel.show_progress(hardware.status() if _hardware_action != "" else {})
 	if not hardware_panel.visible:
-		hardware_panel.popup_centered()
+		Design.show_fitted(hardware_panel, HardwarePanel.wanted_size())
 
 
 ## Loads the bank at `path` and makes it the one Flash writes. Quiet at boot, when a
@@ -3983,7 +3988,6 @@ func _pick_bank(fresh: bool) -> void:
 	bank_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE if fresh else FileDialog.FILE_MODE_OPEN_FILE
 	bank_dialog.title = "New bank" if fresh else "Open bank"
 	bank_dialog.filters = PackedStringArray(["*.json ; Patch banks"])
-	bank_dialog.size = Vector2i(Design.scale(720), Design.scale(480))
 	if bank != null and bank.path != "":
 		bank_dialog.current_dir = bank.path.get_base_dir()
 	elif document_path != "":
@@ -4001,7 +4005,8 @@ func _pick_bank(fresh: bool) -> void:
 		if bank != null:
 			_say("%s is what Flash writes" % bank.name))
 	add_child(bank_dialog)
-	bank_dialog.popup_centered()
+	Design.show_fitted(bank_dialog,
+		Vector2i(Design.furniture_scale(720), Design.furniture_scale(480)))
 
 
 func _pick_patch_for_bank() -> void:
@@ -4014,7 +4019,6 @@ func _pick_patch_for_bank() -> void:
 	bank_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILES
 	bank_dialog.title = "Add patches to %s" % bank.name
 	bank_dialog.filters = PackedStringArray(["*.json ; Patches"])
-	bank_dialog.size = Vector2i(Design.scale(720), Design.scale(480))
 	bank_dialog.current_dir = bank.path.get_base_dir()
 	bank_dialog.files_selected.connect(func(paths: PackedStringArray) -> void:
 		for path in paths:
@@ -4022,7 +4026,8 @@ func _pick_patch_for_bank() -> void:
 		_save_bank()
 		_say("added %d to %s" % [paths.size(), bank.name]))
 	add_child(bank_dialog)
-	bank_dialog.popup_centered()
+	Design.show_fitted(bank_dialog,
+		Vector2i(Design.furniture_scale(720), Design.furniture_scale(480)))
 
 
 ## The open document, as the bank's next entry. A bank lists files, so an unsaved patch
@@ -4084,6 +4089,7 @@ func _flash_hardware() -> void:
 		dialog.queue_free())
 	flash_dialog = dialog
 	add_child(dialog)
+	dialog.theme = Design.dialog_theme()
 	dialog.popup_centered()
 
 
@@ -4128,6 +4134,7 @@ func _watch_hardware() -> void:
 	_hardware_action = ""
 	if action == "scan":
 		_last_scan = status
+		toolbar.show_connected(bool(status.get("found", false)))
 		if hardware_panel != null:
 			hardware_panel.show_board(status)
 		_say(HardwarePanel.describe_board(status))

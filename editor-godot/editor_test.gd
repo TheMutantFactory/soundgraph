@@ -1124,6 +1124,25 @@ func _initialize() -> void:
 	check(main.message_label.text.contains("Axoloti Core") and main.message_label.text.contains("card mounted")
 			and main._hardware_action == "",
 		"a scan reads the board back in a sentence (%s)" % main.message_label.text)
+	var scan_button: Button = main.toolbar.toolbar_scan_button
+	var lit_box := scan_button.get_theme_stylebox("normal") as StyleBoxFlat
+	check(main.toolbar.connected and scan_button.text == "Connected"
+			and lit_box != null and lit_box.bg_color == Design.LIVE,
+		"and the scan button says Connected, in green")
+	# The panel fits the window it is in, at every size: at 4K the chrome doubles and a
+	# dialog that doubled with it was taller than a 1080p window.
+	main._use_ui_scale(Design.Scale.FOUR_K)
+	await process_frame
+	main._open_hardware_panel()
+	await process_frame
+	var panel_room: Vector2i = main.get_viewport().get_visible_rect().size
+	check(main.hardware_panel.size.x <= panel_room.x and main.hardware_panel.size.y <= panel_room.y
+			and main.hardware_panel.size.y >= 300 and main.hardware_panel.theme == Design.dialog_theme(),
+		"the hardware panel fits the window at 4K (%s in %s)"
+			% [str(main.hardware_panel.size), str(panel_room)])
+	main.hardware_panel.hide()
+	main._use_ui_scale(Design.Scale.COMFORTABLE)
+	await process_frame
 	main._flash_hardware()
 	await process_frame
 	check(main.flash_dialog != null and main.flash_dialog.visible
@@ -1137,6 +1156,17 @@ func _initialize() -> void:
 			and main.hardware_panel.progress_label.text.contains("2 entries"),
 		"and the panel and the message both say what was written (%s)" % main.message_label.text)
 	main.hardware_panel.hide()
+	main.hardware.runner = func(args: Array) -> void:
+		var out := FileAccess.open(status_file, FileAccess.WRITE)
+		out.store_string(JSON.stringify({"action": str(args[0]), "state": "done",
+			"found": false, "error": "no board", "log": []}))
+		out.close()
+	main._scan_hardware()
+	for i in 4:
+		await process_frame
+	check(not main.toolbar.connected and scan_button.text == "Scan"
+			and scan_button.get_theme_stylebox("normal") != lit_box,
+		"and a scan that finds nothing takes the light off again")
 	main.hardware.runner = Callable()
 	main._use_bank("")
 	DirAccess.remove_absolute(bank_file)

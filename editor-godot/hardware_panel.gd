@@ -39,7 +39,11 @@ var log_view: RichTextLabel
 
 
 func _init() -> void:
-	size = Vector2i(Design.scale(640), Design.scale(560))
+	# Sized by the caller, not by the content: a PopupPanel that wraps its controls takes
+	# its first frame's minimum — an autowrapped label at zero width is a column of
+	# words — and a Window never shrinks back from that. The list flexes inside instead.
+	wrap_controls = false
+	size = wanted_size()
 	add_theme_stylebox_override("panel",
 		Design.padded_panel(Design.Surface.NODE, Design.SPACE_M, Design.SPACE_M))
 	var box := VBoxContainer.new()
@@ -92,7 +96,7 @@ func _init() -> void:
 
 	list = ItemList.new()
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	list.custom_minimum_size.y = Design.scale(160)
+	list.custom_minimum_size.y = Design.furniture_scale(160)
 	list.item_selected.connect(func(_index: int) -> void: _refresh_buttons())
 	box.add_child(list)
 
@@ -144,7 +148,7 @@ func _init() -> void:
 	box.add_child(flash_row)
 
 	log_view = RichTextLabel.new()
-	log_view.custom_minimum_size.y = Design.scale(110)
+	log_view.custom_minimum_size.y = Design.furniture_scale(110)
 	log_view.scroll_following = true
 	log_view.selection_enabled = true
 	log_view.add_theme_font_override("normal_font", Design.numeric_font())
@@ -156,6 +160,11 @@ func _init() -> void:
 	show_bank()
 
 
+## Furniture-sized: the panel is read once and dismissed, and has to fit the window.
+static func wanted_size() -> Vector2i:
+	return Vector2i(Design.furniture_scale(640), Design.furniture_scale(600))
+
+
 func _rule() -> HSeparator:
 	var rule := HSeparator.new()
 	rule.add_theme_constant_override("separation", Design.SPACE_S)
@@ -165,8 +174,14 @@ func _rule() -> HSeparator:
 ## The last scan, in a sentence.
 func show_board(report: Dictionary) -> void:
 	board_label.text = describe_board(report)
+	var found := bool(report.get("found", false))
 	board_label.add_theme_color_override("font_color",
-		Design.INK_NORMAL if bool(report.get("found", false)) else Design.INK_SECOND)
+		Design.INK_NORMAL if found else Design.INK_SECOND)
+	scan_button.text = "Connected" if found else "Scan"
+	if found:
+		Design.make_lit(scan_button, Design.LIVE)
+	else:
+		Design.make_plain(scan_button)
 
 
 static func describe_board(report: Dictionary) -> String:

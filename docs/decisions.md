@@ -1626,3 +1626,29 @@ fetcher opens the pinned dmg with 7-Zip, and codegen finds the Arm
 toolchain where its installer puts it. The compiler itself is not
 bundled; Scan says when it is missing. The editor never blocks on the
 board: a scan or flash is a process, and the panel follows its file.
+
+## 2026-09-10 — The scan button is the board's light; dialogs are furniture
+
+Decision:
+After a scan that finds a board the Scan button reads "Connected", filled
+in a green that is only ever used for this (`Design.LIVE`, a palette
+token); a scan that finds nothing takes the light off. Dialogs — the
+hardware panel, the bank and patch pickers, the four file dialogs the
+editor already had, the flash and quit confirms — wear `Design.dialog_theme()`,
+furniture type capped at XL, and are shown through `Design.show_fitted()`,
+which sizes them against the parent viewport's visible rect. The hardware
+panel no longer wraps its controls.
+
+Reason:
+At the 4K size the editor theme's type doubles and a dialog that inherits
+it has a minimum taller than a 1080p window; the hardware panel was worse,
+because a PopupPanel that wraps its controls takes its first frame's
+minimum — an autowrapped label at zero width is a column of words — and a
+Window never shrinks back from that. Godot's own clamp reads the OS window,
+which headless is 64 pixels square, so the fit is measured by hand where
+the size actually lives.
+
+Consequences:
+Dialogs fit any window the editor runs in and are readable at every
+interface size. The green is a fifth palette token and is filled, never
+outlined, so it cannot be mistaken for the panic control.
