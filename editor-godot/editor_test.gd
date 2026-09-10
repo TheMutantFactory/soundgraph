@@ -2060,6 +2060,13 @@ func _initialize() -> void:
 	main.show_view("Rack")
 	Rack.density = Rack.Density.ANALYSIS
 	rack_ready(main)
+	# The cutoff is pulled down for the look. First Synth sweeps it with an LFO, and at
+	# the top of that sweep the filtered saw trails the raw one by less than the
+	# hundredth the count below asks for; where the sweep is when the count is taken
+	# depends on how much audio the wall clock drained since the load, so the check
+	# passed or failed with the machine's mood. At 200 Hz the two traces disagree
+	# whatever the LFO is doing. The engine alone is told; the document is untouched.
+	main.engine.set_parameter("filter", "cutoff", 200.0)
 	main.engine.note_on(45, 0.9)
 	for i in 40:
 		main.engine.fill_playback(playback, 256)
@@ -2088,6 +2095,7 @@ func _initialize() -> void:
 			"and the filter shows something different from its own input (%d of %d samples)"
 				% [differ, shared])
 
+	main.engine.set_parameter("filter", "cutoff", 900.0)
 	main.engine.all_notes_off()
 	Rack.density = Rack.Density.INSTRUMENT
 
