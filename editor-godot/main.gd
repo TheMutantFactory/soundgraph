@@ -7235,6 +7235,8 @@ func _commit_cc() -> void:
 ## the bank's last page is ignored rather than wrapped: asking for page 90 of
 ## an eight-page bank means the pedal is set up for some other instrument.
 func _on_midi(event: InputEventMIDI) -> void:
+	if scope_probe != null:
+		scope_probe.note_midi(ProbeScope.describe_midi(event))
 	match event.message:
 		MIDI_MESSAGE_NOTE_ON:
 			# Note-on at velocity zero is the wire's other spelling of note-off.

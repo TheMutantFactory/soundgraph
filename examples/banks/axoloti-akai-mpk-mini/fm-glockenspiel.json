@@ -2,7 +2,7 @@
   "schema_version": 2,
   "metadata": {
     "name": "FM glockenspiel",
-    "controller": "Akai MPK mini mk3, factory program 1"
+    "controller": "Akai MPK mini, knobs on CC 1-8, pads from note 36"
   },
   "nodes": [
     {
@@ -414,7 +414,7 @@
         "y": 200.0
       },
       "parameters": {
-        "cc": 70,
+        "cc": 1,
         "low": -4.0,
         "high": 2.5,
         "resting": 1.0,
@@ -429,7 +429,7 @@
         "y": 350.0
       },
       "parameters": {
-        "cc": 71,
+        "cc": 2,
         "low": 0.0,
         "high": 0.85,
         "resting": 0.23529411764705885,
@@ -458,7 +458,7 @@
         "y": 500.0
       },
       "parameters": {
-        "cc": 73,
+        "cc": 4,
         "low": 0.0,
         "high": 8.0,
         "resting": 0.0,
@@ -484,7 +484,7 @@
         "y": 200.0
       },
       "parameters": {
-        "cc": 72,
+        "cc": 3,
         "low": 0.0,
         "high": 1.0,
         "resting": 0.8,
@@ -518,7 +518,7 @@
         "y": 1400.0
       },
       "parameters": {
-        "cc": 77,
+        "cc": 8,
         "low": 0.0,
         "high": 1.0,
         "resting": 0.7,
@@ -546,7 +546,7 @@
         "y": 400.0
       },
       "parameters": {
-        "cc": 74,
+        "cc": 5,
         "low": 0.05,
         "high": 0.6,
         "resting": 0.42,
@@ -561,7 +561,7 @@
         "y": 550.0
       },
       "parameters": {
-        "cc": 75,
+        "cc": 6,
         "low": 0.0,
         "high": 0.7,
         "resting": 0.5,
@@ -587,7 +587,7 @@
         "y": 700.0
       },
       "parameters": {
-        "cc": 76,
+        "cc": 7,
         "low": 0.0,
         "high": 0.8,
         "resting": 0.0,

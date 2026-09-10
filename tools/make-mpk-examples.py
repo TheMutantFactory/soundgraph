@@ -31,8 +31,11 @@ OUT = REPO / "examples" / "banks" / "axoloti-akai-mpk-mini"
 BANK = REPO / "examples" / "banks" / "axoloti-akai-mpk-mini.json"
 
 CONTROLLER = {
-    "name": "Akai MPK mini mk3, factory program 1",
-    "knobs": [70, 71, 72, 73, 74, 75, 76, 77],  # K1..K8
+    "name": "Akai MPK mini, knobs on CC 1-8, pads from note 36",
+    # What the bench's MPK actually sends, read off the board's own MIDI tally
+    # (hw.py scan): the knobs are CC 1 to 8. A mk3 on its factory program says 70
+    # to 77 instead; change this line and run the script again.
+    "knobs": [1, 2, 3, 4, 5, 6, 7, 8],  # K1..K8
     "pads_base": 36,                             # bank A: pads 1..8 are notes 36..43
 }
 

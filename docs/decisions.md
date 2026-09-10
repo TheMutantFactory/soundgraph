@@ -1714,3 +1714,25 @@ verified on hardware for pm, fm, feedback, the triggers, MidiCC at rest,
 a DX7 algorithm and Poly Five. The controller numbers are the mk3's
 factory program; a mk2 differs, and the script is the one place to
 change them.
+
+## 2026-09-10 — What the board heard, readable from the bench
+
+Decision:
+Every sgaxo patch tallies the MIDI it is handed in its shared block: a
+count, a CC count and the last eight messages. `hw.py scan` reads it and
+the hardware panel puts it in the board's sentence; `hw.py midi` prints
+new messages live. The editor's right-hand panel gained a "MIDI in"
+section listing the last eight messages the computer's own ports
+delivered, in the same words.
+
+Reason:
+A controller on the board's host port never reaches the computer, so
+"the knobs do nothing" could not be looked at from the editor at all. The
+question is always the same two: is anything arriving, and what number
+is it. The tally answers both without a MIDI monitor in the signal path.
+
+Consequences:
+Patches built before this carry no tally; the scan says nothing about
+MIDI for them rather than guessing. Four words per message, the same on
+the board and in the editor, so a number read in one place is the number
+to type in the other.

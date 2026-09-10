@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "Axoloti + Akai MPK mini",
   "target": "axoloti",
-  "controller": "Akai MPK mini mk3, factory program 1",
+  "controller": "Akai MPK mini, knobs on CC 1-8, pads from note 36",
   "program_change": "prev-next",
   "entries": [
     {

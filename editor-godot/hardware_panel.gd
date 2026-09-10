@@ -228,6 +228,12 @@ static func describe_board(report: Dictionary) -> String:
 		"" if bool(report.get("fwid_ok", true)) else " (not the 1.0.12-2 build the patches link against)"])
 	parts.append("card mounted" if bool(report.get("sd_ready", false)) else "no card mounted")
 	parts.append("DSP %d%%" % int(report.get("dsp_load", 0)))
+	var midi: Variant = report.get("midi", null)
+	if midi is Dictionary:
+		var recent: Array = midi.get("recent", [])
+		parts.append("heard %d MIDI messages (%d CC)%s" % [int(midi.get("count", 0)),
+			int(midi.get("cc_count", 0)),
+			", last: " + str(recent[0]) if not recent.is_empty() else ""])
 	var tools: Dictionary = report.get("toolchain", {})
 	if not tools.is_empty():
 		var lacking: Array[String] = []

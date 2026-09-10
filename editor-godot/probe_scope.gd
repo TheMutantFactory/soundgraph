@@ -55,6 +55,13 @@ var level_auto: Button
 var trigger_level := INF
 var display: Control
 
+## What the computer's MIDI ports have said lately, newest first: the answer to "is
+## the controller even reaching this machine, and what is it sending".
+const MIDI_LINES := 8
+var midi_label: Label
+var midi_ports_label: Label
+var midi_lines: Array[String] = []
+
 
 func base_frequency() -> float:
 	if note_mode:
@@ -189,8 +196,72 @@ func _ready() -> void:
 	display.custom_minimum_size.y = Design.scale(160)
 	add_child(display)
 
+	# ---- MIDI in ------------------------------------------------------------------
+	var midi_heading := Label.new()
+	midi_heading.text = "MIDI in"
+	midi_heading.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
+	midi_heading.add_theme_font_size_override("font_size",
+		Design.furniture_type(Design.SIZE_SECONDARY))
+	midi_heading.add_theme_color_override("font_color", Design.INK_SECOND)
+	add_child(midi_heading)
+	midi_ports_label = Label.new()
+	midi_ports_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	midi_ports_label.add_theme_font_size_override("font_size",
+		Design.furniture_type(Design.SIZE_SECONDARY))
+	midi_ports_label.add_theme_color_override("font_color", Design.INK_SECOND)
+	add_child(midi_ports_label)
+	midi_label = Label.new()
+	midi_label.add_theme_font_override("font", Design.numeric_font())
+	midi_label.add_theme_font_size_override("font_size",
+		Design.furniture_type(Design.SIZE_SECONDARY))
+	midi_label.custom_minimum_size.y = Design.furniture_scale(14) * MIDI_LINES
+	midi_label.text = "nothing heard yet"
+	midi_label.tooltip_text = "Every MIDI message this computer's ports deliver, newest first. " \
+		+ "A controller plugged into the board, not the computer, shows on the hardware panel instead."
+	add_child(midi_label)
+	show_midi_ports(OS.get_connected_midi_inputs())
+
 	_refresh_words()
 	_refresh_fields()
+
+
+func show_midi_ports(ports: PackedStringArray) -> void:
+	if midi_ports_label == null:
+		return
+	midi_ports_label.text = ("ports: " + ", ".join(ports)) if not ports.is_empty() \
+		else "no MIDI input on this computer"
+
+
+## One message, newest on top; the list keeps the last eight.
+func note_midi(line: String) -> void:
+	midi_lines.push_front(line)
+	if midi_lines.size() > MIDI_LINES:
+		midi_lines.resize(MIDI_LINES)
+	if midi_label != null:
+		midi_label.text = "\n".join(PackedStringArray(midi_lines))
+
+
+## The words for an event, the way the board's own tally spells them.
+static func describe_midi(event: InputEventMIDI) -> String:
+	var channel := event.channel + 1
+	match event.message:
+		MIDI_MESSAGE_NOTE_ON:
+			if event.velocity > 0:
+				return "note on %d vel %d ch %d" % [event.pitch, event.velocity, channel]
+			return "note off %d ch %d" % [event.pitch, channel]
+		MIDI_MESSAGE_NOTE_OFF:
+			return "note off %d ch %d" % [event.pitch, channel]
+		MIDI_MESSAGE_CONTROL_CHANGE:
+			return "CC %d = %d ch %d" % [event.controller_number, event.controller_value, channel]
+		MIDI_MESSAGE_PROGRAM_CHANGE:
+			return "program %d ch %d" % [event.instrument, channel]
+		MIDI_MESSAGE_PITCH_BEND:
+			return "bend %d ch %d" % [event.pitch - 8192, channel]
+		MIDI_MESSAGE_AFTERTOUCH:
+			return "aftertouch %d = %d ch %d" % [event.pitch, event.pressure, channel]
+		MIDI_MESSAGE_CHANNEL_PRESSURE:
+			return "pressure %d ch %d" % [event.pressure, channel]
+	return "message %d ch %d" % [event.message, channel]
 
 
 func _quiet(control: Control) -> Control:

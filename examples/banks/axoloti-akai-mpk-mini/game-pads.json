@@ -2,7 +2,7 @@
   "schema_version": 1,
   "metadata": {
     "name": "Game pads",
-    "controller": "Akai MPK mini mk3, factory program 1"
+    "controller": "Akai MPK mini, knobs on CC 1-8, pads from note 36"
   },
   "nodes": [
     {
@@ -780,7 +780,7 @@
         "y": 200.0
       },
       "parameters": {
-        "cc": 70,
+        "cc": 1,
         "low": 0.0,
         "high": 1.0,
         "resting": 0.8,

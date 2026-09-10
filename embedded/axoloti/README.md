@@ -65,6 +65,17 @@ tools/fetch-sdk.sh          # opens the pinned dmg with 7-Zip instead of hdiutil
 winget install Arm.GnuArmEmbeddedToolchain   # arm-none-eabi-g++; codegen finds it
 ```
 
+## What the board heard
+
+Every sgaxo patch keeps a tally of the MIDI it is handed, in its shared block:
+a count, a CC count, and the last eight messages. `tools/hw.py scan` reads it
+back (the editor's hardware panel shows it in the board's sentence), and
+`tools/hw.py midi --seconds 10` prints new messages as they arrive - turn a
+knob, hit a pad, and see the number it sends and the channel it sends on.
+A controller plugged into the board's host port never reaches the computer,
+so this is the only place to read it; a controller plugged into the computer
+shows in the editor's right-hand panel under "MIDI in".
+
 ## From the editor
 
 Scan and Flash sit beside Add node in the Godot editor. Scan runs

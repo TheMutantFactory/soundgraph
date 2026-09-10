@@ -1135,6 +1135,26 @@ func _initialize() -> void:
 	check(main.message_label.text.contains("Axoloti Core") and main.message_label.text.contains("card mounted")
 			and main._hardware_action == "",
 		"a scan reads the board back in a sentence (%s)" % main.message_label.text)
+	# The right-hand panel keeps the last messages the computer's ports delivered,
+	# spelled the way the board's own tally spells them.
+	var turned := InputEventMIDI.new()
+	turned.message = MIDI_MESSAGE_CONTROL_CHANGE
+	turned.channel = 0
+	turned.controller_number = 70
+	turned.controller_value = 64
+	main._on_midi(turned)
+	var pressed := InputEventMIDI.new()
+	pressed.message = MIDI_MESSAGE_NOTE_ON
+	pressed.channel = 9
+	pressed.pitch = 36
+	pressed.velocity = 100
+	main._on_midi(pressed)
+	main._let_go_note(36)
+	check(main.scope_probe.midi_lines.size() == 2
+			and main.scope_probe.midi_lines[0] == "note on 36 vel 100 ch 10"
+			and main.scope_probe.midi_lines[1] == "CC 70 = 64 ch 1"
+			and main.scope_probe.midi_label.text.begins_with("note on 36"),
+		"the probe panel lists what MIDI the computer heard, newest first")
 	var scan_button: Button = main.toolbar.toolbar_scan_button
 	var lit_box := scan_button.get_theme_stylebox("normal") as StyleBoxFlat
 	check(main.toolbar.connected and scan_button.text == "Connected"

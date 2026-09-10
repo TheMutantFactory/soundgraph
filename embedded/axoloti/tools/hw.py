@@ -130,6 +130,46 @@ def toolchain_report():
     }
 
 
+SHM_ADDR = 0x2001C000
+SHM_MAGIC = 0x53475831  # "SGX1": an sgaxo patch is running and keeps its block
+SHM_WORDS = 16          # magic..status (6), midi_count, midi_cc_count, ring[8]
+
+
+def describe_midi(packed):
+    """One packed message as a sentence: what the MPK's pad or knob actually sent."""
+    b0, b1, b2 = (packed >> 16) & 0xFF, (packed >> 8) & 0xFF, packed & 0xFF
+    kind, channel = b0 & 0xF0, (b0 & 0x0F) + 1
+    if kind == 0x90 and b2 > 0:
+        return f"note on {b1} vel {b2} ch {channel}"
+    if kind == 0x80 or kind == 0x90:
+        return f"note off {b1} ch {channel}"
+    if kind == 0xB0:
+        return f"CC {b1} = {b2} ch {channel}"
+    if kind == 0xC0:
+        return f"program {b1} ch {channel}"
+    if kind == 0xE0:
+        return f"bend {((b2 << 7) | b1) - 8192} ch {channel}"
+    if kind == 0xA0:
+        return f"aftertouch {b1} = {b2} ch {channel}"
+    if kind == 0xD0:
+        return f"pressure {b1} ch {channel}"
+    return f"status {b0:#04x} {b1} {b2}"
+
+
+def read_board_midi(board):
+    """The running patch's MIDI tally, or None when what is running is not
+    one of ours (or was built before the tally existed)."""
+    import struct
+    words = struct.unpack("<16I", board.read_mem(SHM_ADDR, SHM_WORDS * 4))
+    if words[0] != SHM_MAGIC:
+        return None
+    count, cc_count, ring = words[6], words[7], words[8:16]
+    recent = []
+    for k in range(min(count, 8)):
+        recent.append(describe_midi(ring[(count - 1 - k) & 7]))
+    return {"count": count, "cc_count": cc_count, "recent": recent}
+
+
 def scan(status):
     import codegen
     report = {"found": False, "toolchain": toolchain_report()}
@@ -151,6 +191,10 @@ def scan(status):
                 pass
             ack = board.ping()
             fwid = f"0x{fw.fwid:08x}"
+            try:
+                report["midi"] = read_board_midi(board)
+            except Exception as error:  # noqa: BLE001 — a tally is optional
+                report["midi_error"] = f"{type(error).__name__}: {error}"
             report.update(
                 found=True,
                 firmware=".".join(str(part) for part in fw.version),
@@ -232,7 +276,35 @@ def main():
     flasher = commands.add_parser("flash")
     flasher.add_argument("bank")
     flasher.add_argument("--dry-run", action="store_true")
+    watcher = commands.add_parser("midi", help="print what the running patch hears, live")
+    watcher.add_argument("--seconds", type=float, default=10.0)
     args = parser.parse_args()
+
+    if args.command == "midi":
+        from axoproto import Axoloti
+        board = Axoloti()
+        try:
+            seen = None
+            deadline = time.time() + args.seconds
+            print(f"watching the board's MIDI for {args.seconds:g} s; turn a knob, hit a pad")
+            while time.time() < deadline:
+                tally = read_board_midi(board)
+                if tally is None:
+                    print("the running patch is not one of ours, or was built before "
+                          "the tally; flash again and retry")
+                    return
+                if seen is None:
+                    seen = tally["count"]
+                    print(f"  {tally['count']} messages so far, {tally['cc_count']} of them CC")
+                fresh = tally["count"] - seen
+                if fresh > 0:
+                    for line in reversed(tally["recent"][:min(fresh, 8)]):
+                        print(f"  {line}")
+                    seen = tally["count"]
+                time.sleep(0.1)
+        finally:
+            board.close()
+        return
 
     status = Status(args.command)
     try:

@@ -33,6 +33,13 @@ typedef struct {
   uint32_t frames_target;
   uint32_t capture_base;
   uint32_t status;  // 0 rendering, 1 capture complete (audio keeps running)
+  // What the MIDI input threads have handed this patch, for the host to read
+  // back: a controller whose knobs do nothing is either not sending or sending
+  // numbers the patch does not listen for, and this says which. Every message
+  // counts; the ring keeps the last eight, packed status<<16 | b1<<8 | b2.
+  uint32_t midi_count;
+  uint32_t midi_cc_count;
+  uint32_t midi_ring[8];
 } sgaxo_shm_t;
 
 static volatile sgaxo_shm_t *const SGX = (volatile sgaxo_shm_t *)SGAXO_SHM_ADDR;
@@ -90,6 +97,12 @@ static void sgaxo_midi_in(midi_device_t dev, uint8_t port, uint8_t b0,
                           uint8_t b1, uint8_t b2) {
   (void)dev; (void)port;
   const uint8_t status = b0 & 0xF0;
+  {
+    const uint32_t n = SGX->midi_count;
+    SGX->midi_ring[n & 7] = ((uint32_t)b0 << 16) | ((uint32_t)b1 << 8) | b2;
+    SGX->midi_count = n + 1;
+    if (status == 0xB0) SGX->midi_cc_count = SGX->midi_cc_count + 1;
+  }
 #ifdef SGAXO_BANK
   // Program Change walks the SD bank: the firmware stops this patch, reads
   // index.axb, and loads line b1's directory's patch.bin — /start.bin on any
