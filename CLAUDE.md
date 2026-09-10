@@ -108,6 +108,10 @@ writes it: a mistake that looks fixed until something regenerates.
 `git push --no-verify` skips it. That is for a push that cannot break anything, not for
 getting past a red suite.
 
+`tools/watch-gate.bat` opens a window that follows a run: which stage it is on, how
+long, the check count inside a suite, and the verdict. It reads `run/gate-status`,
+which the gate rewrites at every step.
+
 ## Worktrees
 
 Parallel worktrees are encouraged after interfaces stabilize.
