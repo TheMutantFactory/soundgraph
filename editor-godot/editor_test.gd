@@ -3282,6 +3282,18 @@ func _initialize() -> void:
 	check(card_title == 18 and card_long < 18 and card_long >= 9,
 		"a schematic card's title fits its line and its width (%d, %d)"
 			% [card_title, card_long])
+	# The graph's map goes away with the schematic and comes back with the graph: its
+	# nodes are hidden there and its camera is parked on the cards, so the map drew a
+	# frame around nothing over them.
+	await main._set_patch_view(main.PatchView.SCHEMATIC)
+	for i in 6:
+		await process_frame
+	var map_in_schematic: bool = main.graph_edit.minimap_enabled
+	await main._set_patch_view(main.PatchView.GRAPH)
+	for i in 6:
+		await process_frame
+	check(not map_in_schematic and main.graph_edit.minimap_enabled,
+		"the graph's map is put away in the schematic lens and comes back in the graph")
 
 	# The rack can be panned beyond its frame, and has a map. The rackmap_holder is the case
 	# plus half a window of rack_slack on every side, the rack sits in the middle of it,

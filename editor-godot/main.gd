@@ -888,6 +888,10 @@ func _build_ui() -> void:
 	var minimap := _minimap_of(graph_edit)
 	if minimap != null:
 		minimap.z_index = 200
+		# Lifted out of its layer's draw order, the map must clip its own drawing: the
+		# camera rectangle it draws reaches past its edge whenever the graph's camera
+		# is off the nodes, which the schematic lens does on purpose.
+		(minimap as Control).clip_contents = true
 	# Opaque, now that it is a surface rather than a grey box: it was faded to hide
 	# how out of place it looked, which is treating the symptom.
 	graph_edit.minimap_opacity = 0.9
@@ -3404,6 +3408,9 @@ func _show_schematic(on: bool) -> void:
 		schematic.type_colours = TYPE_COLOURS
 		schematic.rebuild()
 		schematic.visible = true
+		# The graph's map means nothing here: its nodes are hidden and the camera is
+		# parked on the schematic, so the map drew a frame around nothing over the cards.
+		graph_edit.minimap_enabled = false
 		# So the canvas keeps placing it. Without this the schematic is positioned once
 		# and then sits there while the camera moves underneath it - fixed on screen
 		# while everything else zooms, which is exactly as wrong as it sounds.
@@ -3426,6 +3433,7 @@ func _show_schematic(on: bool) -> void:
 		_say("schematic: %d nodes on the grid" % (patch.get("nodes", []) as Array).size())
 	else:
 		schematic.visible = false
+		graph_edit.minimap_enabled = true
 		graph_edit.mount_up = false
 		graph_edit.mount_box = Rect2()
 		await _rebuild_view()
