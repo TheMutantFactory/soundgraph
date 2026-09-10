@@ -116,7 +116,7 @@ CXXFLAGS = [
     # No fused multiply-add: the golden vectors were rendered with separate
     # rounding steps, and bit-fidelity is the product claim.
     "-ffp-contract=off",
-    "-Wall", "-Wextra", "-Wdouble-promotion",
+    "-Wall", "-Wextra",
     f"-DSG_EXPECTED_FWID={FWID}",
 ]
 

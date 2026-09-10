@@ -43,21 +43,6 @@
       }
     },
     {
-      "id": "p_detune",
-      "type": "MidiCC",
-      "position": {
-        "x": 0.0,
-        "y": 600.0
-      },
-      "parameters": {
-        "cc": 4,
-        "low": 0.0,
-        "high": 0.05,
-        "resting": 0.14,
-        "glide": 15.0
-      }
-    },
-    {
       "id": "p_filter",
       "type": "StateVariableFilter",
       "position": {
@@ -350,6 +335,32 @@
       }
     },
     {
+      "id": "p_detune",
+      "type": "MidiCC",
+      "position": {
+        "x": 0.0,
+        "y": 600.0
+      },
+      "parameters": {
+        "cc": 4,
+        "low": 1.0,
+        "high": 1.035,
+        "resting": 0.14,
+        "glide": 15.0
+      }
+    },
+    {
+      "id": "p_bent_b",
+      "type": "Multiply",
+      "position": {
+        "x": 600.0,
+        "y": 300.0
+      },
+      "parameters": {
+        "factor": 1.0
+      }
+    },
+    {
       "id": "p_cutoff",
       "type": "MidiCC",
       "position": {
@@ -451,7 +462,7 @@
       }
     },
     {
-      "id": "p_pitch",
+      "id": "p_pitch_ratio",
       "type": "MidiCC",
       "position": {
         "x": 0.0,
@@ -459,8 +470,8 @@
       },
       "parameters": {
         "cc": 1,
-        "low": 0.0,
-        "high": 0.16666666666666666,
+        "low": 1.0,
+        "high": 1.122462048309373,
         "resting": 0.0,
         "glide": 5.0
       }
@@ -481,11 +492,14 @@
       }
     },
     {
-      "id": "p_fm_b",
-      "type": "Add",
+      "id": "p_bent",
+      "type": "Multiply",
       "position": {
         "x": 300.0,
-        "y": 600.0
+        "y": 300.0
+      },
+      "parameters": {
+        "factor": 1.0
       }
     },
     {
@@ -557,8 +571,8 @@
   "connections": [
     {
       "from": {
-        "node": "p_kb",
-        "port": "frequency"
+        "node": "p_bent",
+        "port": "out"
       },
       "to": {
         "node": "p_osc_a",
@@ -567,8 +581,8 @@
     },
     {
       "from": {
-        "node": "p_kb",
-        "port": "frequency"
+        "node": "p_bent_b",
+        "port": "out"
       },
       "to": {
         "node": "p_osc_b",
@@ -857,6 +871,16 @@
     },
     {
       "from": {
+        "node": "p_detune",
+        "port": "out"
+      },
+      "to": {
+        "node": "p_bent_b",
+        "port": "b"
+      }
+    },
+    {
+      "from": {
         "node": "p_cutoff",
         "port": "out"
       },
@@ -937,42 +961,32 @@
     },
     {
       "from": {
-        "node": "p_pitch",
-        "port": "out"
+        "node": "p_kb",
+        "port": "frequency"
       },
       "to": {
-        "node": "p_osc_a",
-        "port": "fm"
-      }
-    },
-    {
-      "from": {
-        "node": "p_detune",
-        "port": "out"
-      },
-      "to": {
-        "node": "p_fm_b",
+        "node": "p_bent",
         "port": "a"
       }
     },
     {
       "from": {
-        "node": "p_pitch",
+        "node": "p_pitch_ratio",
         "port": "out"
       },
       "to": {
-        "node": "p_fm_b",
+        "node": "p_bent",
         "port": "b"
       }
     },
     {
       "from": {
-        "node": "p_fm_b",
+        "node": "p_bent",
         "port": "out"
       },
       "to": {
-        "node": "p_osc_b",
-        "port": "fm"
+        "node": "p_bent_b",
+        "port": "a"
       }
     },
     {

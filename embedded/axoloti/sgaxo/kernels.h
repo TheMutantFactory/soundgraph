@@ -111,8 +111,11 @@ class Xorshift32 {
 // oscillator phase drift: derive constants, never recall them.)
 inline float exp2f_approx(float x) {
   const float xf = x < -126.0f ? -126.0f : (x > 127.0f ? 127.0f : x);
-  const int ip = (int)xf - (xf < (float)(int)xf ? 1 : 0);  // floor
-  const float r = xf - (float)ip;                          // [0,1)
+  // floor(xf) without a branch: xf + 128 is positive, so truncation is floor
+  // there, and 128 is exact in float, so the subtraction gives floor(xf) itself.
+  const float fl = (float)(int)(xf + 128.0f) - 128.0f;
+  const int ip = (int)fl;
+  const float r = xf - fl;                                  // [0,1)
   // Degree-8 least-squares fit of 2^r - 1 on Chebyshev nodes, exact at r=0.
   const float p = 1.0f +
       r * (0.6931471824645996f +

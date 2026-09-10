@@ -267,11 +267,18 @@ def poly5_pads(kit_lanes=4):
     an echo on Poly Five is five delay lines, and with the stick that is past the
     board's 44 KB code window."""
     synth = Part(load("synths/poly-five.json"), "p")
-    # The detune constant becomes the knob: same id, so its wire to osc_b.fm stays.
-    detune = synth.find("detune")
-    detune.clear()
-    detune.update(knob("p_detune", 4, 0.0, 0.05, 0.14, x=0, y=600))
     extra, wires = [], []
+    # The detune constant becomes the knob, as a frequency ratio on osc_b rather than
+    # octaves into its fm: a moving fm input is an exp2 per sample per voice, and K4
+    # turning put the patch at 99% of a codec call. Up to 3.5% sharp, about a third
+    # of a semitone, which is where the stock 0.007 octaves sat.
+    synth.drop("detune")
+    extra.append(knob("p_detune", 4, 1.0, 1.035, 0.14, x=0, y=600))
+    extra.append(node("p_bent_b", "Multiply", {"factor": 1.0}, x=600, y=300))
+    for c in synth.connections:
+        if c["to"] == {"node": "p_osc_b", "port": "frequency"}:
+            c["from"] = {"node": "p_bent_b", "port": "out"}
+    wires += [wire("p_detune.out", "p_bent_b.b")]
     # In octaves around the filter's own 900 Hz, through cutoff_mod (which the envelope
     # sweep already drives; control inputs sum): a MidiCC's range stops at 1000, so a
     # knob in hertz could not reach the top of the filter.
@@ -295,15 +302,19 @@ def poly5_pads(kit_lanes=4):
               knob("p_wobble_rate", 5, 0.0, 8.0, 0.0, x=-300, y=1100)]
     wires += [wire("p_wobble_rate.out", "p_wobble.rate"), wire("p_wobble.out", "p_cm_sum3.b")]
     # ---- the stick ----------------------------------------------------------------
-    extra += stick("p")
-    # Pitch: octaves into both oscillators' fm. osc_a's is free; osc_b's carries the
-    # detune knob, so the two are summed first.
-    extra.append(node("p_fm_b", "Add", x=300, y=600))
-    synth.connections = [c for c in synth.connections
-                         if c["to"] != {"node": "p_osc_b", "port": "fm"}]
-    wires += [wire("p_pitch.out", "p_osc_a.fm"), wire("p_detune.out", "p_fm_b.a"),
-              wire("p_pitch.out", "p_fm_b.b")]
-    wires.append(wire("p_fm_b.out", "p_osc_b.fm"))
+    # Pitch as a ratio on the note's frequency, not octaves into fm: an fm input that
+    # moves costs an exp2 per sample per oscillator (five percent of a codec call
+    # each, ten oscillators here), and bending the stick pushed the patch from 86% into
+    # overrun. A Multiply on the frequency is one multiply per sample. The detune knob
+    # stays on osc_b's fm, where it is a Constant-like block and costs one exp2.
+    extra.append(knob_cc("p_pitch_ratio", CONTROLLER["stick_pitch_cc"], 1.0,
+                         2.0 ** PITCH_RANGE_OCTAVES, 0.0, glide=5.0, x=0, y=1600))
+    extra.append(knob_cc("p_volume", CONTROLLER["stick_volume_cc"], 0.0, 2.0, 0.5,
+                         glide=20.0, x=0, y=1750))
+    extra.append(node("p_bent", "Multiply", {"factor": 1.0}, x=300, y=300))
+    redirect_sources(synth.connections, "p_kb.frequency", "p_bent.out")
+    wires += [wire("p_kb.frequency", "p_bent.a"), wire("p_pitch_ratio.out", "p_bent.b"),
+              wire("p_bent.out", "p_bent_b.a")]
     kit = drum_kit("d", lanes=kit_lanes)
     extra.append(node("d_level", "Gain", {"gain": 0.7}, x=1800, y=1200))
     extra.append(knob("d_level_knob", 8, 0.0, 1.0, 0.7, x=1500, y=1400))

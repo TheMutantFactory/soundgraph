@@ -210,8 +210,13 @@ the joystick: its CC axis bends the pitch up two semitones, its bend axis
 is the volume, left quieter and right louder. Poly Five carries no echo
 (the engine copies everything after the keyboard once per voice, and an
 echo there is five delay lines) and two drums, kick and snare: the five
-voices are 51% of a codec call and each drum about 6%. The game pads carry
-six sounds; eight were 96%. The bank asks for
+voices are 51% of a codec call and each drum about 6%. Its pitch bend and
+detune are ratios multiplied into the note's frequency rather than octaves
+into fm, because an fm input that moves is an exp2 per sample per
+oscillator and turning a knob pushed the patch from 86% into overrun; it
+sits at 83% with five notes held and 91% with every knob and both stick
+axes moving at once, and matches the native render to 1e-5. The game pads
+carry six sounds; eight were 96%. The bank asks for
 `"program_change": "prev-next"`: on the board program 0 is the previous
 entry, 1 the next, 2 the first, and every other number the entry it names,
 so the MPK's PROG CHANGE pads walk a bank of two hundred. A mk2 or a
