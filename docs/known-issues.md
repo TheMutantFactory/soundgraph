@@ -4,6 +4,18 @@ Open problems, ordered by how much they threaten the Knobcon demo.
 
 ## Open
 
+- **The 7-inch P4 board has no serial port on macOS.** Its CH340 enumerates as 1a86:7522,
+  which Apple's built-in CH34x driver does not match, so no `/dev/cu.*` ever appears and
+  `idf.py monitor`, `sg-serial.py --port /dev/...` and pyserial all have nothing to open.
+  `tools/esp32/ch340.py` reaches it from user space over libusb and the tools accept
+  `--port ch340`; installing WCH's DriverKit extension by hand would give every tool a
+  normal port back. The board's other USB-C is the P4's own USB-Serial-JTAG and needs no
+  driver, but the console is on the UART and that port is untested.
+- **The S3 build directory's sdkconfig has drifted from the defaults.**
+  `CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1` is `y` in `embedded/esp32-s3/sdkconfig` and
+  `n` in `sdkconfig.defaults`. ESP-IDF only reads the defaults when it generates a fresh
+  sdkconfig, so the drift survives every build and would vanish on a `rm sdkconfig`.
+  Left alone until after Knobcon; the demo runs on the drifted one.
 - **The Web Serial deploy button has never been clicked.** The web editor can push a patch
   straight into the board's NVS, and everything around it is verified, but the serial port
   chooser is gesture-gated by design so a human has to try it. This is step 7–9 of the

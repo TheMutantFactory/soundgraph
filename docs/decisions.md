@@ -1108,3 +1108,91 @@ hardware is the tripwire. Nodes with per-block schedules that depend on
 history (cutoff_sweep) stay refused until replicated. Patch switching remains
 stop/load/start. The subset grows kernel by kernel, each landing with its
 golden case.
+
+## 2026-09-10 — The board profile names the chip, and the P4 builds from the S3 tree
+
+Decision:
+`target` in board.json now selects the ESP-IDF target. `embedded/esp32-s3/CMakeLists.txt`
+reads it, sets `IDF_TARGET`, and layers `sdkconfig.defaults.<target>` over the shared
+`sdkconfig.defaults`. A build directory belongs to one target (`-B build-p4` for the P4);
+the P4 keeps its generated sdkconfig inside its build directory, the S3 keeps its own
+where it always was. The first P4 board is the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B,
+profile `esp32-p4-wifi6-touch-lcd-7b`, with its own partition table (6M app: the
+RISC-V binary with the DSI drivers is 3.4M) and PSRAM at 80 MHz (200 is behind
+IDF_EXPERIMENTAL_FEATURES in v5.5, and asking for it ungated lands on 20).
+
+Reason:
+The firmware was already target-agnostic in everything but its name: every pin comes
+from the generated board header, the console falls back to UART when USB-Serial-JTAG
+is configured out, and the DSP component is plain C++. What was S3-specific was one
+Kconfig line and the directory name. Making the profile the single thing a build is told
+keeps "board profile and processor target are separate" true in practice — the target is
+a fact about the board, and a build that had to be told both could be told them
+inconsistently.
+
+Alternatives:
+A second project directory (`embedded/esp32-p4/`) sharing `main/` — two CMake trees to
+keep in step for one line of difference. Renaming `esp32-s3/` to `esp-idf/` — right, and
+deferred: the day before Knobcon is not the day to move the directory the demo builds
+from. Do it after.
+
+Consequences:
+`idf.py set-target` is no longer the way to choose a chip and is not honoured; the
+S3 build directory keeps a pre-existing sdkconfig drift (`ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1`
+is `y` there and `n` in the defaults) that a regenerate would remove — noted in
+known-issues. Components that only exist for one target are declared with a rule
+(`if: target == esp32p4`) so the other target's build does not fetch them.
+
+## 2026-09-10 — MIPI-DSI is a display kind, and the framebuffer stays ours
+
+Decision:
+`display.kind` gains `mipi-dsi` beside `qspi`, with a `mipi` block (lanes, lane rate,
+PHY LDO channel and voltage) instead of a pin table. The display layer keeps its own
+framebuffer in PSRAM and presents with `draw_bitmap` as before; on the DSI panel that is
+a 2D-DMA copy into the panel's scan-out buffer, and the transfer-done callback is the
+panel's `on_color_trans_done` rather than the SPI IO's. RGB565, little-endian, because
+the DSI framebuffer is native 16-bit words where the QSPI panel was a byte stream.
+
+Reason:
+Every drawing primitive, clip rule and banded present the watch and the bar earned
+works unchanged on the new glass. Drawing straight into the panel's buffer would save
+one copy per present and cost tearing on every partial redraw, and the copy is a DMA
+engine's job on this chip, not the CPU's.
+
+Alternatives:
+Drawing into the panel's framebuffer directly with cache writeback in `present` —
+cheaper, and worth measuring once the kiosk's redraw pattern is known. LVGL — the vendor
+route, and a second UI vocabulary the firmware would then have to agree with.
+
+Consequences:
+1.2 MB of PSRAM for the framebuffer plus the panel's own; nothing at 32 MB. Rotation
+90/270 on a landscape-native panel means a full present per frame as on the bar. The
+GT911 has no interrupt wired on this board, so touch is polled; its two addresses are
+both tried, because which one a unit answers at is set by a line nobody connected.
+
+## 2026-09-10 — A serial port from user space, because macOS has no CH340 driver
+
+Decision:
+`tools/esp32/ch340.py` drives the 7B's CH340 (1a86:7522) over libusb from Python and
+presents pyserial's surface: `read`, `write`, `baudrate`, `dtr`, `rts`, timeouts. It does
+the ESP32 reset dance itself and hands esptool a connected loader with `--before
+no_reset`. `sg-serial.py --port ch340` and `SG_PORT=ch340 shoot.sh` use it.
+
+Reason:
+Apple's CH34x DriverKit extension matches product ids 7523 and 55d4 and not this one;
+the vendor's extension needs a password, a System Settings approval and a reboot, and is
+a thing to install on the bench Mac by hand rather than a thing a script can do. A device
+with no kernel driver attached is claimable from user space with no privileges at all,
+and the chip's protocol is four vendor requests and two bulk endpoints.
+
+Alternatives:
+The WCH driver — still the right answer for a machine where someone is willing to
+install it; nothing here prevents it, and a `/dev/cu.*` port would then work with
+every tool unchanged. The board's other USB-C is the P4's own USB-Serial-JTAG, which
+needs no driver; it is untested and the console is configured for the UART.
+
+Consequences:
+Reads run on a thread, always — the chip drops bytes the moment nobody is asking for
+them, and a boot log read on demand arrived with every fifth character missing.
+esptool's Unix reset strategy uses ioctl on a file descriptor the shim does not have, so
+the reset lives in the shim and esptool is told not to; flashing at 921600 works.

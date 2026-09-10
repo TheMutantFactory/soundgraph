@@ -34,7 +34,16 @@ EMBEDDED_TOLERANCE = 1.0e-4
 
 
 def open_port(port: str, baud: int) -> "serial.Serial":
-    connection = serial.Serial(port, baud, timeout=2)
+    if port == "ch340":
+        # A board behind a CH340 that macOS has no driver for: reached from user space
+        # over libusb instead of through a /dev node. See ch340.py, which is duck-typed
+        # to the parts of pyserial this file uses. Opening a real port resets the board
+        # as a side effect; this one has to be asked.
+        from ch340 import CH340Serial
+        connection = CH340Serial(baud, timeout=2)
+        connection.hard_reset()
+    else:
+        connection = serial.Serial(port, baud, timeout=2)
     # Opening the port resets the board (DTR/RTS toggle), so a burst of boot logging is
     # on its way. Drain until the line has been quiet for a moment rather than sleeping a
     # fixed time — the boot log's tail interleaving with the first command's response was
@@ -394,7 +403,9 @@ def do_abuse(connection: "serial.Serial", args) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--port", required=True, help="serial port, e.g. COM5 or /dev/ttyUSB0")
+    parser.add_argument("--port", required=True,
+                        help="serial port, e.g. COM5 or /dev/ttyUSB0; or `ch340` for a "
+                             "board reached through tools/esp32/ch340.py")
     parser.add_argument("--baud", type=int, default=115200)
     commands = parser.add_subparsers(dest="verb", required=True)
 

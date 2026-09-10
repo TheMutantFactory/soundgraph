@@ -18,6 +18,8 @@ bool touch_read_probe(int*, int*, int*, int*) { return false; }
 #include "esp_lcd_touch_ft5x06.h"
 #elif SG_TOUCH_CHIP_KIND == 2
 #include "esp_lcd_axs15231b.h"
+#elif SG_TOUCH_CHIP_KIND == 3
+#include "esp_lcd_touch_gt911.h"
 #endif
 #include "esp_log.h"
 
@@ -85,22 +87,18 @@ bool touch_init() {
         return false;
     }
 
-    esp_lcd_panel_io_handle_t io = nullptr;
-    // Field by field rather than ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG(): that macro is
-    // written for C, whose designated initializers may appear in any order, and C++
-    // requires declaration order. The address comes from the manifest, not the macro,
-    // because it is a fact about the board.
-    esp_lcd_panel_io_i2c_config_t io_config = {};
-    io_config.dev_addr = SG_TOUCH_I2C_ADDRESS;
-    io_config.scl_speed_hz = 400000;
-    io_config.control_phase_bytes = 1;
-    io_config.dc_bit_offset = 0;
-    io_config.lcd_cmd_bits = 8;
-    io_config.flags.disable_control_phase = 1;
-    if (esp_lcd_new_panel_io_i2c(bus, &io_config, &io) != ESP_OK) {
-        ESP_LOGE(TAG, "could not reach %s at 0x%02x", SG_TOUCH_CHIP, SG_TOUCH_I2C_ADDRESS);
-        return false;
-    }
+    // The GT911 has two addresses and chooses one at power-up from the state of its
+    // interrupt line, which on this board is not wired to anything — so which one this
+    // unit answers at is a fact about the unit, not the board. The manifest's is tried
+    // first and the other second, the way Waveshare's own BSP does it.
+#if SG_TOUCH_CHIP_KIND == 3
+    const int addresses[] = {SG_TOUCH_I2C_ADDRESS,
+                             SG_TOUCH_I2C_ADDRESS == ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS
+                                 ? ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP
+                                 : ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS};
+#else
+    const int addresses[] = {SG_TOUCH_I2C_ADDRESS};
+#endif
 
     esp_lcd_touch_config_t config = {};
     // The controller reports in panel coordinates, so its limits are the panel's, not
@@ -121,17 +119,43 @@ bool touch_init() {
     config.levels.reset = 0;
     config.levels.interrupt = 0;
 
-#if SG_TOUCH_CHIP_KIND == 2
-    if (esp_lcd_touch_new_i2c_axs15231b(io, &config, &g_touch) != ESP_OK) {
+    for (const int address : addresses) {
+        esp_lcd_panel_io_handle_t io = nullptr;
+        // Field by field rather than ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG(): that macro
+        // is written for C, whose designated initializers may appear in any order, and
+        // C++ requires declaration order. The address comes from the manifest, not the
+        // macro, because it is a fact about the board.
+        esp_lcd_panel_io_i2c_config_t io_config = {};
+        io_config.dev_addr = static_cast<uint32_t>(address);
+        io_config.scl_speed_hz = 400000;
+        io_config.control_phase_bytes = 1;
+        io_config.dc_bit_offset = 0;
+        // The FT parts and the AXS take an 8-bit register address; the GT911's register
+        // map is 16 bits wide, and a driver handed 8 reads the wrong half of it.
+        io_config.lcd_cmd_bits = SG_TOUCH_CHIP_KIND == 3 ? 16 : 8;
+        io_config.flags.disable_control_phase = 1;
+        if (esp_lcd_new_panel_io_i2c(bus, &io_config, &io) != ESP_OK) {
+            ESP_LOGE(TAG, "could not reach %s at 0x%02x", SG_TOUCH_CHIP, address);
+            continue;
+        }
+
+#if SG_TOUCH_CHIP_KIND == 3
+        const esp_err_t made = esp_lcd_touch_new_i2c_gt911(io, &config, &g_touch);
+#elif SG_TOUCH_CHIP_KIND == 2
+        const esp_err_t made = esp_lcd_touch_new_i2c_axs15231b(io, &config, &g_touch);
 #else
-    if (esp_lcd_touch_new_i2c_ft5x06(io, &config, &g_touch) != ESP_OK) {
+        const esp_err_t made = esp_lcd_touch_new_i2c_ft5x06(io, &config, &g_touch);
 #endif
-        ESP_LOGE(TAG, "%s would not initialise", SG_TOUCH_CHIP);
+        if (made == ESP_OK) {
+            ESP_LOGI(TAG, "%s up at 0x%02x", SG_TOUCH_CHIP, address);
+            return true;
+        }
+        ESP_LOGW(TAG, "%s did not answer at 0x%02x", SG_TOUCH_CHIP, address);
         g_touch = nullptr;
-        return false;
+        esp_lcd_panel_io_del(io);
     }
-    ESP_LOGI(TAG, "%s up at 0x%02x", SG_TOUCH_CHIP, SG_TOUCH_I2C_ADDRESS);
-    return true;
+    ESP_LOGE(TAG, "%s would not initialise", SG_TOUCH_CHIP);
+    return false;
 }
 
 bool touch_available() { return g_touch != nullptr; }

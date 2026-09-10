@@ -37,7 +37,25 @@ idf.py build flash monitor
 ```
 
 A different board: `idf.py -DSG_BOARD=<id> build`, where `<id>` is a directory under
-`embedded/boards/*/`.
+`embedded/boards/*/`. The board profile names the chip, so `set-target` is not needed
+and not honoured; a board on another chip wants its own build directory:
+
+```bash
+idf.py -DSG_BOARD=esp32-p4-wifi6-touch-lcd-7b -B build-p4 build     # the 7-inch P4
+```
+
+That board's USB-to-UART bridge has no macOS driver (see docs/known-issues.md), so from a
+Mac it is flashed and talked to through `tools/esp32/ch340.py` rather than a port name:
+
+```bash
+tools/esp32/ch340.py idf-flash embedded/esp32-s3/build-p4    # what idf.py flash would do
+tools/esp32/ch340.py monitor                                 # boot log after a reset
+tools/esp32/ch340.py cmd "screen test"                       # one console command
+tools/esp32/sg-serial.py --port ch340 verify-goldens
+```
+
+Run those with the IDF virtualenv's python (it has esptool and pyusb; `pip install pyusb`
+once if it does not).
 
 The defaults assume a DevKitC-1 **N8R8** (octal PSRAM). A quad-PSRAM variant needs
 `CONFIG_SPIRAM_MODE_QUAD` instead; the symptom of the wrong setting is a bootloop that

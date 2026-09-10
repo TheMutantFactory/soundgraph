@@ -42,7 +42,6 @@ bool display_test_card() { return false; }
 #include <cmath>
 #include <cstring>
 
-#include "driver/spi_master.h"
 #include "esp_heap_caps.h"
 #include "esp_memory_utils.h"
 #include "esp_lcd_panel_io.h"
@@ -50,12 +49,23 @@ bool display_test_card() { return false; }
 #include "esp_lcd_panel_vendor.h"
 // One panel per build. Both drivers would link happily, but a board carrying a driver
 // for a panel it does not have is a driver nobody ever tests on hardware.
+#if SG_DISPLAY_KIND == 2
+// MIPI-DSI: the P4's dedicated panel interface. No SPI bus, no pin table; a PHY that
+// needs powering, and a panel whose framebuffer the silicon scans out by itself.
+#include "esp_ldo_regulator.h"
+#include "esp_lcd_mipi_dsi.h"
+#include "esp_lcd_ek79007.h"
+#include "driver/ledc.h"
+#include "driver/gpio.h"
+#else
+#include "driver/spi_master.h"
 #if SG_DISPLAY_CHIP_KIND == 1
 #include "esp_lcd_sh8601.h"
 #elif SG_DISPLAY_CHIP_KIND == 2
 #include "esp_lcd_axs15231b.h"
 #include "driver/ledc.h"
 #include "driver/gpio.h"
+#endif
 #endif
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -193,19 +203,25 @@ uint8_t* g_fb = nullptr;
 // nothing at all. Waveshare's own port for this glass uses 16, and after reset timing
 // and byte order had both been ruled out, being right about the format mattered more
 // than the framebuffer being convenient.
-#if SG_DISPLAY_CHIP_KIND == 2
+//
+// The 7-inch DSI panel is RGB565 as well, but the other way round in memory. The QSPI
+// panel takes its pixels as a byte stream, high byte first; the DSI framebuffer is
+// scanned out by the chip as native 16-bit words, low byte first. Same format, opposite
+// order, and the wrong one shows every colour as some other colour.
+#if SG_DISPLAY_CHIP_KIND == 2 || SG_DISPLAY_CHIP_KIND == 3
 constexpr int kBytesPerPixel = 2;   // RGB565
 #else
 constexpr int kBytesPerPixel = 3;   // RGB888
 #endif
+constexpr bool kHighByteFirst = SG_DISPLAY_CHIP_KIND == 2;
 
 // Pack and unpack, so nothing above this line has to know which it is.
 inline void store_rgb(uint8_t* p, int r, int g, int b) {
-#if SG_DISPLAY_CHIP_KIND == 2
+#if SG_DISPLAY_CHIP_KIND == 2 || SG_DISPLAY_CHIP_KIND == 3
     const uint16_t packed = static_cast<uint16_t>(((r & 0xF8) << 8) |
                                                   ((g & 0xFC) << 3) | (b >> 3));
-    p[0] = static_cast<uint8_t>(packed >> 8);
-    p[1] = static_cast<uint8_t>(packed & 0xFF);
+    p[kHighByteFirst ? 0 : 1] = static_cast<uint8_t>(packed >> 8);
+    p[kHighByteFirst ? 1 : 0] = static_cast<uint8_t>(packed & 0xFF);
 #else
     p[0] = static_cast<uint8_t>(r);
     p[1] = static_cast<uint8_t>(g);
@@ -214,8 +230,10 @@ inline void store_rgb(uint8_t* p, int r, int g, int b) {
 }
 
 inline void load_rgb(const uint8_t* p, int* r, int* g, int* b) {
-#if SG_DISPLAY_CHIP_KIND == 2
-    const uint16_t packed = static_cast<uint16_t>((p[0] << 8) | p[1]);
+#if SG_DISPLAY_CHIP_KIND == 2 || SG_DISPLAY_CHIP_KIND == 3
+    const uint16_t packed = kHighByteFirst
+        ? static_cast<uint16_t>((p[0] << 8) | p[1])
+        : static_cast<uint16_t>((p[1] << 8) | p[0]);
     // Widened back to eight bits by replicating the high bits, not by shifting in zeros:
     // a full-scale 31 must come back as 255 or every read-modify-write darkens what it
     // touches, and an interface built out of blends would fade towards black.
@@ -235,12 +253,24 @@ inline void load_rgb(const uint8_t* p, int* r, int* g, int* b) {
 // because that is precisely what it is.
 SemaphoreHandle_t g_trans_done = nullptr;
 
+#if SG_DISPLAY_KIND != 2
 bool IRAM_ATTR on_trans_done(esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t*,
                              void*) {
     BaseType_t woken = pdFALSE;
     if (g_trans_done != nullptr) xSemaphoreGiveFromISR(g_trans_done, &woken);
     return woken == pdTRUE;
 }
+#else
+// The same signal from the DSI side. There the "transfer" is the 2D DMA engine copying
+// our rows into the framebuffer the panel scans out of; it completes in a different
+// callback with a different signature, and the driver insists it live in IRAM.
+bool IRAM_ATTR on_dpi_trans_done(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*,
+                                 void*) {
+    BaseType_t woken = pdFALSE;
+    if (g_trans_done != nullptr) xSemaphoreGiveFromISR(g_trans_done, &woken);
+    return woken == pdTRUE;
+}
+#endif
 
 int g_rotation = 0;
 
@@ -883,6 +913,92 @@ bool backlight_set(int percent) {
 #endif
 
 bool display_init() {
+#if SG_DISPLAY_KIND == 2
+    // The PHY's power first. VDD_MIPI_DPHY hangs off one of the chip's internal LDOs,
+    // and until that channel is acquired at 2.5 V the DSI controller initialises, the
+    // panel driver initialises, every call returns ESP_OK, and the glass shows nothing.
+    if (SG_DISPLAY_MIPI_LDO_CHANNEL >= 0) {
+        esp_ldo_channel_config_t ldo = {};
+        ldo.chan_id = SG_DISPLAY_MIPI_LDO_CHANNEL;
+        ldo.voltage_mv = SG_DISPLAY_MIPI_LDO_MV;
+        esp_ldo_channel_handle_t phy_power = nullptr;
+        if (esp_ldo_acquire_channel(&ldo, &phy_power) != ESP_OK) {
+            ESP_LOGE(TAG, "could not power the DSI PHY from LDO channel %d",
+                     SG_DISPLAY_MIPI_LDO_CHANNEL);
+            return false;
+        }
+    }
+
+    esp_lcd_dsi_bus_config_t bus = {};
+    bus.bus_id = 0;
+    bus.num_data_lanes = SG_DISPLAY_MIPI_LANES;
+    bus.phy_clk_src = MIPI_DSI_PHY_CLK_SRC_DEFAULT;
+    bus.lane_bit_rate_mbps = SG_DISPLAY_MIPI_LANE_MBPS;
+    esp_lcd_dsi_bus_handle_t dsi = nullptr;
+    if (esp_lcd_new_dsi_bus(&bus, &dsi) != ESP_OK) {
+        ESP_LOGE(TAG, "DSI bus would not start");
+        return false;
+    }
+
+    // Commands go over DBI, pixels over DPI: two paths on one bus, which is the shape
+    // of MIPI-DSI rather than a quirk of this panel.
+    esp_lcd_dbi_io_config_t dbi = {};
+    dbi.virtual_channel = 0;
+    dbi.lcd_cmd_bits = 8;
+    dbi.lcd_param_bits = 8;
+    if (esp_lcd_new_panel_io_dbi(dsi, &dbi, &g_io) != ESP_OK) {
+        ESP_LOGE(TAG, "panel IO would not start");
+        return false;
+    }
+
+    // The EK79007 component's own 60 Hz timing for this glass, written out rather than
+    // taken from its macro because the macro is a C designated initialiser and this is
+    // C++. 52 MHz pixel clock; 1024 + 160 + 160 + 10 by 600 + 23 + 12 + 1.
+    esp_lcd_dpi_panel_config_t dpi = {};
+    dpi.virtual_channel = 0;
+    dpi.dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT;
+    dpi.dpi_clock_freq_mhz = 52;
+    dpi.pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565;
+    dpi.num_fbs = 1;
+    dpi.video_timing.h_size = SG_DISPLAY_WIDTH;
+    dpi.video_timing.v_size = SG_DISPLAY_HEIGHT;
+    dpi.video_timing.hsync_pulse_width = 10;
+    dpi.video_timing.hsync_back_porch = 160;
+    dpi.video_timing.hsync_front_porch = 160;
+    dpi.video_timing.vsync_pulse_width = 1;
+    dpi.video_timing.vsync_back_porch = 23;
+    dpi.video_timing.vsync_front_porch = 12;
+    // The 2D DMA engine does the copy from our framebuffer into the panel's, and reports
+    // through on_dpi_trans_done. Without it the copy is a memcpy on the calling task.
+    dpi.flags.use_dma2d = true;
+
+    ek79007_vendor_config_t vendor = {};
+    vendor.mipi_config.dsi_bus = dsi;
+    vendor.mipi_config.dpi_config = &dpi;
+    vendor.mipi_config.lane_num = SG_DISPLAY_MIPI_LANES;
+
+    esp_lcd_panel_dev_config_t panel_config = {};
+    panel_config.reset_gpio_num = SG_DISPLAY_RESET;
+    panel_config.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB;
+    panel_config.bits_per_pixel = 16;
+    panel_config.vendor_config = &vendor;
+    if (esp_lcd_new_panel_ek79007(g_io, &panel_config, &g_panel) != ESP_OK) {
+        ESP_LOGE(TAG, "%s would not initialise", SG_DISPLAY_CHIP);
+        g_panel = nullptr;
+        return false;
+    }
+    esp_lcd_panel_reset(g_panel);
+    esp_lcd_panel_init(g_panel);
+    esp_lcd_panel_disp_on_off(g_panel, true);
+
+    esp_lcd_dpi_panel_event_callbacks_t callbacks = {};
+    callbacks.on_color_trans_done = on_dpi_trans_done;
+    if (esp_lcd_dpi_panel_register_event_callbacks(g_panel, &callbacks, nullptr) != ESP_OK) {
+        ESP_LOGE(TAG, "the panel would not take a transfer-done callback; presents "
+                      "would wait a second each for a signal that never comes");
+        return false;
+    }
+#else
     spi_bus_config_t bus = {};
     bus.sclk_io_num = SG_DISPLAY_QSPI_SCLK;
     bus.data0_io_num = SG_DISPLAY_QSPI_D0;
@@ -1025,7 +1141,10 @@ bool display_init() {
     // The controller's frame buffer is wider than the glass; without the gap every
     // pixel lands 22 columns left of where it was asked for.
     esp_lcd_panel_set_gap(g_panel, SG_DISPLAY_X_OFFSET, SG_DISPLAY_Y_OFFSET);
-#if SG_DISPLAY_CHIP_KIND == 2
+#endif  // SG_DISPLAY_KIND
+#if SG_DISPLAY_KIND == 2
+    // Turned on above, in the order the DSI driver wants.
+#elif SG_DISPLAY_CHIP_KIND == 2
     // Deliberately not calling esp_lcd_panel_disp_on_off here. The component wires its
     // slot to a function with the opposite sense:
     //

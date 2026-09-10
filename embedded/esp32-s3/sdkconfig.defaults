@@ -4,7 +4,7 @@
 # (N8R2/N16R8V differ), flip CONFIG_SPIRAM_MODE_OCT to CONFIG_SPIRAM_MODE_QUAD — the
 # symptom of getting it wrong is a bootloop mentioning PSRAM.
 
-CONFIG_IDF_TARGET="esp32s3"
+# The target is not set here: it comes from the board profile (see CMakeLists.txt).
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 # Custom table: the stock large-app table's 24KB NVS cannot re-store a patch past
 # ~8KB (NVS keeps old and new blobs during replacement) — see partitions.csv.

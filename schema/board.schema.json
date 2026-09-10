@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://soundgraph.dev/schema/board.schema.json",
   "title": "SoundGraph Board Profile",
-  "description": "Describes one physical board: which processor target it uses and how audio and controls are wired. A board profile is data consumed by the generic firmware \u2014 it must never alter graph semantics. Target (esp32-s3) and board (this file) are deliberately separate: the target defines architecture and memory constraints, the board defines pins and peripherals.",
+  "description": "Describes one physical board: which processor target it uses and how audio and controls are wired. A board profile is data consumed by the generic firmware — it must never alter graph semantics. Target (esp32-s3) and board (this file) are deliberately separate: the target defines architecture and memory constraints, the board defines pins and peripherals.",
   "type": "object",
   "required": [
     "schema_version",
@@ -159,8 +159,10 @@
           "type": "string",
           "enum": [
             "quad",
-            "octal"
-          ]
+            "octal",
+            "hex"
+          ],
+          "description": "Bus width of the PSRAM part: quad or octal SPI on the S3, the P4's 16-bit hex part. The symptom of the wrong mode is a bootloop that mentions PSRAM."
         },
         "megabytes": {
           "type": "integer"
@@ -213,9 +215,10 @@
         "kind": {
           "type": "string",
           "enum": [
-            "qspi"
+            "qspi",
+            "mipi-dsi"
           ],
-          "description": "How the panel is wired. Only quad SPI so far."
+          "description": "How the panel is wired. Quad SPI for the small AMOLED and bar panels; MIPI-DSI for the P4 boards, whose panel pins are dedicated silicon and need no table — the `mipi` block carries what the bus does need."
         },
         "chip": {
           "type": "string",
@@ -258,6 +261,33 @@
             }
           }
         },
+        "mipi": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "MIPI-DSI bus facts, for kind mipi-dsi. The lane count and rate come from the vendor's port for the glass; the PHY runs off one of the chip's internal LDO channels and is dead until that channel is acquired at the right voltage — a panel that never initialises, with no error anywhere, is what a missing LDO looks like.",
+          "properties": {
+            "lanes": {
+              "type": "integer",
+              "enum": [
+                1,
+                2
+              ],
+              "default": 2
+            },
+            "lane_bitrate_mbps": {
+              "type": "integer",
+              "description": "Per-lane bit rate. 1000 on the Waveshare 7B, per its BSP; the EK79007 component's own macro says 900."
+            },
+            "phy_ldo_channel": {
+              "type": "integer",
+              "description": "Internal LDO channel wired to VDD_MIPI_DPHY, or -1 if the PHY is powered externally."
+            },
+            "phy_ldo_mv": {
+              "type": "integer",
+              "default": 2500
+            }
+          }
+        },
         "reset": {
           "type": "integer"
         },
@@ -296,7 +326,7 @@
                 270
               ],
               "default": 0,
-              "description": "Degrees to rotate the controller's report to reach the display's logical frame. This is a fact about how the touch layer is mounted relative to the panel, and it is not the same number as the display's own rotation \u2014 the two were conflated, which was right for the watch by luck and sent fingers off the far end of the 3.49."
+              "description": "Degrees to rotate the controller's report to reach the display's logical frame. This is a fact about how the touch layer is mounted relative to the panel, and it is not the same number as the display's own rotation — the two were conflated, which was right for the watch by luck and sent fingers off the far end of the 3.49."
             }
           }
         },
@@ -317,7 +347,7 @@
         "expander": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Some panel control lines live on an I2C I/O expander rather than a chip GPIO. Where they do, `reset` and `backlight` above are -1 and the pin is named here instead \u2014 the distinction matters because an expander line costs an I2C transaction and cannot be driven from an ISR.",
+          "description": "Some panel control lines live on an I2C I/O expander rather than a chip GPIO. Where they do, `reset` and `backlight` above are -1 and the pin is named here instead — the distinction matters because an expander line costs an I2C transaction and cannot be driven from an ISR.",
           "properties": {
             "chip": {
               "type": "string"

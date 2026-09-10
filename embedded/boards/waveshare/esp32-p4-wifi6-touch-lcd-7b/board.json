@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "id": "esp32-p4-wifi6-touch-lcd-7b",
+  "name": "Waveshare ESP32-P4-WIFI6-Touch-LCD-7B",
+  "vendor": "waveshare",
+  "url": "https://www.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B",
+  "target": "esp32-p4",
+  "notes": "Identified from its own boot log rather than a label, because the label was behind a laser-cut bezel and the first guess was wrong: this was bought as 'a 7-inch ESP32 touchscreen' and the ROM banner reads esp32p4-eco2. The factory firmware (esp_brookesia_demo, IDF v5.5) names an EK79007 panel over MIPI-DSI, a GT911 touch controller, ES8311 out and ES7210 in on I2S, 32 MB hex PSRAM and a battery gauge; esptool reads the flash as 16 MB (the wiki says 32, the bootloader log says 16, esptool wins). Chip revision v1.3. Pins are from Waveshare's own board-support component (waveshare/esp32_p4_wifi6_touch_lcd_7b 3.0.1, which lists the codec, I2S, expander-free amp enable, backlight and reset lines), not the wiki, which has no pin table for this board at all. The display needs no pin table: MIPI-DSI on the P4 is dedicated silicon, and what the bus needs instead is a lane count, a lane rate and an internal LDO channel for the PHY. The backlight is a plain PWM GPIO and active low, as on the 3.49. Touch has neither an interrupt nor a reset line wired, so the driver polls, and the GT911 answers at 0x5d on this unit with 0x14 as the documented alternative the firmware also tries. The vendor BSP mirrors both touch axes, which in this profile's terms is a half turn; that is a claim to be checked with a finger and a camera, not a fact yet. The USB-to-UART bridge is a CH340 that enumerates as 1a86:7522, which macOS has no driver for — tools/esp32/ch340.py is how this board is reached from the bench Mac. There is a second USB-C on the chip's own USB-Serial-JTAG, untested.",
+  "audio_out": {
+    "kind": "codec",
+    "chip": "ES8311",
+    "sample_rate": 48000,
+    "bits": 16,
+    "i2s": {
+      "mclk": 13,
+      "bclk": 12,
+      "ws": 10,
+      "dout": 9
+    },
+    "i2c": {
+      "sda": 7,
+      "scl": 8,
+      "address": 24
+    },
+    "amp": {
+      "gpio": 53
+    }
+  },
+  "audio_in": {
+    "kind": "codec",
+    "chip": "ES7210",
+    "i2c_address": 64,
+    "i2s": {
+      "din": 11
+    },
+    "channels": 2,
+    "notes": "Dual microphones, as on the AUDIO-Board. Shares the ES8311's clocks."
+  },
+  "psram": {
+    "present": true,
+    "mode": "hex",
+    "megabytes": 32
+  },
+  "controls": [
+    {
+      "id": "screen",
+      "kind": "touch",
+      "pin": -1
+    },
+    {
+      "id": "boot_button",
+      "kind": "button",
+      "pin": 35
+    }
+  ],
+  "display": {
+    "kind": "mipi-dsi",
+    "chip": "EK79007",
+    "width": 1024,
+    "height": 600,
+    "mipi": {
+      "lanes": 2,
+      "lane_bitrate_mbps": 1000,
+      "phy_ldo_channel": 3,
+      "phy_ldo_mv": 2500
+    },
+    "reset": 33,
+    "te": -1,
+    "backlight": 32,
+    "touch": {
+      "chip": "GT911",
+      "i2c_address": 93,
+      "sda": 7,
+      "scl": 8,
+      "interrupt": -1,
+      "reset": -1,
+      "rotation": 180
+    },
+    "rotation": 0,
+    "corner_radius": 0,
+    "notes": "1024x600 landscape, mounted the way it is used. The first board where the panel and the UI agree on which way is up."
+  }
+}

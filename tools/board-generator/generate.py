@@ -17,7 +17,7 @@ from pathlib import Path
 # board naming a panel that is not here should not build.
 # Touch controllers this firmware has a driver for. FT3168 answers to the FT5x06 driver;
 # the AXS15231B is the panel controller doing double duty and has its own.
-TOUCH_CHIPS = {"FT3168": 1, "FT5X06": 1, "FT6336": 1, "AXS15231B": 2}
+TOUCH_CHIPS = {"FT3168": 1, "FT5X06": 1, "FT6336": 1, "AXS15231B": 2, "GT911": 3}
 
 
 def touch_chip_kind(touch):
@@ -29,7 +29,21 @@ def touch_chip_kind(touch):
     return TOUCH_CHIPS[chip]
 
 
-DISPLAY_CHIPS = {"SH8601": 1, "AXS15231B": 2}
+DISPLAY_CHIPS = {"SH8601": 1, "AXS15231B": 2, "EK79007": 3}
+
+# How the panel is wired, which decides which bus driver the firmware brings up before
+# it ever talks to the controller. The QSPI panels share one SPI path; a MIPI-DSI panel
+# has its own PHY, its own LDO and no pin table at all.
+DISPLAY_KINDS = {"qspi": 1, "mipi-dsi": 2}
+
+
+def display_kind(display):
+    kind = str(display.get("kind", "qspi")).lower()
+    if kind not in DISPLAY_KINDS:
+        raise SystemExit(
+            f"board-generator: no driver for display wiring '{display.get('kind')}'. "
+            f"Known: {', '.join(sorted(DISPLAY_KINDS))}.")
+    return DISPLAY_KINDS[kind]
 
 
 def display_chip_kind(display):
@@ -142,10 +156,12 @@ def main() -> None:
     display = board.get("display")
     if display:
         qspi = display.get("qspi", {})
+        mipi = display.get("mipi", {})
         touch = display.get("touch", {})
         lines += [
             "",
             "#define SG_DISPLAY_PRESENT 1",
+            f"#define SG_DISPLAY_KIND {display_kind(display)}",
             f'#define SG_DISPLAY_CHIP "{display["chip"]}"',
             # A number as well as a name, so the firmware selects a driver at compile
             # time instead of carrying every panel it has ever met. Unknown panels fail
@@ -166,6 +182,13 @@ def main() -> None:
             f"#define SG_DISPLAY_QSPI_D1 {qspi.get('d1', -1)}",
             f"#define SG_DISPLAY_QSPI_D2 {qspi.get('d2', -1)}",
             f"#define SG_DISPLAY_QSPI_D3 {qspi.get('d3', -1)}",
+            # The DSI bus, for panels wired that way. Defaults are the EK79007 component's
+            # own; the LDO channel defaults to none, and a board that has one must say so
+            # or the PHY stays unpowered and the panel stays dark without a word.
+            f"#define SG_DISPLAY_MIPI_LANES {mipi.get('lanes', 2)}",
+            f"#define SG_DISPLAY_MIPI_LANE_MBPS {mipi.get('lane_bitrate_mbps', 900)}",
+            f"#define SG_DISPLAY_MIPI_LDO_CHANNEL {mipi.get('phy_ldo_channel', -1)}",
+            f"#define SG_DISPLAY_MIPI_LDO_MV {mipi.get('phy_ldo_mv', 2500)}",
             f"#define SG_DISPLAY_RESET {display.get('reset', -1)}",
             f"#define SG_DISPLAY_TE {display.get('te', -1)}",
             # A transmissive panel needs a backlight pin; an AMOLED sets brightness with

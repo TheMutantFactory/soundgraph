@@ -48,3 +48,9 @@ bool mic_set_gain(float decibels);
 // the touch controller, the RTC, the PMIC — shares it rather than creating a second
 // master on the same wires, which would be a hardware fault rather than a software one.
 i2c_master_bus_handle_t codec_i2c_bus();
+
+// Tear the bus down and bring it back with or without the chip's internal pull-ups.
+// Bring-up only: every device handle opened on the old bus is dead afterwards. Exists
+// because a bus nobody answers on is either the pins or the pull-ups, and only one of
+// those can be changed from a console.
+bool codec_i2c_reopen(bool internal_pullup);

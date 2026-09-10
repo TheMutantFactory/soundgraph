@@ -1,0 +1,13 @@
+# The P4's table. Same shape as partitions.csv, sized for a chip with 16 MB of flash and
+# a bigger binary: the RISC-V build of the same firmware with the DSI, EK79007 and GT911
+# drivers came to 3.4 MB, which the S3's 3 MB factory slot refused. 6 MB leaves the same
+# proportion of headroom the S3 table had when it was cut.
+#
+# The bootloader sits at 0x2000 on this chip rather than 0x0, so the app starts at
+# 0x20000 as before but the table's own offset is the default 0x8000 either way.
+#
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     ,        0x10000,
+phy_init, data, phy,     ,        0x1000,
+factory,  app,  factory, ,        6M,
+model,    data, spiffs,  ,        4M,

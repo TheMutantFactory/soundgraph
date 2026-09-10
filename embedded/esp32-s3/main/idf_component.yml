@@ -22,3 +22,13 @@ dependencies:
   # controller, because on this part they are the same silicon — it answers at
   # 0x3b for touch on its own I2C bus, where the watch needs a separate FT3168.
   espressif/esp_lcd_axs15231b: "^2.0.2"
+  # The 7-inch P4 board's panel, over MIPI-DSI. Only fetched when building for the P4:
+  # the component declares esp32p4 as its one target, and the manager refuses a
+  # dependency the target cannot use rather than quietly leaving it out.
+  espressif/esp_lcd_ek79007:
+    version: "^2.0.2"
+    rules:
+      - if: "target == esp32p4"
+  # Its touch controller, a separate part this time and the one nearly every large
+  # capacitive panel ships with.
+  espressif/esp_lcd_touch_gt911: "^1.2"

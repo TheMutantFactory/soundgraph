@@ -1,0 +1,33 @@
+# What differs on the ESP32-P4. Applied after sdkconfig.defaults, so anything here wins.
+#
+# The P4 boards so far (the Waveshare 7B) carry 16 MB of flash and 32 MB of hex PSRAM.
+# The S3 symbols for octal mode and 240 MHz do not exist on this chip and are ignored
+# with a warning, which is why they are not un-set here.
+#
+# PSRAM at 80 MHz, not the 200 the vendor demo runs. 200 is gated behind
+# IDF_EXPERIMENTAL_FEATURES in v5.5, and naming it without that gate does not fall back
+# to 80: the choice silently lands on its 20 MHz default, which is a quarter of the
+# bandwidth a 1.2 MB framebuffer wants. Worth revisiting with the gate on, measured.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=n
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+# A larger factory slot: the P4 binary overflowed the S3's 3 MB one on the first build.
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-esp32p4.csv"
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
+
+# The console goes to UART0, which is the CH340 the bench Mac is actually plugged into.
+# The S3 boards put it on the chip's own USB-Serial-JTAG because that was the only port
+# they exposed; this board exposes both, and the UART is the one that works without a
+# driver macOS does not have (see tools/esp32/ch340.py).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=n
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Silicon revision. The chip on the first 7B is v1.3, and ESP-IDF's P4 support forks on
+# "before v3 or not" — the DSI PHY takes its clock from a legacy PLL on pre-v3 parts and
+# from the crystal on v3, chosen at compile time and not probed at run time. Waveshare
+# ships two config profiles for exactly this and the default is the v3 one. A rev3
+# board will need these two lines the other way round; a build for the wrong one
+# initialises the panel without a word of complaint and shows nothing.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y

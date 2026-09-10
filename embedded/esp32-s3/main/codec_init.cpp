@@ -8,6 +8,7 @@
 // hardware for this firmware to find either.
 bool codec_init(i2s_chan_handle_t, int) { return true; }
 i2c_master_bus_handle_t codec_i2c_bus() { return nullptr; }
+bool codec_i2c_reopen(bool) { return false; }
 bool codec_set_volume(float) { return false; }
 bool mic_init(i2s_chan_handle_t, int) { return false; }
 bool mic_available() { return false; }
@@ -305,5 +306,20 @@ bool mic_set_gain(float) { return false; }
 #endif  // SG_AUDIO_IN_PRESENT
 
 i2c_master_bus_handle_t codec_i2c_bus() { return g_i2c_bus; }
+
+bool codec_i2c_reopen(bool internal_pullup) {
+    if (g_i2c_bus != nullptr) {
+        i2c_del_master_bus(g_i2c_bus);
+        g_i2c_bus = nullptr;
+    }
+    i2c_master_bus_config_t bus_config = {};
+    bus_config.i2c_port = -1;
+    bus_config.sda_io_num = static_cast<gpio_num_t>(SG_CODEC_I2C_SDA);
+    bus_config.scl_io_num = static_cast<gpio_num_t>(SG_CODEC_I2C_SCL);
+    bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
+    bus_config.glitch_ignore_cnt = 7;
+    bus_config.flags.enable_internal_pullup = internal_pullup;
+    return i2c_new_master_bus(&bus_config, &g_i2c_bus) == ESP_OK;
+}
 
 #endif  // SG_AUDIO_IS_CODEC

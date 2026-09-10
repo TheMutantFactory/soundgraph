@@ -17,10 +17,17 @@ OUT=$2
 # to look at the bench is backwards, and it failed exactly when the board was in
 # pieces on the desk being identified.
 if [ -n "$CMD" ]; then
-"${SG_PYTHON:-$HOME/.espressif/python_env/idf5.5_py3.9_env/bin/python}" - "$PORT" "$CMD" <<'PY'
-import sys, time, serial
-port, cmd = sys.argv[1], sys.argv[2]
-s = serial.Serial(port, 115200, timeout=0.3)
+"${SG_PYTHON:-$HOME/.espressif/python_env/idf5.5_py3.9_env/bin/python}" - "$PORT" "$CMD" "$HERE/../esp32" <<'PY'
+import sys, time
+port, cmd, tools = sys.argv[1], sys.argv[2], sys.argv[3]
+# SG_PORT=ch340 is the 7-inch P4 board, whose UART bridge macOS has no driver for.
+if port == "ch340":
+    sys.path.insert(0, tools)
+    from ch340 import CH340Serial
+    s = CH340Serial(115200, timeout=0.3)
+else:
+    import serial
+    s = serial.Serial(port, 115200, timeout=0.3)
 time.sleep(0.4)
 s.write((cmd + "\n").encode())
 time.sleep(1.5)

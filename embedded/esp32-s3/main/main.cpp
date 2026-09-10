@@ -47,6 +47,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
+#include "driver/gpio.h"
 
 #if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
 #include "driver/usb_serial_jtag.h"
@@ -1349,6 +1350,45 @@ bool xy_touch(int x, int y, bool first) {
 }
 
 // ---------------------------------------------------------------------------------
+// Where the firmware thinks the finger is, drawn where it thinks it is.
+//
+// The `touch` log says raw and mapped numbers; this says them in a form a camera can
+// judge. A finger on a corner leaves a crosshair, and whether the crosshair is under the
+// finger is visible from across the desk. Marks accumulate on purpose: four corners and
+// a centre stay on the glass for one photograph.
+void draw_spot() {
+    if (!display_available()) return;
+    const int w = display_width(), h = display_height();
+    const uint32_t frame = display_rgb(70, 70, 90);
+    display_clear(display_rgb(8, 8, 12));
+    display_rect(0, 0, w, 3, frame);
+    display_rect(0, h - 3, w, 3, frame);
+    display_rect(0, 0, 3, h, frame);
+    display_rect(w - 3, 0, 3, h, frame);
+    const char* prompt = "TOUCH THE CORNERS";
+    display_text(w / 2 - display_text_width(prompt, 3) / 2, h / 2 - 10, prompt, 3,
+                 display_rgb(120, 120, 140));
+    display_present();
+}
+
+bool spot_touch(int x, int y, bool first) {
+    if (!first) return true;   // one mark per press; a drag would smear the evidence
+    const uint32_t lit = display_rgb(60, 255, 120);
+    display_line(static_cast<float>(x - 40), static_cast<float>(y),
+                 static_cast<float>(x + 40), static_cast<float>(y), 3.0f, lit);
+    display_line(static_cast<float>(x), static_cast<float>(y - 40),
+                 static_cast<float>(x), static_cast<float>(y + 40), 3.0f, lit);
+    display_disc(x, y, 7.0f, display_rgb(255, 255, 255));
+    // The numbers, where the last mark can be read back without a console.
+    char label[32];
+    std::snprintf(label, sizeof label, "%d,%d", x, y);
+    display_rect(8, 8, 200, 30, display_rgb(8, 8, 12));
+    display_text(8, 8, label, 3, lit);
+    display_present();
+    return true;
+}
+
+// ---------------------------------------------------------------------------------
 // Which set of knobs the finger is on.
 //
 // The touch task used to reach straight into the patch's controls and call draw_face,
@@ -1386,6 +1426,8 @@ const Surface kSliderSurface{&g_ui_controls, draw_sliders, face_changed,
                              slider_hit, slider_tapped, nullptr, sliders_redraw_moving};
 const Surface kXySurface{&g_ui_controls, draw_xy, face_changed,
                          nullptr, nullptr, xy_touch, nullptr};
+const Surface kSpotSurface{&g_ui_controls, draw_spot, face_changed,
+                           nullptr, nullptr, spot_touch, nullptr};
 const Surface* g_surface = &kFaceSurface;
 
 // A finger on a knob. Vertical drag rather than rotation: turning a real knob is a
@@ -1992,6 +2034,57 @@ void console_task(void*) {
 
         if (command == "info") {
             print_info();
+        } else if (command == "gpio") {
+            // Poke a pin. Bring-up on a board whose vendor documents three different
+            // reset lines is a series of "what if this one is held low" questions, and
+            // each of them is cheaper as a console command than as a reflash.
+            if (tokens.size() >= 4 && std::strcmp(tokens[1], "set") == 0) {
+                const int pin = std::atoi(tokens[2]);
+                const int level = std::atoi(tokens[3]);
+                gpio_config_t out = {};
+                out.pin_bit_mask = 1ULL << pin;
+                out.mode = GPIO_MODE_OUTPUT;
+                if (gpio_config(&out) == ESP_OK &&
+                    gpio_set_level(static_cast<gpio_num_t>(pin), level) == ESP_OK) {
+                    std::printf("OK gpio %d = %d\n", pin, level);
+                } else {
+                    std::printf("ERR gpio %d refused\n", pin);
+                }
+            } else if (tokens.size() >= 3 && std::strcmp(tokens[1], "get") == 0) {
+                const int pin = std::atoi(tokens[2]);
+                gpio_config_t in = {};
+                in.pin_bit_mask = 1ULL << pin;
+                in.mode = GPIO_MODE_INPUT;
+                gpio_config(&in);
+                std::printf("OK gpio %d reads %d\n", pin,
+                            gpio_get_level(static_cast<gpio_num_t>(pin)));
+            } else {
+                std::printf("ERR gpio set <pin> <0|1> | gpio get <pin>\n");
+            }
+        } else if (command == "i2c") {
+            // Who is on the codec's bus. A NAK from a part that ought to be there is
+            // either the part, the pins, or the bus, and a scan tells the three apart
+            // faster than a rebuild does.
+            if (tokens.size() >= 3 && std::strcmp(tokens[1], "pullup") == 0) {
+                const bool wanted = std::atoi(tokens[2]) != 0;
+                std::printf("%s i2c bus reopened, internal pull-ups %s\n",
+                            codec_i2c_reopen(wanted) ? "OK" : "ERR", wanted ? "on" : "off");
+                continue;
+            }
+            i2c_master_bus_handle_t bus = codec_i2c_bus();
+            if (bus == nullptr) {
+                std::printf("ERR no I2C bus on this board\n");
+            } else {
+                std::printf("OK i2c sda=%d scl=%d:", SG_CODEC_I2C_SDA, SG_CODEC_I2C_SCL);
+                int found = 0;
+                for (int address = 0x08; address <= 0x77; ++address) {
+                    if (i2c_master_probe(bus, static_cast<uint16_t>(address), 20) == ESP_OK) {
+                        std::printf(" 0x%02x", address);
+                        ++found;
+                    }
+                }
+                std::printf("%s\n", found ? "" : " nobody answers");
+            }
         } else if (command == "touch") {
             if (!touch_available()) {
                 std::printf("ERR no touch controller\n");
@@ -2104,6 +2197,12 @@ void console_task(void*) {
                 g_active_knob = -1;
                 draw_face();
                 std::printf("OK face\n");
+            } else if (tokens.size() >= 2 && std::strcmp(tokens[1], "spot") == 0) {
+                g_surface = &kSpotSurface;
+                g_active_knob = -1;
+                draw_spot();
+                std::printf("OK spot: every press leaves a crosshair at its mapped "
+                            "position; `touch` logs the numbers, `screen face` leaves\n");
             } else if (tokens.size() >= 2 && std::strcmp(tokens[1], "sweep") == 0) {
                 // A drag without a finger. The trail of end caps the sliders left behind
                 // was only ever visible mid-gesture, which meant it could not be seen in
