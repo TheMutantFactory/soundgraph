@@ -13,6 +13,16 @@ const RackView := preload("res://rack.gd")
 const SpeakText := preload("res://speak_text.gd")
 ## For its ceiling — the roll holds a fixed number of steps and typed text does not.
 const PianoRoll := preload("res://piano_roll.gd")
+## The transcriber's editor half. The parsing is reachable with no binary and no
+## audio anywhere near it, which is the only way a feature that shells out can be
+## checked on a machine that has not built the thing it shells out to.
+const Transcribe := preload("res://transcribe.gd")
+## The faceplate themes, and the rack colours they resolve to.
+const ModuleThemes := preload("res://module_themes.gd")
+## The generated faceplate finishes.
+const Faceplate := preload("res://faceplate.gd")
+## The third way of looking at a patch.
+const Schematic := preload("res://schematic.gd")
 ## Headless checks on the editor itself.
 ##
 ##   godot --headless --script res://editor_test.gd
@@ -2846,7 +2856,7 @@ func _initialize() -> void:
 		Rect2(main.widgets["lfo"].position_offset, main.widgets["lfo"].size)))
 	for i in 4:
 		await process_frame
-	main.face_edit_button.button_pressed = true
+	await main._set_face_edit(true)
 	for i in 3:
 		await process_frame
 	check(main.graph_edit.face_edit, "the toolbar button arms face edit")
@@ -2996,7 +3006,7 @@ func _initialize() -> void:
 	check(main.patch["nodes"].size() == seam_nodes_before,
 		"a click on the seam's own jack takes the whole seam out")
 
-	main.face_edit_button.button_pressed = false
+	await main._set_face_edit(false)
 	for i in 3:
 		await process_frame
 	check(not main.graph_edit.face_edit, "the button disarms the mode")
@@ -7504,6 +7514,493 @@ func _initialize() -> void:
 			== Design.scale(112),
 		"and full is the whole piano again")
 
+	# ---- faceplates ---------------------------------------------------------------
+	# A theme changes what a module is painted in and nothing else, so the checks are
+	# about resolution and about the document: which theme wins, and whether it is still
+	# there after a save.
+	check(ModuleThemes.resolve("", "") == ModuleThemes.CATEGORY
+		and ModuleThemes.resolve("", "oxide-teal") == "oxide-teal"
+		and ModuleThemes.resolve("ultraviolet", "oxide-teal") == "ultraviolet",
+		"a panel wears its own theme, then the rack's, then the category colours")
+	check(ModuleThemes.resolve("a-theme-from-the-future", "oxide-teal") == "oxide-teal",
+		"and a name this build has never heard of falls back rather than failing")
+
+	# The default has to be the rack that was already there. Every one of the eleven
+	# repaints the panel and drops the category stripe; none of them may do that by
+	# accident to somebody who never asked for a theme.
+	var unpainted: Dictionary = Rack.skin(ModuleThemes.CATEGORY)
+	check(unpainted["panel"] == Rack.PANEL and bool(unpainted["stripe"]),
+		"the category theme is the panel and the stripe this editor always drew")
+	var repainted := 0
+	for key in ModuleThemes.ORDER:
+		var paint: Dictionary = Rack.skin(str(key))
+		if paint["panel"] != Rack.PANEL and not bool(paint["stripe"]):
+			repainted += 1
+	check(repainted == ModuleThemes.ORDER.size(),
+		"and all %d themes repaint the panel and drop the stripe (%d)"
+			% [ModuleThemes.ORDER.size(), repainted])
+
+	# Four cable colours, handed to the four signal types in order - a theme may change
+	# what the signal language looks like and not that there is one.
+	var cabled := 0
+	for key in ModuleThemes.ORDER:
+		if ModuleThemes.cables(str(key)).size() == Rack.SIGNAL_ORDER.size():
+			cabled += 1
+	check(cabled == ModuleThemes.ORDER.size(),
+		"every theme carries one cable colour per signal type")
+
+	# ---- and the finish on them ----------------------------------------------------
+	# A theme names a surface as well as a colour, and for a while only the colour was
+	# drawn: worn edges, a halftone and a photocopy all came out as the same flat
+	# rectangle in three hues.
+	var named := 0
+	for key in ModuleThemes.ORDER:
+		var finish := str(ModuleThemes.THEMES[key].get("finish", ""))
+		if Faceplate.FINISHES.has(finish):
+			named += 1
+	check(named == ModuleThemes.ORDER.size(),
+		"every theme names a finish the generator knows (%d of %d)"
+			% [named, ModuleThemes.ORDER.size()])
+
+	# Built once. A rack redraws constantly and generating a tile per frame would be a
+	# quiet way to make scrolling cost a fortune.
+	check(Faceplate.texture("worn") == Faceplate.texture("worn"),
+		"a finish is generated once and kept")
+	check(Faceplate.texture("not-a-finish") == Faceplate.texture("matte"),
+		"and an unknown finish falls back to matte rather than to nothing")
+
+	# Each one has to actually be a different surface. The failure this guards against is
+	# not a crash - it is seven finishes that all quietly render the same speckle.
+	var signatures: Dictionary = {}
+	for finish in Faceplate.FINISHES:
+		var tile: Image = Faceplate.texture(str(finish)).get_image()
+		var marked := 0.0
+		for y in range(0, tile.get_height(), 4):
+			for x in range(0, tile.get_width(), 4):
+				marked += tile.get_pixel(x, y).a
+		signatures[str(finish)] = snappedf(marked, 0.01)
+	var distinct: Array = []
+	for value in signatures.values():
+		if not distinct.has(value):
+			distinct.append(value)
+	check(distinct.size() == Faceplate.FINISHES.size(),
+		"the %d finishes are %d different surfaces"
+			% [Faceplate.FINISHES.size(), distinct.size()])
+
+	# The halftone is the one with a shape rather than a scatter, and the way to say that
+	# is periodicity rather than loudness. It was written as "fewer marked pixels than the
+	# grains", which was true of the first draft and stopped being true the moment the
+	# others were quietened - a check that encodes a passing coincidence rather than the
+	# property. A dot screen repeats at its pitch; noise does not.
+	var pitch := 8
+	var repeats: Dictionary = {}
+	for finish in Faceplate.FINISHES:
+		var tile: Image = Faceplate.texture(str(finish)).get_image()
+		var same := 0
+		for x in tile.get_width():
+			if absf(tile.get_pixel(x, pitch).a
+					- tile.get_pixel((x + pitch) % tile.get_width(), pitch).a) < 0.01:
+				same += 1
+		repeats[str(finish)] = same
+	var noisiest := 0
+	for finish in Faceplate.FINISHES:
+		if str(finish) != "halftone":
+			noisiest = maxi(noisiest, int(repeats[str(finish)]))
+	check(int(repeats["halftone"]) == 96 and noisiest < 48,
+		"the halftone is a screen and the rest are not (%d of 96 against %d)"
+			% [int(repeats["halftone"]), noisiest])
+
+	# An unpainted rack draws no texture at all - the default is the panel it always was.
+	check(str(Rack.skin(ModuleThemes.CATEGORY).get("finish", "")) == "",
+		"the category default has no finish to lay over anything")
+	check(str(Rack.skin("oxide-teal").get("finish", "")) == "worn",
+		"and a painted one carries the surface its board described")
+
+	# ---- the schematic -------------------------------------------------------------
+	# The platonic view: not where somebody dragged things and not the instrument, but
+	# what feeds what, on a grid. The layout is the whole claim, so that is what is
+	# checked - a node has to be right of everything that feeds it, whatever the
+	# document says about positions.
+	var drawing := Schematic.new()
+	drawing.patch = {
+		"nodes": [
+			{"id": "out", "type": "StereoOutput", "name": "Output"},
+			{"id": "osc", "type": "SawOscillator", "name": "Oscillator"},
+			{"id": "env", "type": "AhdEnvelope", "name": "Pluck"},
+			{"id": "filter", "type": "StateVariableFilter", "name": "Filter"},
+			{"id": "clock", "type": "Clock", "name": "Sequence"},
+		],
+		"connections": [
+			{"from": {"node": "clock", "port": "out"}, "to": {"node": "env", "port": "gate"}},
+			{"from": {"node": "osc", "port": "out"}, "to": {"node": "filter", "port": "in"}},
+			{"from": {"node": "env", "port": "out"}, "to": {"node": "filter", "port": "cutoff"}},
+			{"from": {"node": "filter", "port": "out"}, "to": {"node": "out", "port": "left"}},
+		],
+	}
+	drawing.registry = main.registry
+	drawing.rebuild()
+
+	# Written in deliberately backwards document order above: out first, clock last. If
+	# the layout followed the file rather than the signal this would be wrong.
+	var feeds_first := true
+	for edge in drawing.patch["connections"]:
+		var feeder_card: Rect2 = drawing.card_of(str(edge["from"]["node"]))
+		var fed_card: Rect2 = drawing.card_of(str(edge["to"]["node"]))
+		if feeder_card.position.x >= fed_card.position.x:
+			feeds_first = false
+	check(feeds_first, "every node sits right of everything that feeds it")
+	check(drawing.card_of("clock").position.x < drawing.card_of("env").position.x
+		and drawing.card_of("env").position.x < drawing.card_of("filter").position.x
+		and drawing.card_of("filter").position.x < drawing.card_of("out").position.x,
+		"and the spine runs left to right however the file was written")
+
+	# osc feeds filter and nothing feeds osc, so it shares the first column with clock.
+	check(is_equal_approx(drawing.card_of("osc").position.x,
+			drawing.card_of("clock").position.x),
+		"two sources with nothing feeding them share a column")
+
+	# Same file, same picture. A view whose whole value is being independent of how the
+	# patch was drawn has to be independent of when it was drawn, too.
+	var first_pass: Dictionary = {}
+	for node in drawing.patch["nodes"]:
+		first_pass[str(node["id"])] = drawing.card_of(str(node["id"]))
+	drawing.rebuild()
+	var same_twice := true
+	for node in drawing.patch["nodes"]:
+		if drawing.card_of(str(node["id"])) != first_pass[str(node["id"])]:
+			same_twice = false
+	check(same_twice, "and laying it out twice puts everything in the same place")
+	drawing.free()
+
+	# Through the editor: it hides the wiring, and it does not touch the document.
+	var before_looking := JSON.stringify(main.patch)
+	var was_unsaved: bool = main.unsaved
+	await main._show_schematic(true)
+	for i in 8:
+		await process_frame
+	var put_away := 0
+	var still_up := 0
+	for child in main.graph_edit.get_children():
+		if child is GraphNode:
+			if (child as GraphNode).visible:
+				still_up += 1
+			else:
+				put_away += 1
+	check(main.schematic.visible and still_up == 0 and put_away > 0,
+		"turning to the schematic puts the wiring away (%d hidden)" % put_away)
+	check(JSON.stringify(main.patch) == before_looking and main.unsaved == was_unsaved,
+		"and looking at a patch is not an edit to it")
+
+	# It is a tenant on the graph's canvas, so it has to move with the camera. It did
+	# not: the canvas only asks for its mounts to be placed while a *face* is up, so the
+	# schematic was positioned once and then sat there at a fixed size while everything
+	# around it zoomed.
+	check(main.graph_edit.mount_up,
+		"the canvas knows something is mounted on it")
+
+	# And it cannot draw outside the work area. GraphEdit clips its own nodes, but the
+	# face and the schematic are tenants of the tab rather than children of the graph,
+	# and a plain Control does not clip - so a mount wider than the viewport drew over
+	# the inspector beside it.
+	var work_area := main.graph_edit.get_parent() as Control
+	check(work_area != null and work_area.clip_contents,
+		"the work area clips whatever is mounted in it")
+
+	# Clipping the tab was not enough on its own. The tab includes the scrollbar gutter
+	# and the zoom cluster, so a schematic wider than the view stopped being drawn over
+	# the inspector and started disappearing under the scrollbars instead. The mount sits
+	# in the graph's usable rectangle - the same one fit_to frames against, so what
+	# arrives fitted stays fitted.
+	var usable: Rect2 = main.graph_edit.usable_rect()
+	check(main.mount_area != null and main.mount_area.clip_contents
+		and main.mount_area.position.is_equal_approx(usable.position)
+		and main.mount_area.size.is_equal_approx(usable.size),
+		"and the schematic is mounted clear of the scrollbars, not under them")
+	var followed := true
+	for wanted_zoom in [0.4, 0.9, 1.25]:
+		main.graph_edit.zoom = wanted_zoom
+		for i in 4:
+			await process_frame
+		if not is_equal_approx(main.schematic.scale.x, wanted_zoom):
+			followed = false
+	check(followed, "and the schematic zooms with it rather than staying one size")
+
+	# And it arrives framed. Its grid is a different shape and usually a different size
+	# from the drawing it replaces, so opening it at whatever zoom the old layout left
+	# behind puts it off the side of the window.
+	await main._show_schematic(false)
+	for i in 6:
+		await process_frame
+	main.graph_edit.zoom = 1.6
+	await main._show_schematic(true)
+	for i in 8:
+		await process_frame
+	check(main.graph_edit.zoom < 1.6,
+		"opening it frames it rather than keeping the old zoom (%.2f)"
+			% main.graph_edit.zoom)
+
+	await main._show_schematic(false)
+	for i in 8:
+		await process_frame
+	check(not main.schematic.visible,
+		"and turning back brings the wiring out again")
+
+	# The two modes are on the case band beside Face view, and they exclude each other.
+	# Face edit works by clicking the knobs on the nodes and the schematic hides the
+	# nodes, so both at once is a mode that is lit and does nothing.
+	await main._set_face_edit(true)
+	for i in 4:
+		await process_frame
+	await main._show_schematic(true)
+	for i in 8:
+		await process_frame
+	check(main.schematic.visible and not main.graph_edit.face_edit,
+		"turning on the schematic turns face edit off")
+
+	# The way out has to be on screen. The case band is measured from the nodes, and the
+	# schematic hides them - so the band went with them, and with it every control for
+	# leaving. It was a room with no door.
+	var exits: Dictionary = main.graph_edit._case_chip_rects()
+	check(exits.size() == 4 and main.graph_edit.case_box().size.x > 0.0,
+		"the schematic keeps the band, so there is a way back out of it (%d chips)"
+			% exits.size())
+	check(main.graph_edit._chip_lit("schematic") and not main.graph_edit._chip_lit("graph"),
+		"and the lit chip is the view you are actually in")
+	# And the band stops being a drag handle while it is up: there are no visible nodes
+	# under it, so a drag would move things nobody can see and leave an undo step behind.
+	check(main.graph_edit.mount_up,
+		"and the band knows it is not a handle just now")
+
+	# The face has the same three, and the door is labelled with where it goes. It used to
+	# be a floating WIRES button in the corner of the canvas - the only control of the four
+	# that was not on the band, and the only one that said what you were leaving rather
+	# than where you were going.
+	await main._show_schematic(false)
+	for i in 6:
+		await process_frame
+	await main._flip_container(true)
+	for i in 12:
+		await process_frame
+	var face_chips: Dictionary = main.graph_edit._case_chip_rects()
+	check(main.graph_edit.face_up and face_chips.size() == 4,
+		"the face carries the same four controls (%d)" % face_chips.size())
+	# GRAPH is a chip of its own now, so the door keeps one name everywhere. It used to
+	# be FACE VIEW from the graph and GRAPH from the face - one control with two names,
+	# which reads well enough with two views and stops meaning anything with three.
+	check(main.graph_edit._chip_label("face_view") == "FACE VIEW"
+		and main.graph_edit._chip_lit("face_view")
+		and not main.graph_edit._chip_lit("graph"),
+		"the face lights its own chip, and GRAPH is a separate way back")
+
+	# The band follows the panel rather than the case it replaced. The face is stretched to
+	# at least the width of the nodes it covers, so on a wide patch most of that is empty
+	# canvas - and chips measured from it ended up out there on their own.
+	check(is_equal_approx(main.graph_edit.case_box().size.x, main.big_face.full_width()),
+		"with the band over the panel, not over the empty canvas beside it")
+
+	# The face hugs its panels rather than stretching to the case it replaced. It used to
+	# take the width of the wiring — 2812 units against a 513-unit panel on first-synth —
+	# and everything positioned against that width went out into the empty part with it:
+	# the chips, and the face's own name, which is a centred label.
+	check(is_equal_approx(main.big_face.size.x, main.big_face.full_width()),
+		"the face is as wide as its panels and no wider (%d)" % int(main.big_face.size.x))
+
+
+	# And the door swings both ways now.
+	main.graph_edit.case_flipped.emit()
+	for i in 12:
+		await process_frame
+	check(not main.graph_edit.face_up and not main.big_face.visible,
+		"pressing it on the face comes back to the graph")
+
+	# ---- every way of getting from one view to another ------------------------------
+	# Three views, six transitions, and they were being added one at a time - each new
+	# one wired against the state it was written from. Face view never turned the
+	# schematic off, so coming to the face from the schematic drew the panel on top of
+	# the grid and left both mounted at once.
+	#
+	# Walked as a table rather than as prose, because the fault is never in the
+	# transition somebody was thinking about.
+	var views_seen: Array = []
+	for step in ["wires", "face", "schematic", "wires", "schematic", "face", "wires"]:
+		match str(step):
+			"wires":
+				if main.graph_edit.face_up:
+					await main._flip_container(false)
+				if main.schematic_up:
+					await main._show_schematic(false)
+			"face":
+				await main._flip_container(true)
+			"schematic":
+				await main._show_schematic(true)
+		for i in 12:
+			await process_frame
+
+		# Exactly one of the three is showing. The nodes count as the third: wires is a
+		# view like the others, it just happens to be the one made of real controls.
+		var nodes_up := false
+		for child in main.graph_edit.get_children():
+			if child is GraphNode and (child as GraphNode).visible:
+				nodes_up = true
+		var showing: Array = []
+		if nodes_up:
+			showing.append("wires")
+		if main.big_face.visible:
+			showing.append("face")
+		if main.schematic.visible:
+			showing.append("schematic")
+		views_seen.append("%s->%s" % [step, ",".join(showing)])
+		check(showing.size() == 1 and showing[0] == step,
+			"%s shows %s and nothing else" % [step, step]
+				if showing.size() == 1 and showing[0] == step
+				else "going to %s left %s showing" % [step, str(showing)])
+
+	# And the mount the canvas is told about has to agree with what is actually up, or
+	# the band ends up measured against a view that is not there.
+	check(not main.graph_edit.mount_up and main.graph_edit.mount_box.size.x <= 0.0,
+		"back at the wiring, the canvas is holding no mount")
+
+	# GRAPH gets you home from either of the other two, and is a no-op when you are
+	# already there. Not a toggle: the wiring is the view the others are departures from.
+	for from_view in ["schematic", "face"]:
+		if from_view == "schematic":
+			await main._show_schematic(true)
+		else:
+			await main._flip_container(true)
+		for i in 10:
+			await process_frame
+		main.graph_edit.case_graph_requested.emit()
+		for i in 12:
+			await process_frame
+		check(not main.big_face.visible and not main.schematic.visible
+			and main.graph_edit._chip_lit("graph"),
+			"GRAPH comes home from the %s" % from_view)
+	main.graph_edit.case_graph_requested.emit()
+	for i in 8:
+		await process_frame
+	check(main.graph_edit._chip_lit("graph") and not main.big_face.visible,
+		"and pressing it again from the graph changes nothing")
+
+	await main._set_face_edit(true)
+	for i in 8:
+		await process_frame
+	check(main.graph_edit.face_edit and not main.schematic_up
+		and not main.schematic.visible,
+		"and turning on face edit turns the schematic off and goes back to the wiring")
+	await main._set_face_edit(false)
+	for i in 4:
+		await process_frame
+
+	# All three live on the band, in reading order.
+	var chips: Dictionary = main.graph_edit._case_chip_rects()
+	check(chips.has("face_edit") and chips.has("schematic") and chips.has("face_view"),
+		"the case band carries all three ways of looking at the patch")
+	if chips.size() == 3:
+		check((chips["face_edit"] as Rect2).position.x < (chips["schematic"] as Rect2).position.x
+			and (chips["schematic"] as Rect2).position.x < (chips["face_view"] as Rect2).position.x,
+			"with face edit and schematic to the left of face view")
+
+	# And through the editor, as document edits.
+	var before_painting := JSON.stringify(main.patch)
+	await main._load_example("First Synth")
+	for i in 6:
+		await process_frame
+	main._set_patch_theme("acid-mustard")
+	await process_frame
+	check(str(main.patch.get("arrangement", {}).get("theme", "")) == "acid-mustard",
+		"the rack's panels are a fact about the patch, not about this machine")
+
+	var first_node := str((main.patch["nodes"][0] as Dictionary)["id"])
+	main._set_module_theme(first_node, "ultraviolet")
+	await process_frame
+	check(str((main.patch["nodes"][0] as Dictionary).get("theme", "")) == "ultraviolet",
+		"and one panel can be repainted on its own")
+
+	# Through text and back, which is where the last two cosmetic sections were lost.
+	var painted_text := JSON.stringify(main.patch)
+	await main._load_text(painted_text)
+	for i in 6:
+		await process_frame
+	check(str(main.patch.get("arrangement", {}).get("theme", "")) == "acid-mustard"
+		and str((main.patch["nodes"][0] as Dictionary).get("theme", "")) == "ultraviolet",
+		"and both survive a save and reload")
+
+	main._set_module_theme(first_node, "")
+	await process_frame
+	check(not (main.patch["nodes"][0] as Dictionary).has("theme"),
+		"putting a panel back on the rack's leaves no trace of the override")
+	main._set_patch_theme(ModuleThemes.CATEGORY)
+	await process_frame
+	check(str(main.patch.get("arrangement", {}).get("theme", "")) == "",
+		"and the default is stored as nothing at all, not as the word for it")
+
+	await main._load_text(before_painting)
+	for i in 6:
+		await process_frame
+
+	# ---- a recording becomes the roll -------------------------------------------
+	# The parsing first, which needs neither the binary nor a sound file. sg-transcribe
+	# writes a whole patch and only its roll is wanted, so what comes back has to be
+	# picked out of it - and a recording with nothing in it must read as nothing rather
+	# than as an empty tune quietly replacing the one already there.
+	check(Transcribe.sequence_from(JSON.stringify({
+		"sequence": {"tempo": 120.0, "division": 4, "steps": 16,
+			"notes": [{"step": 0, "note": 60, "length": 4}]}})).has("notes"),
+		"a transcribed patch gives up its roll")
+	check(Transcribe.sequence_from(JSON.stringify({"nodes": []})).is_empty()
+		and Transcribe.sequence_from(JSON.stringify({
+			"sequence": {"notes": []}})).is_empty()
+		and Transcribe.sequence_from("not json at all").is_empty(),
+		"and a recording with no notes in it reads as nothing, not as an empty tune")
+
+	# The patch handed over to be written into is deliberately empty: the roll is the
+	# only part wanted back, and sending the open document through somebody else's
+	# writer to retrieve one section would be risk without gain.
+	var carrier: Variant = JSON.parse_string(Transcribe.carrier_text())
+	check(carrier is Dictionary and (carrier as Dictionary).has("nodes")
+		and ((carrier as Dictionary)["nodes"] as Array).is_empty(),
+		"the patch it writes into carries nothing of its own")
+
+	# And the menu says so when there is nothing to run. The binary is optional - it
+	# needs a machine-learning runtime - so this must be a sentence rather than a
+	# silence or a crash.
+	var transcriber := Transcribe.binary_path()
+	check(transcriber == "" or FileAccess.file_exists(transcriber),
+		"the transcriber is either found or honestly absent")
+	if transcriber == "":
+		var refused: Dictionary = Transcribe.run("nothing.wav", 120.0, 4)
+		check(not bool(refused["ok"]) and str(refused["error"]).contains("sg-transcribe"),
+			"and with none built, it points at the README rather than failing silently")
+	else:
+		# End to end, over the MP3 committed for exactly this. Six notes were played into
+		# that file; six notes should come back out of it and into the document.
+		var stage_before := JSON.stringify(main.patch)
+		var fixture := ProjectSettings.globalize_path(
+			"res://../tools/sg-transcribe/fixtures/melody.mp3")
+		if not FileAccess.file_exists(fixture):
+			check(false, "the MP3 fixture is missing")
+		else:
+			main._set_roll_open(false)
+			await main._transcribe_audio_file(fixture)
+			for i in 8:
+				await process_frame
+			var transcribed: Dictionary = main.patch.get("sequence", {})
+			var came_back: Array = []
+			for heard_note in transcribed.get("notes", []):
+				came_back.append(int(heard_note["note"]))
+			check(came_back == [60, 64, 67, 72, 67, 64],
+				"a recording transcribes into the roll as the notes that were played (%s)"
+					% str(came_back))
+			check(main.roll_open, "and the roll opens on what it heard")
+			await main._undo()
+			for i in 6:
+				await process_frame
+			check(main.patch.get("sequence", {}) != transcribed,
+				"and one undo takes the whole recording back out")
+			await main._load_text(stage_before)
+			for i in 6:
+				await process_frame
+
 	# The letters on the keys are training wheels somebody can take off. The size
 	# radios and the hints checkbox share one popup, so flipping the size must not
 	# blow the checkbox away.
@@ -9189,7 +9686,8 @@ func _initialize() -> void:
 		(wheel_knob as RackView.Knob).set_value_silently(
 			(wheel_knob as RackView.Knob)._to_value(held))
 
-	main.wires_button.pressed.emit()
+	# The floating WIRES button is gone; the door is a chip on the band now.
+	main.graph_edit.case_flipped.emit()
 	for i in 10:
 		await process_frame
 	var wires_back := 0

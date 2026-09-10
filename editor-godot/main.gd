@@ -104,6 +104,9 @@ const DeviceBlurbs := preload("res://device_blurbs.gd")
 const FeedbackSubmitter := preload("res://feedback_submitter.gd")
 const WavImport := preload("res://wav_import.gd")
 const MidiImport := preload("res://midi_import.gd")
+const Transcribe := preload("res://transcribe.gd")
+const ModuleThemes := preload("res://module_themes.gd")
+const Schematic := preload("res://schematic.gd")
 const SpeakText := preload("res://speak_text.gd")
 const ProbeScope := preload("res://probe_scope.gd")
 
@@ -186,7 +189,12 @@ var graph_edit: GraphEdit
 ## The container turned over: the file's face, full size, in the Graph tab's slot.
 ## Same class as the side panel's face — one face, two mountings.
 var big_face: PatchFace
-var wires_button: Button
+## The third way of looking at a patch: not where somebody dragged things, and not the
+## instrument, but the graph itself on a grid nobody has moved. See schematic.gd.
+var schematic: Schematic
+## The clipped region the schematic is mounted in. See where it is built.
+var mount_area: Control
+var schematic_up := false
 ## Which open modules are turned over, and the ModuleFace mounted for each. Session
 ## state, like which side the file's case shows: nothing here is written to the patch.
 var flipped_modules := {}
@@ -200,7 +208,6 @@ var flipped_nodes := {}
 ## seams — and climbing writes the edits back into the host as one undo step.
 var dive_stack: Array = []
 var climb_button: Button
-var face_edit_button: Button
 
 # The piano roll and its transport. The clock lives here with the engine; the roll
 # itself only draws and points.
@@ -219,6 +226,7 @@ var roll_tempo: ValueField
 var roll_division: ValueField
 var roll_bars_menu: PopupMenu
 var midi_dialog: FileDialog
+var audio_dialog: FileDialog
 var roll_open := false
 var roll_playing := false
 var _roll_clock := 0.0
@@ -748,13 +756,10 @@ func _build_ui() -> void:
 	graph_edit.show_zoom_label = true
 	# Face edit, beside the zoom controls it shares a bar with: a mode, so a toggle,
 	# and it lives on the graph because the graph is where the pointing happens.
-	face_edit_button = Button.new()
-	face_edit_button.toggle_mode = true
-	face_edit_button.text = "Face edit"
-	face_edit_button.tooltip_text = "Dress the face from the graph: click a knob to put " \
-		+ "it on the panel, click it again to take it off. Lit frames are on the face."
-	face_edit_button.toggled.connect(_set_face_edit)
-	graph_edit.get_menu_hbox().add_child(_defocus(face_edit_button))
+	# Face edit and Schematic used to live here, beside the zoom cluster. They are on the
+	# case band now, next to Face view: all three answer "how am I looking at this
+	# patch", and two of them above the canvas with the third on the case meant the set
+	# never read as a set. See _case_chip_rects in patch_graph.gd.
 	# Fit, beside the zoom controls: framing is a camera move, so it lives with the
 	# camera. It spent time in the toolbar and before that in the Arrange menu; this
 	# strip is the first home where its neighbours are also about looking.
@@ -806,7 +811,16 @@ func _build_ui() -> void:
 	# The container's own controls: its band switches which way you are looking at it,
 	# and dragging that band moves everything mounted in it.
 	graph_edit.case_move_started.connect(func() -> void: _begin_edit())
-	graph_edit.case_flipped.connect(func() -> void: _flip_container(true))
+	# One door, both ways. It used to only ever turn the case face-up, with a floating
+	# WIRES button in the corner as the way back; the button is gone and the chip does
+	# both, labelled with the side you will get.
+	graph_edit.case_flipped.connect(
+		func() -> void: await _flip_container(not graph_edit.face_up))
+	graph_edit.case_face_edit_toggled.connect(
+		func() -> void: _set_face_edit(not graph_edit.face_edit))
+	graph_edit.case_schematic_toggled.connect(
+		func() -> void: await _show_schematic(not schematic_up))
+	graph_edit.case_graph_requested.connect(func() -> void: await _show_graph())
 	graph_edit.group_flip_toggled.connect(func(module_name: String) -> void:
 		if flipped_modules.has(module_name):
 			flipped_modules.erase(module_name)
@@ -930,9 +944,38 @@ func _build_ui() -> void:
 	# every camera gesture keeps working because it is the same camera.
 	var container_tab := Control.new()
 	container_tab.name = "Graph"
+	# Clipped to the work area.
+	#
+	# GraphEdit clips its own nodes, but the face and the schematic are tenants of this
+	# container rather than children of the graph, and a plain Control does not clip. So
+	# a mount wider than the viewport drew straight over the inspector beside it — the
+	# schematic's last card sat on top of "point the probe at a wire". Whatever is
+	# mounted here is looking at the patch, and the patch's window ends where the panel
+	# begins.
+	container_tab.clip_contents = true
 	graph_edit.name = "Wires"
 	graph_edit.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	container_tab.add_child(graph_edit)
+
+	# The region a mount is allowed to occupy: the graph's usable rectangle, which is its
+	# own size less the scrollbars and the zoom cluster.
+	#
+	# Clipping the whole tab was not enough. The tab includes the gutters, so a schematic
+	# wider than the view stopped being drawn over the inspector and started disappearing
+	# *underneath the scrollbars* instead — still the wrong picture, just a smaller wrong.
+	# Sized from usable_rect() every frame, the same rectangle fit_to() frames against, so
+	# what arrives fitted stays fitted.
+	mount_area = Control.new()
+	mount_area.name = "MountArea"
+	mount_area.clip_contents = true
+	mount_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	container_tab.add_child(mount_area)
+
+	schematic = Schematic.new()
+	schematic.visible = false
+	schematic.z_index = 50
+	schematic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mount_area.add_child(schematic)
 
 	big_face = PatchFace.new()
 	big_face.visible = false
@@ -964,16 +1007,6 @@ func _build_ui() -> void:
 	graph_edit.add_child(big_face)
 
 	# The way back, floating over the canvas while the face is up.
-	wires_button = Button.new()
-	wires_button.text = "WIRES"
-	wires_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	wires_button.offset_left = -Design.scale(100)
-	wires_button.offset_top = Design.scale(10)
-	wires_button.offset_right = -Design.scale(14)
-	wires_button.offset_bottom = Design.scale(38)
-	wires_button.visible = false
-	wires_button.pressed.connect(func() -> void: _flip_container(false))
-	container_tab.add_child(_defocus(wires_button))
 	views.add_child(container_tab)
 
 	var rack_scroll := ScrollContainer.new()
@@ -996,6 +1029,7 @@ func _build_ui() -> void:
 	rack.edit_started.connect(func() -> void: _begin_edit())
 	rack.edit_finished.connect(func(label: String) -> void: _commit_edit(label))
 	rack.node_selected.connect(_on_rack_node_selected)
+	rack.theme_requested.connect(_on_module_theme_requested)
 	# A plain Control between the scroll container and the rack, because a Container
 	# resets its children's scale on every layout pass — fit_child_in_rect wipes it —
 	# so a zoomed rack that is a direct child snaps back to 1.0 the moment anything
@@ -1104,6 +1138,16 @@ func _build_ui() -> void:
 	midi_dialog.file_selected.connect(_import_midi_file)
 	add_child(midi_dialog)
 
+	audio_dialog = FileDialog.new()
+	audio_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	audio_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	for filter in Transcribe.FILTERS:
+		var halves: PackedStringArray = str(filter).split(" ; ")
+		audio_dialog.add_filter(halves[0], halves[1])
+	audio_dialog.title = "Transcribe a recording into the piano roll"
+	audio_dialog.file_selected.connect(_transcribe_audio_file)
+	add_child(audio_dialog)
+
 	if _on_web():
 		_install_web_file_bridge()
 
@@ -1179,6 +1223,92 @@ func _refresh_view_zoom_slider() -> void:
 	_zoom_slider_syncing = false
 
 
+## What every panel wears unless it says otherwise.
+##
+## Stored in the document rather than in the settings, because it is a fact about this
+## patch: a rack somebody painted mustard should open mustard on the next machine, the
+## same way its module positions travel. The category default is stored as *nothing* —
+## a patch that has never been repainted carries no theme key at all.
+func _set_patch_theme(key: String) -> void:
+	_begin_edit()
+	var arrangement: Dictionary = patch.get("arrangement", {})
+	if key == ModuleThemes.CATEGORY:
+		arrangement.erase("theme")
+	else:
+		arrangement["theme"] = key
+	if arrangement.is_empty():
+		patch.erase("arrangement")
+	else:
+		patch["arrangement"] = arrangement
+	_commit_edit("panels")
+	_repaint_rack()
+	_say("panels: %s" % ModuleThemes.display_name(key))
+
+
+## One panel, repainted on its own. Empty puts it back on the rack's.
+func _set_module_theme(node_id: String, key: String) -> void:
+	# Looked up before the edit is opened: there is no cancel on a begun edit, and
+	# starting one for a node that is not there would leave an empty step in the history.
+	var target: Dictionary = {}
+	for node in patch.get("nodes", []):
+		if str((node as Dictionary).get("id", "")) == node_id:
+			target = node
+			break
+	if target.is_empty():
+		return
+	_begin_edit()
+	if key == "":
+		target.erase("theme")
+	else:
+		target["theme"] = key
+	_commit_edit("panel")
+	_repaint_rack()
+	_say("%s: %s" % [node_id, "the rack's panels" if key == ""
+		else ModuleThemes.display_name(key)])
+
+
+## The rack draws from the document by reference, so a repaint is a rebuild.
+func _repaint_rack() -> void:
+	if rack == null:
+		return
+	rack.patch = patch
+	rack.rebuild()
+	_sync_panels_menu()
+
+
+func _sync_panels_menu() -> void:
+	if view_popup == null:
+		return
+	var panels := view_popup.get_node_or_null("PanelsMenu") as PopupMenu
+	if panels == null:
+		return
+	var current := str(patch.get("arrangement", {}).get("theme", ""))
+	for index in panels.item_count:
+		var id := panels.get_item_id(index)
+		if id < 200:
+			continue
+		var key: String = ModuleThemes.CATEGORY if id == 200 \
+			else str(ModuleThemes.ORDER[id - 201])
+		var wanted: String = ModuleThemes.resolve("", current)
+		panels.set_item_checked(index, key == wanted)
+
+
+## Right-click on a panel: the same list, plus the way back to the rack's own.
+func _on_module_theme_requested(node_id: String, at: Vector2) -> void:
+	var menu := PopupMenu.new()
+	menu.add_item("Use the rack's panels", 0)
+	menu.add_separator()
+	for index in ModuleThemes.ORDER.size():
+		var key: String = ModuleThemes.ORDER[index]
+		menu.add_item(ModuleThemes.display_name(key), 1 + index)
+	menu.id_pressed.connect(func(id: int) -> void:
+		_set_module_theme(node_id, "" if id == 0 else str(ModuleThemes.ORDER[id - 1]))
+		menu.queue_free())
+	menu.close_requested.connect(func() -> void: menu.queue_free())
+	add_child(menu)
+	menu.popup(Rect2i(Vector2i(at), Vector2i(1, 1)))
+
+
 func _on_view_zoom_slider(value: float) -> void:
 	if view_zoom_readout == null or _zoom_slider_syncing:
 		return
@@ -1200,6 +1330,15 @@ func _on_file_menu(id: int) -> void:
 			return
 		midi_dialog.popup_centered_ratio(0.6)
 		return
+	if id == 6:
+		if _on_web():
+			_say("transcribing is desktop-only — it runs a separate program")
+			return
+		if Transcribe.binary_path() == "":
+			_say("no transcriber built — see tools/sg-transcribe/README.md")
+			return
+		audio_dialog.popup_centered_ratio(0.6)
+		return
 	_importing_module = id == 1
 	_importing_definition = id == 3
 	if _on_web():
@@ -1220,6 +1359,12 @@ func _on_file_menu(id: int) -> void:
 
 
 func _on_view_menu(id: int) -> void:
+	# Panels first, because the detail modes below catch everything from 70 up and these
+	# ids are above that.
+	if id >= 200 and id <= 200 + ModuleThemes.ORDER.size():
+		_set_patch_theme(ModuleThemes.CATEGORY if id == 200
+			else str(ModuleThemes.ORDER[id - 201]))
+		return
 	if id == 72:
 		graph_edit.fit_graph()
 		return
@@ -1636,8 +1781,14 @@ func _flip_container(show_face: bool) -> void:
 	if graph_edit == null or big_face == null:
 		return
 	if show_face:
+		# The schematic is a mount on this canvas too, and turning to the face does not
+		# displace it by itself: both would be visible, the panel drawn on top of the
+		# grid. Every other pair of these views already cleared each other and this one
+		# was missed, because it is the transition nobody makes while building the view
+		# they are working on.
+		if schematic_up:
+			await _show_schematic(false)
 		face_anchor = graph_edit.case_box().position
-		var footprint: Rect2 = graph_edit.case_box()
 		graph_edit.face_up = true
 		for child in graph_edit.get_children():
 			if child is GraphNode:
@@ -1647,19 +1798,25 @@ func _flip_container(show_face: bool) -> void:
 			(module_mounts[module_name] as Control).visible = false
 		big_face.visible = true
 		_refresh_face()
-		# As wide as the case it replaces, or its own need if that is more: the face
-		# stands where the wiring stood, and its need is the whole rail, ports to
-		# ports — a scroller's minimum would crop the instrument mid-panel.
+		# As wide as its panels need and no wider.
+		#
+		# It used to stretch to the case it replaced, on the reasoning that the face
+		# stands where the wiring stood. But a graph is usually far wider than the
+		# instrument dressed out of it — 2812 units against 513 on first-synth — and
+		# everything positioned against that width went out into empty canvas with it.
+		# The band's chips sat two thousand units right of the panel, and the face's own
+		# name is a centred label, so it drew halfway across a rectangle nobody can see.
+		#
+		# full_width() is the whole rail, ports to ports, which is the thing that must
+		# not be cropped. The empty stretch beyond it was never doing anything.
 		var natural: Vector2 = big_face.get_combined_minimum_size()
-		big_face.size = Vector2(maxf(big_face.full_width(), footprint.size.x),
-			natural.y)
+		big_face.size = Vector2(maxf(big_face.full_width(), 1.0), natural.y)
 		_place_face()
 	else:
 		graph_edit.face_up = false
+		graph_edit.mount_box = Rect2()
 		big_face.visible = false
 		await _rebuild_view()
-	if wires_button != null:
-		wires_button.visible = show_face
 
 
 ## Keeps the mounted face under the graph's camera: its position and scale are the
@@ -2020,6 +2177,77 @@ func _mount_for(key: String) -> ModuleFace:
 	return shown
 
 
+## Turns the canvas to the schematic and back.
+##
+## Session state, like the face flip: which way you are looking at a patch is not a fact
+## about the patch, so nothing is written and nothing lands in undo.
+##
+## The nodes are hidden rather than moved. A schematic that dragged the real nodes onto
+## its grid would be an edit — it would dirty the document, land in the history, and
+## leave somebody who only wanted a look at it with a patch they have to undo.
+func _show_schematic(on: bool) -> void:
+	if graph_edit == null or schematic == null:
+		return
+	schematic_up = on
+	graph_edit.schematic_on = on
+	if on:
+		# Face edit is a thing you do to the wiring, and there is no wiring here.
+		if graph_edit.face_edit:
+			graph_edit.face_edit = false
+			graph_edit.face_edit_on = false
+			_say("face edit: off — the schematic has no knobs to dress")
+		if big_face != null and big_face.visible:
+			await _flip_container(false)
+		face_anchor = graph_edit.case_box().position
+		for child in graph_edit.get_children():
+			if child is GraphNode:
+				(child as GraphNode).visible = false
+		graph_edit.clear_connections()
+		for module_name in module_mounts:
+			(module_mounts[module_name] as Control).visible = false
+		schematic.patch = patch
+		schematic.registry = registry
+		schematic.type_colours = TYPE_COLOURS
+		schematic.rebuild()
+		schematic.visible = true
+		# So the canvas keeps placing it. Without this the schematic is positioned once
+		# and then sits there while the camera moves underneath it - fixed on screen
+		# while everything else zooms, which is exactly as wrong as it sounds.
+		graph_edit.mount_up = true
+		# So the case band still has something to measure, and the way out is still on
+		# screen: with the nodes hidden there is nothing else for it to sit above.
+		graph_edit.mount_box = Rect2(face_anchor, schematic.content_size())
+		# A frame is waited for before framing. fit_to measures usable_rect(), and that
+		# rectangle is not the truth until the canvas has been laid out at its current
+		# size - ask too early and it answers with a viewport taller than the one on
+		# screen, which fits the schematic to a window that is not there. The same
+		# reasoning, and the same fix, as the wait before fit_graph() in _load_text.
+		await get_tree().process_frame
+		# Framed on arrival. The schematic is anchored where the case stood, and its grid
+		# is a different shape and usually a different size from the drawing it replaces
+		# - so without this it opens wherever the old layout happened to leave the camera,
+		# which at any zoom but the one you were on is off the side of the window.
+		graph_edit.fit_to(Rect2(face_anchor, schematic.content_size()))
+		_place_face()
+		_say("schematic: %d nodes on the grid" % (patch.get("nodes", []) as Array).size())
+	else:
+		schematic.visible = false
+		graph_edit.mount_up = false
+		graph_edit.mount_box = Rect2()
+		await _rebuild_view()
+
+
+## Back to the wiring from wherever, and a no-op when already there.
+##
+## Not a toggle, unlike the two modes: the graph is the view the others are departures
+## from, so pressing it twice means the same as pressing it once.
+func _show_graph() -> void:
+	if schematic_up:
+		await _show_schematic(false)
+	if graph_edit.face_up:
+		await _flip_container(false)
+
+
 func _place_face() -> void:
 	if graph_edit == null:
 		return
@@ -2027,6 +2255,24 @@ func _place_face() -> void:
 	if big_face != null and big_face.visible:
 		big_face.position = face_anchor * zoom - graph_edit.scroll_offset
 		big_face.scale = Vector2(zoom, zoom)
+		# The band is measured from the nodes, and the face hides them, so it is told
+		# where the face is instead. Every frame rather than once at the flip: the face
+		# settles to its own size a frame or two later, and a rectangle taken before that
+		# left the chips floating in empty canvas beside the panel they belong to.
+		# Its own width, not its stretched one. The face is sized to at least the case it
+		# replaces, so on a wide patch most of that is empty canvas to the right of the
+		# panel — and a band measured from it put the chips out there on their own,
+		# nowhere near the thing they belong to.
+		graph_edit.mount_box = Rect2(face_anchor,
+			Vector2(maxf(big_face.full_width(), 1.0), big_face.size.y))
+	if schematic != null and schematic.visible and mount_area != null:
+		# The mount area tracks the usable rectangle, and the schematic is placed inside
+		# it — so its offset is the canvas transform less where that area begins.
+		var area: Rect2 = graph_edit.usable_rect()
+		mount_area.position = area.position
+		mount_area.size = area.size
+		schematic.position = face_anchor * zoom - graph_edit.scroll_offset - area.position
+		schematic.scale = Vector2(zoom, zoom)
 	for module_name in module_mounts:
 		var mount := module_mounts[module_name] as Control
 		if mount.visible and mount.has_meta("anchor"):
@@ -2455,6 +2701,32 @@ func shutdown_audio() -> void:
 
 func _exit_tree() -> void:
 	shutdown_audio()
+
+
+## The histories are Objects, not RefCounteds, so they are freed by hand or not at all.
+##
+## One was always outliving the editor: the dive out of a module frees the history it
+## made on the way in, and nothing freed the one still in use when the program ended.
+## That is the "1 ObjectDB instance was leaked at exit" the suite has printed for as long
+## as anyone has looked, and the suspected reason it segfaulted at teardown perhaps a
+## third of the time - a leaked object is destroyed during cleanup in no particular
+## order, and this one holds callables bound to nodes and to the extension's own objects,
+## which by then may be gone.
+##
+## PREDELETE rather than _exit_tree: leaving the tree is not the same as ceasing to
+## exist, and a node that is re-parented would otherwise come back holding a freed
+## history.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_PREDELETE:
+		return
+	if is_instance_valid(undo_redo):
+		undo_redo.free()
+	# Any level still stacked underneath, if the editor ends mid-dive.
+	for frame in dive_stack:
+		var history: Variant = (frame as Dictionary).get("history", null)
+		if history is UndoRedo and is_instance_valid(history):
+			(history as UndoRedo).free()
+	dive_stack.clear()
 
 
 func _process(_delta: float) -> void:
@@ -3691,8 +3963,20 @@ func _fit_row_height(line: Control) -> void:
 ## frames of what the face is wearing. Ports are shown but not toggled — a port is
 ## on the plates because its seam exists, so the wand is the tool that moves them.
 
+## Dressing the face is done from the wiring, so turning it on turns the schematic off.
+##
+## The two are not compatible and never were: face edit works by clicking the knobs on
+## the nodes, and the schematic hides the nodes. Left to themselves they would produce a
+## mode that is lit and does nothing, which is worse than a mode that is unavailable.
 func _set_face_edit(on: bool) -> void:
+	if on and schematic_up:
+		await _show_schematic(false)
+	# Same reasoning as the schematic: the knobs you click to dress a face are the ones
+	# on the nodes, and the face is covering them.
+	if on and graph_edit.face_up:
+		await _flip_container(false)
 	graph_edit.face_edit = on
+	graph_edit.face_edit_on = on
 	if on:
 		_refresh_face_edit_badges()
 	_say("face edit: %s" % ("on — click a knob to dress the face" if on else "off"))
@@ -5385,6 +5669,49 @@ func _say_into_roll(text: String) -> void:
 		"" if syllables == 1 else "s", text.strip_edges().left(28),
 		" — %d past the end stayed behind" % int(spoken["dropped"])
 			if int(spoken["dropped"]) > 0 else ""])
+
+
+## A recording becomes the roll. One undo step, roll opened on it, the same bargain the
+## MIDI reader and the text driver both strike.
+##
+## The tempo and division already on the roll are what the transcription is laid against,
+## because they are what the person has been working in. The model hears absolute time;
+## something has to decide the grid, and the roll's own settings are a better guess than
+## anything this could invent.
+func _transcribe_audio_file(path: String) -> void:
+	_say("listening to %s…" % path.get_file())
+	# Godot has no way to paint before a blocking call returns, and this one takes a
+	# second or two on a long recording. The line above is posted, the frame is let
+	# through, and only then does the process start - otherwise the first thing anybody
+	# sees is the result, and the editor looks frozen in between.
+	await get_tree().process_frame
+
+	var tempo: float = float(patch.get("sequence", {}).get("tempo", 120.0))
+	var heard: Dictionary = Transcribe.run(path, tempo, _roll_division())
+	if not bool(heard["ok"]):
+		_say(str(heard["error"]))
+		return
+
+	var sequence: Dictionary = heard["sequence"]
+	_begin_edit()
+	patch["sequence"] = sequence
+	_commit_edit("transcribe %s" % path.get_file())
+	if not roll_open:
+		_set_roll_open(true)
+	piano_roll.sequence = patch["sequence"]
+	piano_roll.scroll_step = 0
+	_refresh_roll_tempo_text()
+	piano_roll.queue_redraw()
+
+	var notes: Array = sequence.get("notes", [])
+	var lowest := 127
+	var highest := 0
+	for note in notes:
+		lowest = mini(lowest, int(note["note"]))
+		highest = maxi(highest, int(note["note"]))
+	_say("%d note%s from %s, %s to %s — press Play" % [notes.size(),
+		"" if notes.size() == 1 else "s", path.get_file(),
+		_note_name(lowest), _note_name(highest)])
 
 
 ## The piece grows a bar at a time under notes placed past its end: the window can
