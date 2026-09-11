@@ -1135,6 +1135,29 @@ func _initialize() -> void:
 			and main.toolbar.toolbar_hardware_group != null
 			and main.toolbar.toolbar_hardware_group.get_child_count() == 2,
 		"Scan and Flash sit beside Add node and reach the editor")
+	# In a browser the same slot holds one button: the desktop download, because the
+	# compiler and the USB tools are programs on a computer. Built here on the desktop
+	# with the flag the web build passes, since OS.has_feature cannot be faked.
+	var web_bar := EditorToolbar.new(main._examples, "test build", true)
+	main.add_child(web_bar)
+	await process_frame
+	var web_slot: HBoxContainer = web_bar.toolbar_hardware_group
+	var web_help: PopupMenu = web_bar.find_child("HelpMenu", true, false)
+	var web_help_rows: Array = []
+	for index in web_help.item_count:
+		web_help_rows.append(web_help.get_item_text(index))
+	check(web_slot != null and web_slot.get_child_count() == 1
+			and web_bar.toolbar_scan_button == null
+			and web_bar.toolbar_desktop_button != null
+			and web_bar.toolbar_desktop_button.text
+				== "Download SoundGraph Desktop to compile and flash hardware"
+			and web_bar.toolbar_desktop_button.tooltip_text.contains("soundgraph/desktop")
+			and web_help_rows.has("Download SoundGraph Desktop…"),
+		"on the web the slot holds the desktop download instead, and Help has it too (%s)"
+			% ", ".join(PackedStringArray(web_help_rows)))
+	main.remove_child(web_bar)
+	web_bar.queue_free()
+	await process_frame
 	var test_bank := PatchBank.new()
 	var bank_file := ProjectSettings.globalize_path("user://test-bank.json")
 	test_bank.path = bank_file

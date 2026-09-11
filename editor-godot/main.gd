@@ -400,6 +400,7 @@ var document_name := "untitled"
 ## Where the Support button goes.
 const SUPPORT_URL := "https://mutantfactory.net/soundgraph/support"
 const DOCUMENTATION_URL := "https://mutantfactory.net/soundgraph/documentation"
+const DESKTOP_URL := "https://mutantfactory.net/soundgraph/desktop"
 ## Where the document came from, when it came from a file: what "Add current patch"
 ## puts in a bank. Empty for a new, handed-over or downloaded patch.
 var document_path := ""
@@ -802,7 +803,7 @@ func _build_ui() -> void:
 	add_child(root)
 
 	_scan_examples()
-	toolbar = EditorToolbar.new(_examples, _build_description())
+	toolbar = EditorToolbar.new(_examples, _build_description(), _on_web())
 	toolbar.is_muted = func() -> bool: return muted
 	# Add node opens the browser; Ctrl+Space still opens the search palette. The browser
 	# is a shell until its own steps fill it, and retiring a working path in favour of a
@@ -815,6 +816,7 @@ func _build_ui() -> void:
 	toolbar.support_requested.connect(func() -> void: OS.shell_open(SUPPORT_URL))
 	toolbar.documentation_requested.connect(func() -> void:
 		OS.shell_open(DOCUMENTATION_URL))
+	toolbar.desktop_requested.connect(func() -> void: OS.shell_open(DESKTOP_URL))
 	toolbar.flash_requested.connect(_flash_hardware)
 	_use_bank(str(Settings.fetch("hardware_bank", "")), true)
 	toolbar.undo_requested.connect(_undo)

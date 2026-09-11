@@ -2006,6 +2006,28 @@ the launch itself: a clean console on `tools/run-demo.sh`. Whether the show
 laptop printed the same error behind its minimised terminal is unknown; it
 is fixed there too.
 
+## 2026-09-11 — On the web, Scan and Flash become the desktop download
+
+Decision:
+The web build's hardware slot holds one button, "Download SoundGraph
+Desktop to compile and flash hardware", opening
+mutantfactory.net/soundgraph/desktop; Help carries the same row for the
+rungs that fold the slot away. The toolbar takes `web` as a constructor
+flag rather than asking OS, so the suite builds the web bar on a desktop
+and looks at it. `toolbar_scan_button` is null on the web.
+
+Reason:
+A browser cannot run sgaxo or the USB tools, and Web Serial wants a
+driver download on most machines before it sees a board at all — so a
+visitor was going to download something either way, and the desktop
+build ships with everything the board needs. Two buttons that could only
+fail were the wrong thing to offer.
+
+Consequences:
+The lite page's own Web Serial deploy is untouched; this is the Godot
+export. main still connects scan and flash on every platform — on the web
+nothing emits them.
+
 ## 2026-09-11 — A Documentation button, and every patch opens with the roll out and flat
 
 Decision:

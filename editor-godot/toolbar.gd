@@ -28,6 +28,8 @@ signal quit_requested
 ## The board on USB: look for it, and write the chosen bank to its card. Main owns both.
 signal scan_requested
 signal flash_requested
+## The web build's stand-in for both: main opens the desktop download page.
+signal desktop_requested
 ## The Support button, top right: main opens the page.
 signal support_requested
 ## The Documentation button beside it, and Help's row of the same name: main opens the
@@ -69,7 +71,12 @@ var toolbar_identity: VBoxContainer
 var toolbar_title: Label
 var toolbar_edit_group: HBoxContainer
 var toolbar_hardware_group: HBoxContainer
+## Null on the web, where there is no board to scan — see toolbar_desktop_button.
 var toolbar_scan_button: Button
+## The web build's one hardware button: a browser cannot run the compiler or the USB
+## tools, and Web Serial needs a driver download on most machines anyway, so the honest
+## door is the desktop build, which ships with everything the board needs.
+var toolbar_desktop_button: Button
 ## Support, in a fill that drifts between purple and chartreuse: the one thing in the
 ## chrome that moves on its own, and slowly enough to be a colour rather than a signal.
 var toolbar_support_button: Button
@@ -130,14 +137,18 @@ var _primary_buttons: Array[Button] = []
 var examples: Dictionary = {}
 var description := ""
 var is_muted: Callable = func() -> bool: return false
+## Whether this bar is in a browser. Injected rather than asked of OS here, so the suite
+## can build the web bar on a desktop and look at it.
+var on_web := false
 
 ## Which VSeparator introduces which group, so hiding a group takes its rule with it.
 var _toolbar_rules: Dictionary = {}
 var _fitting_toolbar := false
 
 
-func _init(menu_examples: Dictionary, build_description: String) -> void:
+func _init(menu_examples: Dictionary, build_description: String, web := false) -> void:
 	examples = menu_examples
+	on_web = web
 	description = build_description
 	_build()
 
@@ -310,18 +321,33 @@ func _build() -> void:
 	# thing done twice a day. They go with undo and redo when the bar runs short.
 	var hardware_group := _toolbar_group(bar)
 	toolbar_hardware_group = hardware_group
-	var scan_button := Button.new()
-	toolbar_scan_button = scan_button
-	scan_button.icon = _icon(Icons.Kind.PLUG, Design.INK_NORMAL)
-	_icon_kinds[scan_button] = Icons.Kind.PLUG
-	scan_button.pressed.connect(func() -> void: scan_requested.emit())
-	hardware_group.add_child(_defocus(scan_button))
-	_dress_scan_button()
-	var flash_button := Button.new()
-	flash_button.text = "Flash"
-	flash_button.tooltip_text = "Write the chosen bank of patches to the board's card"
-	flash_button.pressed.connect(func() -> void: flash_requested.emit())
-	hardware_group.add_child(_defocus(flash_button))
+	if on_web:
+		# In a browser the two buttons could only fail: the compiler and the USB tools
+		# are programs on a computer, and Web Serial wants a driver download on most
+		# machines before it sees a board at all. One button in their place says what
+		# to do instead, in the same slot, so the bar reads the same on both.
+		var desktop_button := Button.new()
+		toolbar_desktop_button = desktop_button
+		desktop_button.icon = _icon(Icons.Kind.PLUG, Design.INK_NORMAL)
+		_icon_kinds[desktop_button] = Icons.Kind.PLUG
+		desktop_button.text = "Download SoundGraph Desktop to compile and flash hardware"
+		desktop_button.tooltip_text = "The board tools run on a computer: " \
+			+ "mutantfactory.net/soundgraph/desktop"
+		desktop_button.pressed.connect(func() -> void: desktop_requested.emit())
+		hardware_group.add_child(_defocus(desktop_button))
+	else:
+		var scan_button := Button.new()
+		toolbar_scan_button = scan_button
+		scan_button.icon = _icon(Icons.Kind.PLUG, Design.INK_NORMAL)
+		_icon_kinds[scan_button] = Icons.Kind.PLUG
+		scan_button.pressed.connect(func() -> void: scan_requested.emit())
+		hardware_group.add_child(_defocus(scan_button))
+		_dress_scan_button()
+		var flash_button := Button.new()
+		flash_button.text = "Flash"
+		flash_button.tooltip_text = "Write the chosen bank of patches to the board's card"
+		flash_button.pressed.connect(func() -> void: flash_requested.emit())
+		hardware_group.add_child(_defocus(flash_button))
 
 	# Auto-place and Arrange selection behind one menu, for the same reason. Both are
 	# occasional; the second is usually unavailable anyway, and a permanently greyed
@@ -627,6 +653,12 @@ func _build() -> void:
 	help_popup.set_item_tooltip(1,
 		"A note straight to the workbench: what you were doing, what went "
 		+ "sideways. The dialog says exactly what it sends, and works offline.")
+	if on_web:
+		# The desktop download on the menu too, for the rungs of the ladder that fold
+		# the hardware slot away.
+		help_popup.add_item("Download SoundGraph Desktop…", 107)
+		help_popup.set_item_tooltip(help_popup.get_item_index(107),
+			"To compile and flash hardware: mutantfactory.net/soundgraph/desktop")
 	help_popup.add_separator()
 	# The build, last and unselectable. It is the first thing anybody wants after a
 	# reload that behaved oddly, and hunting for it in a log is not an answer.
@@ -636,7 +668,9 @@ func _build() -> void:
 		if id == 105:
 			feedback_requested.emit()
 		elif id == 106:
-			documentation_requested.emit())
+			documentation_requested.emit()
+		elif id == 107:
+			desktop_requested.emit())
 
 	# ---- performance, pinned to the right ----------------------------------------
 	# The gap that pins the performance group right is also where passing remarks go.
