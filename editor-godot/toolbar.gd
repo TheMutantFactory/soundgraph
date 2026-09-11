@@ -30,6 +30,9 @@ signal scan_requested
 signal flash_requested
 ## The Support button, top right: main opens the page.
 signal support_requested
+## The Documentation button beside it, and Help's row of the same name: main opens the
+## manual.
+signal documentation_requested
 signal mute_toggled
 
 enum Rung {
@@ -70,6 +73,9 @@ var toolbar_scan_button: Button
 ## Support, in a fill that drifts between purple and chartreuse: the one thing in the
 ## chrome that moves on its own, and slowly enough to be a colour rather than a signal.
 var toolbar_support_button: Button
+## Documentation, to Support's left: a plain button, because the manual is a door and
+## Support is the one thing on the bar allowed to ask for attention.
+var toolbar_documentation_button: Button
 const SUPPORT_PURPLE := Color("7b2cbf")
 const SUPPORT_CHARTREUSE := Color("9ef01a")
 const SUPPORT_PERIOD := 9.0  # seconds, one full purple-to-chartreuse-and-back
@@ -613,8 +619,12 @@ func _build() -> void:
 	# ---- Help ----------------------------------------------------------------------
 	var help_popup := PopupMenu.new()
 	help_popup.name = "HelpMenu"
+	# The manual first, because it is what Help means; on a bar too narrow for the
+	# Documentation button this row is the way to it.
+	help_popup.add_item("Documentation", 106)
+	help_popup.set_item_tooltip(0, "The manual: mutantfactory.net/soundgraph/documentation")
 	help_popup.add_item("Send feedback…", 105)
-	help_popup.set_item_tooltip(0,
+	help_popup.set_item_tooltip(1,
 		"A note straight to the workbench: what you were doing, what went "
 		+ "sideways. The dialog says exactly what it sends, and works offline.")
 	help_popup.add_separator()
@@ -624,7 +634,9 @@ func _build() -> void:
 	help_popup.set_item_disabled(help_popup.get_item_index(60), true)
 	help_popup.id_pressed.connect(func(id: int) -> void:
 		if id == 105:
-			feedback_requested.emit())
+			feedback_requested.emit()
+		elif id == 106:
+			documentation_requested.emit())
 
 	# ---- performance, pinned to the right ----------------------------------------
 	# The gap that pins the performance group right is also where passing remarks go.
@@ -745,6 +757,12 @@ func _build() -> void:
 		if id == QUIT_ID:
 			quit_requested.emit())
 	toolbar_menu_popup = burger_popup
+	var documentation := Button.new()
+	toolbar_documentation_button = documentation
+	documentation.text = "Documentation"
+	documentation.tooltip_text = "The manual: mutantfactory.net/soundgraph/documentation"
+	documentation.pressed.connect(func() -> void: documentation_requested.emit())
+	bar.add_child(_defocus(documentation))
 	var support := Button.new()
 	toolbar_support_button = support
 	support.text = "Support"
@@ -910,6 +928,9 @@ func _apply_toolbar_rung(rung: int) -> void:
 		toolbar_add_button.text = "+  Add node" if toolbar_rung < Rung.VERB else "+"
 	_show_toolbar_group(toolbar_edit_group, toolbar_rung < Rung.EDIT)
 	_show_toolbar_group(toolbar_hardware_group, toolbar_rung < Rung.EDIT)
+	# The manual's button goes with the edit group; its Help row stays at every rung.
+	if toolbar_documentation_button != null:
+		toolbar_documentation_button.visible = toolbar_rung < Rung.EDIT
 	if transport_word != null:
 		transport_word.visible = toolbar_rung < Rung.IDENTITY
 

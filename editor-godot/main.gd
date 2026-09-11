@@ -399,6 +399,7 @@ var document_label: RichTextLabel
 var document_name := "untitled"
 ## Where the Support button goes.
 const SUPPORT_URL := "https://mutantfactory.net/soundgraph/support"
+const DOCUMENTATION_URL := "https://mutantfactory.net/soundgraph/documentation"
 ## Where the document came from, when it came from a file: what "Add current patch"
 ## puts in a bank. Empty for a new, handed-over or downloaded patch.
 var document_path := ""
@@ -812,6 +813,8 @@ func _build_ui() -> void:
 	toolbar.quit_requested.connect(_quit_by_hand)
 	toolbar.scan_requested.connect(_scan_hardware)
 	toolbar.support_requested.connect(func() -> void: OS.shell_open(SUPPORT_URL))
+	toolbar.documentation_requested.connect(func() -> void:
+		OS.shell_open(DOCUMENTATION_URL))
 	toolbar.flash_requested.connect(_flash_hardware)
 	_use_bank(str(Settings.fetch("hardware_bank", "")), true)
 	toolbar.undo_requested.connect(_undo)
@@ -1435,7 +1438,7 @@ func _build_ui() -> void:
 	_set_keyboard_mode(str(Settings.fetch("keyboard_mode", "full")))
 	_set_key_hints(bool(Settings.fetch("keyboard_hints", true)))
 	_set_play_mode(str(Settings.fetch("play_mode", "keys")), false)
-	_set_roll_orientation(str(Settings.fetch("roll_orientation", "vertical")))
+	_set_roll_orientation(str(Settings.fetch("roll_orientation", "horizontal")))
 	for key in Settings.fetch("loved_nodes", []):
 		_loved_nodes[str(key)] = true
 	feedback_submitter = FeedbackSubmitter.new()
@@ -8032,7 +8035,7 @@ func _build_keyboard_dock() -> Control:
 
 	column.add_child(keyboard)
 	# The stored fold, through the same door the menu uses.
-	_set_roll_open(bool(Settings.fetch("piano_roll", false)))
+	_set_roll_open(bool(Settings.fetch("piano_roll", true)))
 	return keyboard_dock
 
 
@@ -8050,8 +8053,11 @@ func _set_key_hints(on: bool) -> void:
 
 ## Which way time runs across the roll: vertical rises over the keys, horizontal
 ## runs left to right the way most sequencers have taught.
-func _set_roll_orientation(which: String) -> void:
-	Settings.store("roll_orientation", which)
+## `remember` as in _set_roll_open: the Roll menu states a preference, a patch load
+## does not.
+func _set_roll_orientation(which: String, remember := true) -> void:
+	if remember:
+		Settings.store("roll_orientation", which)
 	if piano_roll != null:
 		piano_roll.orientation = which
 		piano_roll.queue_redraw()
@@ -12868,12 +12874,16 @@ func _load_text(text: String) -> void:
 	graph_edit.fit_graph()
 	_hold_demo_zoom()
 
-	# A document that arrives carrying notes shows them. The roll's fold is a stored
-	# preference that starts closed, so a patch shipping a tune opened onto silence and
-	# an empty stage: the notes were in the file, the transport was hidden, and the only
-	# way to find out either existed was to go looking in a menu. Same shape of bug as
-	# the framing above — the feature worked and was simply never reached.
-	if not roll_open and not (patch.get("sequence", {}).get("notes", []) as Array).is_empty():
+	# Every patch opens with the roll out and lying flat. It used to open only for a
+	# document carrying notes, and only if the fold was closed: the notes were in the
+	# file, the transport was hidden, and the only way to find out either existed was to
+	# go looking in a menu. The roll is where a patch is played from, on the web and on
+	# the desktop alike, so a load puts it on the stage whatever the last session left —
+	# the fold and the orientation are still the reader's to change, and neither is
+	# rewritten here.
+	if piano_roll.orientation != "horizontal":
+		_set_roll_orientation("horizontal", false)
+	if not roll_open:
 		_set_roll_open(true, false)
 
 	if needs_layout:

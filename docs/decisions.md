@@ -2006,6 +2006,27 @@ the launch itself: a clean console on `tools/run-demo.sh`. Whether the show
 laptop printed the same error behind its minimised terminal is unknown; it
 is fixed there too.
 
+## 2026-09-11 — A Documentation button, and every patch opens with the roll out and flat
+
+Decision:
+A plain Documentation button sits to Support's left on the top row and
+opens mutantfactory.net/soundgraph/documentation; the same row leads the
+Help menu, so it survives the rungs of the ladder that fold the button
+away. Every patch load opens the piano roll horizontally without writing
+either as the stored preference; the fresh-install defaults are open and
+horizontal too. `_set_roll_orientation` takes `remember` as
+`_set_roll_open` does.
+
+Reason:
+The manual is going live and the editor had no door to it. The roll is
+where a patch is played from, on the web and on the desktop alike, and it
+opened only for a document carrying notes and only if the fold was
+closed — a show visitor loading a synth got a stage with no band.
+
+Consequences:
+Hide still folds the roll for the session; the next load brings it back.
+The suite checks both, and the Documentation button's place and wiring.
+
 ## 2026-09-11 — Named voices before numbered wirings, and the strip fits at its widest
 
 Decision:

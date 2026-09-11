@@ -1297,6 +1297,16 @@ func _initialize() -> void:
 			and support.tooltip_text.contains("mutantfactory.net/soundgraph/support")
 			and main.toolbar.support_requested.get_connections().size() == 1,
 		"a Support button sits on the top row and reaches the editor")
+	# Documentation to its left, plain, wired to the same kind of door; and on the Help
+	# menu too, for the rungs of the ladder that fold the button away.
+	var documentation: Button = main.toolbar.toolbar_documentation_button
+	var help_menu: PopupMenu = main.toolbar.find_child("HelpMenu", true, false)
+	check(documentation != null and documentation.text == "Documentation"
+			and documentation.tooltip_text.contains("mutantfactory.net/soundgraph/documentation")
+			and documentation.get_index() == support.get_index() - 1
+			and main.toolbar.documentation_requested.get_connections().size() == 1
+			and help_menu != null and help_menu.get_item_text(0) == "Documentation",
+		"a Documentation button sits to Support's left and on the Help menu")
 	check(at_purple.is_equal_approx(EditorToolbar.SUPPORT_PURPLE)
 			and at_green.is_equal_approx(EditorToolbar.SUPPORT_CHARTREUSE)
 			and EditorToolbar.support_colour(1.0).is_equal_approx(at_purple)
@@ -4289,7 +4299,19 @@ func _initialize() -> void:
 	await main._load_example("First Synth")
 	for i in 6:
 		await process_frame
-	check(not main.roll_row.visible, "the roll starts folded away")
+	# Every load puts the roll out, lying flat, whatever the last session left — the
+	# roll is where a patch is played from, and a closed one was a stage with no band.
+	check(main.roll_row.visible and main.piano_roll.orientation == "horizontal",
+		"a patch opens with the roll out and horizontal")
+	main.roll_button.get_popup().id_pressed.emit(2)
+	for i in 3:
+		await process_frame
+	check(not main.roll_row.visible, "Hide folds it away")
+	await main._load_example("Plucked String")
+	for i in 6:
+		await process_frame
+	check(main.roll_row.visible and main.piano_roll.orientation == "horizontal",
+		"and the next patch brings it back, flat")
 	main.roll_button.get_popup().id_pressed.emit(0)
 	for i in 3:
 		await process_frame
