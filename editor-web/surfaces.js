@@ -68,8 +68,10 @@ export const SURFACES = [
         name: 'Desktop',
         summary: 'The full editor as an application, for when the browser is not the point.',
         detail: 'Opens and saves patch files directly, and talks to hardware over serial.',
-        url: null,
-        cost: 'First release: Knobcon 2026, September 11–13.',
+        // The numbered releases: each carries the Windows editor, the web editor and
+        // the Axoloti card image as files. Absolute, since GitHub is another origin.
+        url: 'https://github.com/TheMutantFactory/soundgraph/releases/latest',
+        cost: 'Windows, about 40 MB. From the first release, Knobcon 2026.',
     },
 ];
 

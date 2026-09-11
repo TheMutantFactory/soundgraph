@@ -13,7 +13,10 @@ were reworked, and every one of the 280 examples is load-verified.
 
 Milestones A, B, C and F are all complete. Each feature lands with its tests, rides the
 full gate (`tools/pre-push.sh`, enforced on every push including tags), and gets a tag
-named for itself — the tag list is the changelog.
+named for itself — the tag list is the changelog. Numbered releases are `v0.1.0` and
+up: a GitHub release on the tag carrying the Windows editor, the web editor and the
+Axoloti card image, built by `tools/package-release.py` after the tag exists (the build
+stamp reads `git describe`, so a build before the tag names the wrong thing).
 
 ## Where the project stands
 

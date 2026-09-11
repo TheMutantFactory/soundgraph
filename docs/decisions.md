@@ -1950,3 +1950,35 @@ and the bench's MPK turned out to be on bank B: its pads 1 and 2 sent 44
 and 45, which the board's own tally showed once asked. The playing pads
 still want bank A; a set drawn for both would double every trigger row
 and put the pads under the keyboard's lowest keys.
+
+## 2026-09-10 — The first numbered release
+
+Decision:
+`v0.1.0`, an annotated tag on main, with a GitHub release carrying three
+files: the Windows editor (`tools/export-desktop.mjs`, a new "Windows
+Desktop" preset with the pack embedded and the extension DLL beside the
+executable), the web editor (`tools/export-web.mjs`), and the Axoloti
+card image of the MPK mini set (what `hw.py flash` bakes). The order is
+fixed by `tools/package-release.py`: the tag first, then the exports,
+then the release, and the script refuses to run off a tag. The website's
+desktop surface points at the releases page.
+
+Reason:
+The tags named for branches are the changelog, but nothing so far was a
+thing a person could download and run; `/soundgraph/desktop` had nothing
+to point at. The build stamp reads `git describe`, which is why the tag
+comes first: an export made a commit before the tag says "+1" and is a
+build claiming to be something else. Publishing stays a deliberate step
+outside the script (two REST calls, printed at the end): the gh CLI is
+not on this machine, and putting files in front of the public should be
+done on purpose.
+
+Alternatives:
+Only the web editor, which already ships to the site: the desktop
+surface was the promise made for the show. A CI job: later, once the
+gate itself runs somewhere other than the bench.
+
+Consequences:
+`git describe` on main now says `v0.1.0`, and the stamp with it. The
+Windows export is unsigned; SmartScreen will ask. The card image is a
+zip to unpack onto an SD card's root, the same files the flash writes.

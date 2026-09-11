@@ -80,3 +80,6 @@ runtime-clap/sdks/
 # blanket "git add -A" swept the empty husk into a commit once already.
 MIDI Programs/
 editor-godot/out/
+
+build-godot-desktop/
+build-release/
