@@ -71,7 +71,7 @@ export const SURFACES = [
         // Relative and below this page like the others; the site's routes send
         // /soundgraph/desktop on to the numbered release on GitHub, which carries the
         // Windows editor, the web editor and the Axoloti card image as files.
-        url: './desktop/',
+        url: './desktop',  // no slash: it is a redirect rule's exact path, not a directory
         cost: 'Windows, about 40 MB. From the first release, Knobcon 2026.',
     },
 ];
