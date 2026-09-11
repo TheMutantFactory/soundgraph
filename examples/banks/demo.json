@@ -7,11 +7,11 @@
     {"name": "plucked-string", "patch": "../patches/plucked-string.json"},
     {"name": "acid-bass", "patch": "../patches/synths/acid-bass.json"},
     {"name": "mallard", "patch": "../patches/synths/mallard.json"},
-    {"name": "coin", "patch": "../patches/game/coin.json"},
-    {"name": "jump", "patch": "../patches/game/jump.json"},
-    {"name": "powerup", "patch": "../patches/game/powerup.json"},
-    {"name": "hurt", "patch": "../patches/game/hurt.json"},
-    {"name": "explode", "patch": "../patches/game/explode.json"},
+    {"name": "coin", "patch": "demo/coin.json"},
+    {"name": "jump", "patch": "demo/jump.json"},
+    {"name": "powerup", "patch": "demo/powerup.json"},
+    {"name": "hurt", "patch": "demo/hurt.json"},
+    {"name": "explode", "patch": "demo/explode.json"},
     {"name": "yes-dear", "patch": "../patches/yes-dear.json"}
   ]
 }

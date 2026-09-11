@@ -9,6 +9,7 @@ extends Node
 ##     var sounds := GameSounds.new()
 ##     add_child(sounds)
 ##     sounds.load_folder("res://sounds")     # every .json in the folder
+##     sounds.load_sound("jump2", "res://sounds/jump.json", "jump-0")   # one roll of one
 ##     ...
 ##     sounds.play("jump")
 ##
@@ -56,7 +57,11 @@ func load_folder(path: String) -> int:
 	return loaded
 
 
-func load_sound(sound_name: String, patch_path: String) -> bool:
+## `preset` names one of the patch's own presets to start on — a shelf patch carries six
+## rolls of one generator, and a game wants one of them by name. Empty leaves the patch as
+## its file has it. A name the patch does not have is a failure, not a shrug: the sound
+## would play, and it would be the wrong sound.
+func load_sound(sound_name: String, patch_path: String, preset: String = "") -> bool:
 	var text := FileAccess.get_file_as_string(patch_path)
 	if text.is_empty():
 		_report_failure(sound_name, "could not read %s" % patch_path)
@@ -72,6 +77,10 @@ func load_sound(sound_name: String, patch_path: String) -> bool:
 
 	if not engine.load_patch(text, MIX_RATE):
 		_report_failure(sound_name, str(engine.get_diagnostics_json()))
+		return false
+
+	if preset != "" and not _apply_preset(engine, text, preset):
+		_report_failure(sound_name, "%s has no preset called '%s'" % [patch_path, preset])
 		return false
 
 	var generator := AudioStreamGenerator.new()
@@ -91,7 +100,32 @@ func load_sound(sound_name: String, patch_path: String) -> bool:
 		"engine": engine,
 		"player": player,
 		"playback": player.get_stream_playback(),
+		"preset": preset,
 	}
+	return true
+
+
+## Writes one preset's values into the engine, through the patch's own controls: a
+## preset stores a value per control id, and the control says which node and parameter
+## it turns. The same route the editor's preset strip takes, without the editor.
+func _apply_preset(engine, text: String, preset: String) -> bool:
+	var patch: Variant = JSON.parse_string(text)
+	if not (patch is Dictionary):
+		return false
+	var values := {}
+	for entry: Variant in patch.get("presets", []):
+		if str((entry as Dictionary).get("name", "")) == preset:
+			values = (entry as Dictionary).get("values", {})
+			break
+	if values.is_empty():
+		return false
+	for control: Variant in patch.get("controls", []):
+		var id := str((control as Dictionary).get("id", ""))
+		if not values.has(id):
+			continue
+		var target: Dictionary = (control as Dictionary).get("target", {})
+		engine.set_parameter(str(target.get("node", "")),
+			str(target.get("parameter", "")), float(values[id]))
 	return true
 
 

@@ -38,15 +38,19 @@ const BY_LABEL := {
 	"Synth: poly-five": "Five voices of the classic saw-square-filter recipe: the "
 		+ "patch to play chords on.",
 
-	"Game: coin": "The pickup blip: two tones up, instantly recognisable as money.",
-	"Game: explode": "Noise with a fast fall: the explosion every 8-bit game carries.",
-	"Game: hurt": "A downward blip for taking damage, short enough to stay out of "
-		+ "the way.",
-	"Game: jump": "A rising sweep with legs under it.",
-	"Game: jump2": "The jump, second opinion: same rise, different character.",
-	"Game: powerup": "A rising arpeggio that says something good just happened.",
-	"Game: select": "A menu tick: one tiny neutral blip.",
-	"Game: shoot": "A zap with a fast pitch drop: pew, in patch form.",
+	"sfxr: pickup-coin": "The pickup blip: two tones up, instantly recognisable as "
+		+ "money. Six of sfxr's rolls as presets, and a knob for everything it rolled.",
+	"sfxr: explosion": "Noise with a fast fall: the explosion every 8-bit game "
+		+ "carries, six rolls of it, with sfxr's own knobs.",
+	"sfxr: hit-hurt": "A downward blip for taking damage, short enough to stay out "
+		+ "of the way. Six rolls as presets.",
+	"sfxr: jump": "A rising sweep with legs under it: sfxr's jump button, pressed six "
+		+ "times, and the knobs it rolled.",
+	"sfxr: powerup": "A rising arpeggio that says something good just happened. Six "
+		+ "rolls, and the knobs sfxr rolled them with.",
+	"sfxr: blip-select": "A menu tick: one tiny neutral blip, six ways.",
+	"sfxr: laser-shoot": "A zap with a fast pitch drop: pew, in patch form, six rolls "
+		+ "of it.",
 
 	"808: kick": "A sine dropping fast into the floor: the boom that named a genre. "
 		+ "Tuned to 55 Hz by its author.",

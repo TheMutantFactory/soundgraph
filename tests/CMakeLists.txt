@@ -53,11 +53,11 @@ add_test(NAME sfxr_corpus_is_reproducible
         -DSCRATCH=${CMAKE_CURRENT_BINARY_DIR}/sfxr-regenerated
         -P ${CMAKE_CURRENT_SOURCE_DIR}/sfxr/reproducible.cmake)
 
-# The eight game sounds are copies of eight corpus cases, and copies drift. They already
-# did: the mapper changed, the corpus was regenerated, and the sandbox went on playing the
-# previous wiring because nothing regenerated these. The recipe used to live in somebody's
-# shell history; it now lives in tools/game-sounds.mjs, and this is what notices when the
-# committed files stop matching it.
+# The demo set's five game sounds are copies of five corpus cases, and copies drift. They
+# already did: the mapper changed, the corpus was regenerated, and the sandbox went on
+# playing the previous wiring because nothing regenerated these. The recipe lives in
+# tools/game-sounds.mjs, and this is what notices when the committed files stop
+# matching it.
 if(SOUNDGRAPH_NODE)
     add_test(NAME game_sounds_match_the_corpus
         COMMAND ${SOUNDGRAPH_NODE} ${CMAKE_SOURCE_DIR}/tools/game-sounds.mjs --check)

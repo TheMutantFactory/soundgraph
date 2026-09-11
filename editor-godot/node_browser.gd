@@ -140,6 +140,24 @@ const SEARCH_HEIGHT := 42
 
 static var CATEGORY_ORDER: Array = _category_order()
 
+
+## The browser's type and geometry: the interface scale up to XL and no further —
+## Design.furniture_type's rule, borrowed for Design.furniture_type's reason.
+##
+## The panel is 910 by 800 real pixels and its rail is fourteen rows that must not
+## scroll, both sized so that XL text fits a 1440x900 window with nothing to spare.
+## The 4K preset doubles the chrome and leaves the panel where it was, so at the show
+## size every row grew to its doubled text: Sequencers fell off the bottom of the rail,
+## "Square Oscillator" lost its last letters, and the results column showed eleven
+## rows of the fifty it is for. Capped at XL the browser is the browser the constants
+## were measured for, on a 1600x900 canvas that is the same 900 tall.
+static func _type(value: float) -> int:
+	return Design.furniture_type(value)
+
+
+static func _scale(value: float) -> int:
+	return Design.furniture_scale(value)
+
 var _results: ScrollContainer
 var _result_rows: Array = []
 
@@ -160,12 +178,12 @@ func _ready() -> void:
 	# panel is a shadow nobody ever sees. The panel is drawn inset instead — negative
 	# expand margins pull the paint in by SHADOW on every side, the content margins put
 	# the gutter back so the columns do not move, and the shadow falls into the gap.
-	frame.expand_margin_left = -float(Design.scale(SHADOW))
-	frame.expand_margin_right = -float(Design.scale(SHADOW))
-	frame.expand_margin_top = -float(Design.scale(SHADOW))
-	frame.expand_margin_bottom = -float(Design.scale(SHADOW))
-	frame.shadow_size = Design.scale(SHADOW - 4)
-	frame.shadow_offset = Vector2(0.0, Design.scale(4))
+	frame.expand_margin_left = -float(_scale(SHADOW))
+	frame.expand_margin_right = -float(_scale(SHADOW))
+	frame.expand_margin_top = -float(_scale(SHADOW))
+	frame.expand_margin_bottom = -float(_scale(SHADOW))
+	frame.shadow_size = _scale(SHADOW - 4)
+	frame.shadow_offset = Vector2(0.0, _scale(4))
 	frame.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
 	add_theme_stylebox_override("panel", frame)
 
@@ -188,13 +206,13 @@ func _ready() -> void:
 	var title := Label.new()
 	title.text = "Add node"
 	title.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
-	title.add_theme_font_size_override("font_size", Design.type(Design.SIZE_HEADING))
+	title.add_theme_font_size_override("font_size", _type(Design.SIZE_HEADING))
 	title.add_theme_color_override("font_color", Design.INK_BRIGHT)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	_close_button = Button.new()
 	_close_button.flat = true
-	_close_button.icon = Icons.get_icon(Icons.Kind.CROSS, Design.scale(18),
+	_close_button.icon = Icons.get_icon(Icons.Kind.CROSS, _scale(18),
 		Design.INK_SECOND)
 	_close_button.tooltip_text = "Close (Esc)"
 	_close_button.focus_mode = Control.FOCUS_NONE
@@ -240,7 +258,7 @@ func _build_results() -> void:
 	field.add_child(line)
 
 	var lens := TextureRect.new()
-	lens.texture = Icons.get_icon(Icons.Kind.SEARCH, Design.scale(16), Design.INK_SECOND)
+	lens.texture = Icons.get_icon(Icons.Kind.SEARCH, _scale(16), Design.INK_SECOND)
 	lens.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	line.add_child(lens)
 
@@ -253,7 +271,7 @@ func _build_results() -> void:
 	search_field.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
 	search_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	search_field.add_theme_font_size_override("font_size",
-		Design.type(Design.SIZE_SECONDARY))
+		_type(Design.SIZE_SECONDARY))
 	search_field.text_changed.connect(func(_text: String) -> void: refresh_results())
 	# Taken from the field itself, before it can spend them on its caret. A focused
 	# LineEdit eats the arrow keys, so unhandled input never sees them — which is why
@@ -265,7 +283,7 @@ func _build_results() -> void:
 	# field already focused, so this is discoverability rather than instruction.
 	var shortcut := Label.new()
 	shortcut.text = "Cmd K" if OS.get_name() == "macOS" else "Ctrl K"
-	shortcut.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	shortcut.add_theme_font_size_override("font_size", _type(Design.SIZE_SECONDARY))
 	shortcut.add_theme_color_override("font_color",
 		Design.INK_SECOND.lerp(Design.SURFACES[Design.Surface.NODE], 0.4))
 	line.add_child(shortcut)
@@ -304,6 +322,11 @@ func refresh_results() -> void:
 
 	var groups: Array = []
 	var members := {}
+	# Where each group was first met, which is the shelf's own order: the examples
+	# arrive from main.gd's EXAMPLE_GROUPS, synths first. The sort below is not stable,
+	# and without this the groups the rail does not name — Synth, Patches, sfxr — came
+	# out in whatever order the sort happened to leave equal keys.
+	var first_seen := {}
 	for item: BrowserItem in catalogue:
 		if selected_category == "All":
 			if query == "" and item.kind != BrowserItem.Kind.NODE:
@@ -314,18 +337,18 @@ func refresh_results() -> void:
 			continue
 		if not members.has(item.group):
 			members[item.group] = []
+			first_seen[item.group] = groups.size()
 			groups.append(item.group)
 		(members[item.group] as Array).append(item)
 
 	# Nodes land under their own rail row, so All reads down the rail rather than down
 	# whatever order the registry happens to be in. Device families keep theirs, which is
 	# the shelf order the banks were built in.
+	var rank := func(group: String) -> int:
+		var at := CATEGORY_ORDER.find(group)
+		return at if at >= 0 else CATEGORY_ORDER.size() + int(first_seen[group])
 	groups.sort_custom(func(a: String, b: String) -> bool:
-		var left := CATEGORY_ORDER.find(a)
-		var right := CATEGORY_ORDER.find(b)
-		if left < 0 and right < 0:
-			return false
-		return (left if left >= 0 else 99) < (right if right >= 0 else 99))
+		return int(rank.call(a)) < int(rank.call(b)))
 
 	# Headings are landmarks, so they earn their line only when there is more than one
 	# place to land. A single heading over a single group is a label for the column, and
@@ -363,11 +386,11 @@ func _group_heading(group: String) -> Control:
 	var holder := MarginContainer.new()
 	holder.add_theme_constant_override("margin_top", Design.SPACE_M)
 	holder.add_theme_constant_override("margin_bottom", Design.SPACE_XS)
-	holder.add_theme_constant_override("margin_left", Design.scale(Design.SPACE_M))
+	holder.add_theme_constant_override("margin_left", _scale(Design.SPACE_M))
 	var label := Label.new()
 	label.text = group.to_upper()
 	label.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
-	label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	label.add_theme_font_size_override("font_size", _type(Design.SIZE_SECONDARY))
 	label.add_theme_color_override("font_color",
 		Design.INK_SECOND.lerp(Design.SURFACES[Design.Surface.RAISED], 0.3))
 	holder.add_child(label)
@@ -383,7 +406,7 @@ func _result_row(item: BrowserItem) -> Button:
 	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.focus_mode = Control.FOCUS_NONE
 	row.clip_text = true
-	row.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	row.add_theme_font_size_override("font_size", _type(Design.SIZE_SECONDARY))
 	row.pressed.connect(func() -> void: select_item(item.id))
 	return row
 
@@ -460,7 +483,7 @@ func _build_preview() -> void:
 	_preview_name = Label.new()
 	_preview_name.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
 	_preview_name.add_theme_font_size_override("font_size",
-		Design.type(Design.SIZE_NODE_TITLE))
+		_type(Design.SIZE_NODE_TITLE))
 	_preview_name.add_theme_color_override("font_color", Design.INK_BRIGHT)
 	_preview_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	preview_column.add_child(_preview_name)
@@ -471,7 +494,7 @@ func _build_preview() -> void:
 	_preview_badge = Label.new()
 	_preview_badge.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
 	_preview_badge.add_theme_font_size_override("font_size",
-		Design.type(Design.SIZE_SECONDARY))
+		_type(Design.SIZE_SECONDARY))
 	_preview_badge.add_theme_color_override("font_color", Design.INK_SECOND)
 	preview_column.add_child(_preview_badge)
 
@@ -526,7 +549,7 @@ func show_details(item: BrowserItem) -> void:
 		heading.text = str(section["heading"]).to_upper()
 		heading.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
 		heading.add_theme_font_size_override("font_size",
-			Design.type(Design.SIZE_SECONDARY))
+			_type(Design.SIZE_SECONDARY))
 		heading.add_theme_color_override("font_color",
 			Design.INK_SECOND.lerp(Design.SURFACES[Design.Surface.RAISED], 0.3))
 		# Marked as a heading rather than left to be recognised by its capitals. A section
@@ -547,7 +570,7 @@ func _preview_line(text: String, quiet: bool) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	label.add_theme_font_size_override("font_size", _type(Design.SIZE_SECONDARY))
 	label.add_theme_color_override("font_color",
 		Design.INK_SECOND if quiet else Design.INK_NORMAL)
 	return label
@@ -575,6 +598,7 @@ func _action_button(item: BrowserItem, action: int, primary: bool) -> Button:
 	button.text = BrowserItem.ACTION_LABELS[action]
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size.y = RESULT_HEIGHT
+	button.add_theme_font_size_override("font_size", _type(Design.SIZE_CONTROL))
 	if action == BrowserItem.Action.OPEN_IN_SANDBOX:
 		button.disabled = true
 		button.tooltip_text = "Not wired up yet."
@@ -631,7 +655,7 @@ func _build_rail() -> void:
 		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row.focus_mode = Control.FOCUS_NONE
 		row.add_theme_constant_override("h_separation", Design.SPACE_M)
-		row.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+		row.add_theme_font_size_override("font_size", _type(Design.SIZE_SECONDARY))
 		row.pressed.connect(func() -> void: select_category(name))
 		stack.add_child(row)
 		_rows.append(row)
@@ -661,8 +685,8 @@ func _dress_row(row: Button, chosen: bool) -> void:
 	var quiet := StyleBoxFlat.new()
 	quiet.bg_color = Color(surface, 0.0)
 	quiet.set_corner_radius_all(Design.RADIUS_BUTTON)
-	quiet.content_margin_left = Design.scale(Design.SPACE_M)
-	quiet.content_margin_right = Design.scale(Design.SPACE_M)
+	quiet.content_margin_left = _scale(Design.SPACE_M)
+	quiet.content_margin_right = _scale(Design.SPACE_M)
 	var hover := quiet.duplicate() as StyleBoxFlat
 	hover.bg_color = surface.lerp(Design.INK_NORMAL, 0.07)
 
@@ -686,7 +710,7 @@ func _dress_row(row: Button, chosen: bool) -> void:
 	row.add_theme_color_override("font_pressed_color", ink)
 	# The rail's rows carry a mark; the results' rows carry a name and nothing else.
 	if row.has_meta("mark"):
-		row.icon = Icons.get_icon(int(row.get_meta("mark")), Design.scale(ROW_ICON), ink)
+		row.icon = Icons.get_icon(int(row.get_meta("mark")), _scale(ROW_ICON), ink)
 
 
 ## The keyboard model, as far as this step goes: type to search, up and down to move,
@@ -749,7 +773,7 @@ func _column(row: HBoxContainer, width: int, heading: String,
 	var label := Label.new()
 	label.text = heading
 	label.add_theme_font_override("font", Design.font(Design.WEIGHT_SEMIBOLD))
-	label.add_theme_font_size_override("font_size", Design.type(Design.SIZE_SECONDARY))
+	label.add_theme_font_size_override("font_size", _type(Design.SIZE_SECONDARY))
 	label.add_theme_color_override("font_color", Design.INK_SECOND)
 	holder.add_child(label)
 	var content := VBoxContainer.new()
@@ -805,8 +829,8 @@ func open_beside(anchor: Rect2i) -> void:
 	# control unfolding from the toolbar rather than as a dialog arriving in the middle
 	# of the editor.
 	var at := Vector2i(anchor.position.x,
-		anchor.end.y + Design.scale(DROP) - Design.scale(SHADOW))
-	var margin := Design.scale(Design.SPACE_M)
+		anchor.end.y + _scale(DROP) - _scale(SHADOW))
+	var margin := _scale(Design.SPACE_M)
 	at.x = clampi(at.x, margin, maxi(margin, screen.x - outer.x - margin))
 	at.y = clampi(at.y, margin, maxi(margin, screen.y - outer.y - margin))
 	popup(Rect2i(at, outer))

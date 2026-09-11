@@ -35,6 +35,15 @@ const SETTLE_FRAMES := 12
 func _stage(main, shot: Dictionary) -> void:
 	main._use_palette(int(shot.get("palette", 0)))
 	main._use_ui_scale(int(shot.get("ui_scale", 1)))
+	# The demo launcher's other switches, so a shot can be the show: `case` in HP or
+	# "fit", `detail` as "1:1" or "adaptive", and `arrange` for the auto-placed layout.
+	if str(shot.get("case", "")) != "":
+		main._use_case_width(main._case_from_args(
+			PackedStringArray(["--case=%s" % str(shot["case"])])))
+	if str(shot.get("detail", "")) != "":
+		main.graph_edit.set_detail_mode(main._detail_from_args(
+			PackedStringArray(["--detail=%s" % str(shot["detail"])])))
+	main._demo_arrange = bool(shot.get("arrange", false))
 	for i in 4:
 		await process_frame
 
@@ -160,6 +169,20 @@ func _stage(main, shot: Dictionary) -> void:
 			main._update_port_levels(0.05)
 			await process_frame
 
+	# `browser` opens the Add node browser the way the toolbar button does and lights
+	# the named rail row — "Examples", "FM bank". The browser is a popup, and a popup
+	# was the one surface no spec could ask for: the only pictures of it were taken by
+	# hand, at whatever size the hand's own screen happened to be.
+	if str(shot.get("browser", "")) != "":
+		main._open_node_browser()
+		await process_frame
+		main.node_browser.select_category(str(shot["browser"]))
+		for i in 8:
+			await process_frame
+	elif main.node_browser != null and main.node_browser.visible:
+		main.node_browser.hide()
+		await process_frame
+
 
 func _capture(path: String) -> bool:
 	var image := root.get_texture().get_image()
@@ -182,8 +205,18 @@ func _run_matrix(spec_path: String) -> void:
 		return
 
 	var size: Vector2i = Vector2i(int(spec.get("width", 1600)), int(spec.get("height", 1000)))
-	DisplayServer.window_set_size(size)
-	root.content_scale_size = size
+	if bool(spec.get("fullscreen", false)):
+		# The show's own window. tools/run-demo.sh opens full screen and lets the
+		# project's stretch scale the chrome to the display; a matrix shot pins the
+		# canvas 1:1 to a fixed window instead, and the two are different pictures of
+		# the same editor. What a queue at a 4K screen sees is only reproducible the
+		# first way — the size the spec names is ignored, because the display decides.
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		for i in 30:
+			await process_frame
+	else:
+		DisplayServer.window_set_size(size)
+		root.content_scale_size = size
 
 	var main = load("res://main.tscn").instantiate()
 	root.add_child(main)

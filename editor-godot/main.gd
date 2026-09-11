@@ -140,9 +140,13 @@ const Schematic := preload("res://schematic.gd")
 const SpeakText := preload("res://speak_text.gd")
 const ProbeScope := preload("res://probe_scope.gd")
 
+## Folder -> the prefix on its labels, in the order the shelf is read: the synths
+## first, because "give me something that plays" is the first thing a visitor asks the
+## Examples row, then the worked patches, then the sfxr shelf. The banks the rail names
+## keep their own rows and their order here does not show.
 const EXAMPLE_GROUPS := {
+	"synths": "Synth",
 	"": "",
-	"game": "Game",
 	"sfxr": "sfxr",
 	"nodes": "Node",
 	"fm": "FM",
@@ -152,7 +156,6 @@ const EXAMPLE_GROUPS := {
 	"drums606": "606",
 	"drumssds": "SDS",
 	"drumsgated": "Gated",
-	"synths": "Synth",
 }
 
 ## Groups this big become submenus rather than flat entries — a bank has a shape, and

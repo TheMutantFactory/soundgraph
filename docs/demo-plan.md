@@ -36,15 +36,18 @@ ESP32-S3 and hear the board play the same graph.
 
 ### Station 2 — Patches are game sounds (the sfxr sandbox)
 
-The platformer tab in the Godot editor. Coin, jump, hurt, explode, powerup, select,
-shoot: eight patches under `examples/patches/game/`, each a graph, each derived from an
-sfxr corpus case by `tools/game-sounds.mjs`. The ten-second exhibit: open the Graph
-tab, change the jump patch, come back, jump. No reimport.
+The platformer tab in the Godot editor. Coin, jump, hurt, explode, powerup, shoot:
+seven events, each played by a patch from the sfxr shelf on the roll the game names
+(`Sandbox.SOUNDS`: the jump is `sfxr/jump.json` on `jump-5`, the second jump the same
+file on `jump-0`). The ten-second exhibit: open the Graph tab, change the jump patch,
+come back, jump. No reimport.
 
-- **Examples:** `examples/patches/game/*.json` (all eight), and the **sfxr shelf**:
-  `examples/patches/sfxr/`, one patch per sfxr button with its six rolls as presets.
-  Open "sfxr: Pickup Coin", step the preset strip, and it is sfxr's button pressed six
-  times — then turn Punch or Arpeggio Jump and it is a coin sfxr never rolled.
+- **Examples:** the **sfxr shelf**, `examples/patches/sfxr/`, one patch per sfxr button
+  with its six rolls as presets. Open "sfxr: pickup-coin", step the preset strip, and it
+  is sfxr's button pressed six times — then turn Punch or Arpeggio Jump and it is a coin
+  sfxr never rolled. (The eight copies under `examples/patches/game/` left the shelf on
+  Sep 11: two sets of the same sounds, and the copies were the older, knobless ones. The
+  five the Axoloti set compiles moved beside its bank file, see below.)
 - **Talking point:** these are sfxr's sounds (Tomas Pettersson, 2007, MIT), reproduced
   by the graph within the tolerances `tests/sfxr/` measures, not sampled. A laptop tab
   with the original open (see "sfxr" below) lets a visitor compare.
@@ -101,7 +104,7 @@ checked on Tuesday:
 | 1 | `synths/poly-five.json` | what the editor opens on: five voices, a bank of pages, chords under the keys |
 | 1b | `first-synth.json` | the lite page's opener and the deploy patch; the same graph on every target |
 | 3 | `plucked-string.json` | sounds like an instrument in one keypress |
-| 4 | `game/coin.json`, `game/jump.json` | recognisable in a quarter second |
+| 4 | `sfxr/pickup-coin.json`, `sfxr/jump.json` | recognisable in a quarter second |
 | 5 | `drums909/` | a beat from the roll, loud enough for a hall |
 | 6 | one `dx7/` and one `fm/` favourite | the "we imported real presets" line |
 | 7 | `warehouse.json` | the 85-node, 4-voice one that runs on the Axoloti |
@@ -111,7 +114,10 @@ The Axoloti gets its own set: `examples/banks/demo.json`, ten entries the editor
 button writes to the card until another bank is chosen — first-synth (what the board
 boots into), plucked-string, acid-bass, mallard, coin, jump, powerup, hurt, explode and
 yes-dear, in Program Change order. Every one compiled and was written to a board on
-2026-09-10. Not in it, and why: poly-five, axe and duo-lead connect an oscillator's
+2026-09-10. The five game sounds are the set's own files, `examples/banks/demo/*.json`,
+written by `tools/game-sounds.mjs` from the corpus — byte for byte the files the board
+compiled — rather than the sfxr shelf's, whose union graphs carry the pulse-width path
+the target does not take. Not in it, and why: poly-five, axe and duo-lead connect an oscillator's
 FM input, which the target does not take yet; shoot and laser-shoot sweep pulse width;
 typing and babble use SampleHold; warehouse compiles but renders slower than real time
 on the board.

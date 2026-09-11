@@ -6058,8 +6058,10 @@ func _initialize() -> void:
 		await process_frame
 
 	Design.ui_scale = Design.Scale.COMFORTABLE
-	for example_name in ["First Synth", "Game: coin", "Game: explode", "Game: powerup",
-			"Game: jump2", "DX7: algo-01"]:
+	# Not explosion or powerup: those two shelf patches ship with vibrato over repeat,
+	# which is the shelf writer's layout and docs/known-issues.md's to carry, not this
+	# check's — this is about what opening a clean file does to it.
+	for example_name in ["First Synth", "sfxr: pickup-coin", "sfxr: jump", "DX7: algo-01"]:
 		await main._load_example(example_name)
 		# Frames before the zoom, not after. Opening a patch fits it to the window a few
 		# frames later, so a zoom set immediately was overwritten and everything below
@@ -9862,7 +9864,7 @@ func _initialize() -> void:
 	# The seam a module needs. A game sound is gated by a NoteInput, which is a terminal —
 	# so importing one leaves its envelope gate free for the host graph to drive, instead
 	# of carrying a constant that fires on its own and argues with the parent.
-	var coin_text := FileAccess.get_file_as_string(main._example_path("game/coin.json"))
+	var coin_text := FileAccess.get_file_as_string(main._example_path("sfxr/pickup-coin.json"))
 	var before_coin: int = main.patch["nodes"].size()
 	main._import_module(coin_text, "coin")
 	await process_frame
@@ -11536,7 +11538,7 @@ func _initialize() -> void:
 			   "" if examples_bad.is_empty() else " — bad: " + ", ".join(examples_bad)])
 
 	# The game sounds are one-shots, so the Fire button is the only way to hear one twice.
-	await main._load_example("Game: coin")
+	await main._load_example("sfxr: pickup-coin")
 	await process_frame
 	await process_frame
 	check(main.engine.is_loaded(), "a game sound opens as an ordinary patch")
@@ -11669,9 +11671,18 @@ func _initialize() -> void:
 		var names: Array = main.sandbox.sounds.sound_names()
 		check(names.size() >= 6,
 			"and it loaded its sound patches (%d found)" % names.size())
-		for expected in ["jump", "coin", "hurt", "shoot", "powerup", "explode"]:
+		for expected in ["jump", "jump2", "coin", "hurt", "shoot", "powerup", "explode"]:
 			check(main.sandbox.sounds.has_sound(expected),
-				"including %s.json" % expected)
+				"including %s" % expected)
+		# Two events on one shelf patch, each on its own roll. A voice is only recorded
+		# once its preset was found and written, so the names being there is the
+		# guarantee; that they differ is what makes the second jump a second sound.
+		if main.sandbox.sounds.has_sound("jump") and main.sandbox.sounds.has_sound("jump2"):
+			var jump_roll := str(main.sandbox.sounds._voices["jump"]["preset"])
+			var jump2_roll := str(main.sandbox.sounds._voices["jump2"]["preset"])
+			check(jump_roll != "" and jump2_roll != "" and jump_roll != jump2_roll,
+				"and the two jumps sit on different rolls of the same shelf patch (%s, %s)"
+					% [jump_roll, jump2_roll])
 
 		# Every one has to be a patch the core accepted, not merely a file that existed.
 		# load_sound only records a voice after load_patch succeeds, so a name being

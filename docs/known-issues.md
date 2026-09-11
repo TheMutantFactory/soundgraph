@@ -4,6 +4,11 @@ Open problems, ordered by how much they threaten the Knobcon demo.
 
 ## Open
 
+- **Two sfxr shelf patches ship overlapping.** `examples/patches/sfxr/explosion.json`
+  opens with `vibrato` over `repeat_on` by 176x208 and `powerup.json` with `vibrato`
+  over `repeat` by 376x176 (measured by editor_test's clear-layout check at 100%,
+  2026-09-11). The layout is `sfxr-ref shelf`'s, in tools/sfxr-ref/to_shelf.cpp; Tidy
+  clears it in the editor, and the other five shelf patches open clean.
 - **Import MIDI quantises to sixteenths whatever the file holds.** Ornaments finer than
   a sixteenth land on one step. The `division` field could carry a finer grid when the
   file asks for it; nothing does yet.

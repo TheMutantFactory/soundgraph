@@ -1,11 +1,18 @@
 #!/usr/bin/env node
-// Rebuilds examples/patches/game/ from the sfxr corpus.
+// Rebuilds examples/banks/demo/ — the Axoloti demo set's own game sounds — from the sfxr
+// corpus.
 //
-// These eight files are generated, but until now the recipe lived only in the shell
+// These five files are generated, but until now the recipe lived only in the shell
 // history of whoever made them. That is the same trap as a hand-copied source list: two
 // things that have to agree, and no way to notice when they stop. Changing the mapper
-// meant the corpus was regenerated and these were not, so a jump in the sandbox and a
+// meant the corpus was regenerated and these were not, so a jump on the board and a
 // jump in the test rig were quietly different sounds.
+//
+// They live beside examples/banks/demo.json rather than on the examples shelf, because
+// the bank is what they are for: every one compiled for the board and was written to a
+// card, and the shelf has the same sounds as the sfxr shelf's presets — with knobs, and
+// with the pulse-width path the board does not take. The editor's Sandbox plays the
+// shelf; the board plays these.
 //
 // The mapping below is the record. Each game sound is a corpus case picked for how it
 // sounds, so this file is the only place a taste decision is stored — which is why it is
@@ -28,10 +35,7 @@ const SOUNDS = [
   { file: 'explode.json', case: 'explosion-0', description: 'Something blowing up.' },
   { file: 'hurt.json', case: 'hit-hurt-2', description: 'Taking damage.' },
   { file: 'jump.json', case: 'jump-5', description: 'Jumping.' },
-  { file: 'jump2.json', case: 'jump-0', description: 'The second jump of a double jump.' },
   { file: 'powerup.json', case: 'powerup-0', description: 'Getting a power-up.' },
-  { file: 'select.json', case: 'blip-select-1', description: 'Moving through a menu.' },
-  { file: 'shoot.json', case: 'laser-shoot-0', description: 'Firing a shot.' },
 ];
 
 const check = process.argv.includes('--check');
@@ -39,7 +43,7 @@ let differences = 0;
 
 for (const sound of SOUNDS) {
   const source = join(root, 'tests', 'sfxr', 'patches', `${sound.case}.json`);
-  const target = join(root, 'examples', 'patches', 'game', sound.file);
+  const target = join(root, 'examples', 'banks', 'demo', sound.file);
 
   // A text substitution rather than a parse and re-serialise, so every byte outside the
   // metadata block is the mapper's own output. Re-serialising would work too, and would
@@ -73,7 +77,7 @@ for (const sound of SOUNDS) {
       committed = null;
     }
     if (committed !== rendered) {
-      console.error(`  stale: examples/patches/game/${sound.file}`);
+      console.error(`  stale: examples/banks/demo/${sound.file}`);
       differences++;
     }
   } else {

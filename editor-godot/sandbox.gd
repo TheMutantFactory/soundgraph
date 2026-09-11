@@ -32,6 +32,21 @@ const GROUND := Color(0.20, 0.22, 0.27)
 var sounds: GameSounds
 var world: SandboxWorld
 
+## Which shelf patch, on which of its rolls, plays each event. The sfxr shelf under
+## examples/patches/sfxr keeps one patch per generator with six rolls as presets, so
+## the game names the roll rather than keeping a copy of it: the eight files that used
+## to live under examples/patches/game were those rolls copied out, and copies drift.
+## The rolls are the ones the copies were made from, so the game sounds as it did.
+const SOUNDS := {
+	"jump": ["jump", "jump-5"],
+	"jump2": ["jump", "jump-0"],
+	"coin": ["pickup-coin", "pickup-coin-0"],
+	"hurt": ["hit-hurt", "hit-hurt-2"],
+	"shoot": ["laser-shoot", "laser-shoot-0"],
+	"powerup": ["powerup", "powerup-0"],
+	"explode": ["explosion", "explosion-0"],
+}
+
 var _status: Label
 var _loaded := false
 
@@ -250,13 +265,13 @@ func _show_controls() -> void:
 		body.add_theme_constant_override("separation", Design.SPACE_S)
 		_controls_popup.add_child(body)
 		for line in [
-				"jump.json      when the player jumps",
-				"jump2.json     on the second jump, in mid-air",
-				"coin.json      picking a coin up",
-				"hurt.json      touching the spikes",
-				"shoot.json     firing, on X",
-				"powerup.json   reaching the flag",
-				"explode.json   falling off the bottom",
+				"sfxr/jump.json         jump-5     when the player jumps",
+				"sfxr/jump.json         jump-0     on the second jump, in mid-air",
+				"sfxr/pickup-coin.json  roll 0     picking a coin up",
+				"sfxr/hit-hurt.json     roll 2     touching the spikes",
+				"sfxr/laser-shoot.json  roll 0     firing, on X",
+				"sfxr/powerup.json      roll 0     reaching the flag",
+				"sfxr/explosion.json    roll 0     falling off the bottom",
 		]:
 			var label := Label.new()
 			label.text = line
@@ -291,11 +306,16 @@ func ensure_sounds_loaded() -> void:
 
 	# The patches live with the other examples rather than inside the editor project: they
 	# are ordinary SoundGraph documents, openable in the Graph tab like anything else.
-	var folder := "res://examples-mirror/game"
-	var loaded := sounds.load_folder(folder)
-	if loaded == 0:
-		folder = ProjectSettings.globalize_path("res://").path_join("../examples/patches/game")
-		loaded = sounds.load_folder(folder)
+	# The repository's shelf when it is there, the mirror in an export.
+	var folder := ProjectSettings.globalize_path("res://").path_join("../examples/patches/sfxr")
+	if not DirAccess.dir_exists_absolute(folder):
+		folder = "res://examples-mirror/sfxr"
+	var loaded := 0
+	for sound_name: String in SOUNDS:
+		var choice: Array = SOUNDS[sound_name]
+		if sounds.load_sound(sound_name, folder.path_join("%s.json" % str(choice[0])),
+				str(choice[1])):
+			loaded += 1
 	if loaded > 0:
 		# Short enough for the strip; the list itself is in the tooltip and in the
 		# controls popup, both of which are one gesture away.

@@ -2005,3 +2005,48 @@ The headless suites do not see the rack — it needs pixels — so the check is
 the launch itself: a clean console on `tools/run-demo.sh`. Whether the show
 laptop printed the same error behind its minimised terminal is unknown; it
 is fixed there too.
+
+## 2026-09-11 — The game sounds are the sfxr shelf, and the Add node browser is capped at XL
+
+Decision:
+`examples/patches/game/` is gone from the shelf. The Sandbox plays the
+sfxr shelf instead: `Sandbox.SOUNDS` names a shelf patch and one of its
+six presets per event, and `GameSounds.load_sound` takes a preset name
+and writes that roll's values through the patch's own controls. The rolls
+are the ones the copies were made from, so the game sounds as it did. The
+five copies the Axoloti demo set flashes (coin, jump, powerup, hurt,
+explode) moved beside their bank, to `examples/banks/demo/`, byte for
+byte; `tools/game-sounds.mjs` writes them there and its ctest still
+notices drift. jump2, select and shoot, which nothing but the shelf
+listed, are deleted. On the Examples shelf the synths come first, then the
+worked patches, then sfxr, and the order is now deterministic (the group
+sort had no tiebreak). The browser's type and geometry go through
+`Design.furniture_type` / `furniture_scale` — the interface scale up to
+XL and no further — and the preview's action buttons take that size too.
+
+Reason:
+Two sets of the same game noises on one shelf, and the older set was the
+one without knobs or presets: eight files copied out of the corpus so the
+sandbox had something to load, kept in step by a check that only existed
+because copies drift. The shelf already carried every one of those rolls
+by name. The board is the reason five survive: the demo set was compiled
+and written to a card on 2026-09-10, the shelf's union graphs carry the
+pulse-width sweep the target refuses (docs/demo-plan.md, "shoot and
+laser-shoot"), and the show is today. Retargeting the bank at the shelf is
+a compile question for sgaxo, not an afternoon's. Photographed at the show size (tools/screenshot-matrix's new
+`fullscreen` spec and `browser` shot, 3840x2160 on the bench Mac), the
+browser had Sequencers scrolled off the rail, "Square Oscillator" clipped
+to "Square Oscillato", and eleven results rows showing: the panel is 910
+by 800 real pixels and 4K doubles the chrome inside it. The keyboard's
+transport row fits at that size with room to spare; its Volume knob's
+tick marks touch Mute and the Volume label, which is noted and not fixed.
+
+Consequences:
+An exported build carries the shelf in its mirror, as it did the copies.
+Anybody who wrote `sounds.load_folder("res://game")` against the old
+files still can; `load_sound` with no preset is unchanged. The web export
+under editor-web/editor is from before this and still packs the copies
+until it is rebuilt. Found on the way, and left for the shelf writer:
+`sfxr/explosion.json` and `sfxr/powerup.json` open with their vibrato
+node over the repeat node, so the suite's clear-layout sample reads
+pickup-coin and jump instead (docs/known-issues.md).
