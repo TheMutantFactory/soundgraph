@@ -23,6 +23,17 @@ Open problems, ordered by how much they threaten the Knobcon demo.
   so the two are separate domains and the I2C side wants a power enable or a physical
   look that has not been found yet. `i2c` scans the bus and `gpio`/`i2c pullup` poke at
   it from the console. Touch on this board is blocked here until it is understood.
+
+  Confirmed not a SoundGraph bug on 2026-09-10: Waveshare's own `03_i2c_tools` example,
+  built for this unit and flashed in place of our firmware, times out on every address
+  too (`i2cdetect` prints bus-error markers, not devices). The factory Brookesia demo
+  (captured before we reflashed) did reach all three parts, so the bus can work — the
+  factory's fuller bring-up powers a rail the public BSP's I2C and display init do not,
+  and it is not in any code or schematic found so far. Next step is hardware: a meter on
+  the codec/touch VDD and on the 7/8 pull-ups, and whether a P4 internal LDO (VO1/VO2)
+  or an enable feeds that rail. The repo's prebuilt `FactoryOnly.bin` is a 32 MB image
+  for a 32 MB flash variant; this unit's flash reads as 16 MB, so that blob will not
+  reflash here as-is.
 - **The S3 build directory's sdkconfig has drifted from the defaults.**
   `CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1` is `y` in `embedded/esp32-s3/sdkconfig` and
   `n` in `sdkconfig.defaults`. ESP-IDF only reads the defaults when it generates a fresh
