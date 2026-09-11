@@ -34,6 +34,15 @@ Open problems, ordered by how much they threaten the Knobcon demo.
   or an enable feeds that rail. The repo's prebuilt `FactoryOnly.bin` is a 32 MB image
   for a 32 MB flash variant; this unit's flash reads as 16 MB, so that blob will not
   reflash here as-is.
+- **The 7-inch P4's backlight rail shares the I2C dead-rail's fate, and the power switch
+  does not gate it.** The firmware drives the backlight GPIO correctly (`backlight on
+  GPIO 32, lit`), but the LED supply behind it is off, so a full white fill photographs
+  as dark. It came on once, mid-session, correlated with nothing reproducible, and a
+  power-cycle drops it again; the onboard ON/OFF switch does not bring it back (tested:
+  switch on, `screen fill FFFFFF`, still dark). Same story as the codec/touch bus — a
+  rail the factory bring-up powers and we have not found. Screens are verified regardless
+  with `fbdump` / `tools/esp32/fbshot.py`, which read the framebuffer back over the wire
+  and reconstruct it, so the drawing can be checked with the lamp off.
 - **The S3 build directory's sdkconfig has drifted from the defaults.**
   `CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1` is `y` in `embedded/esp32-s3/sdkconfig` and
   `n` in `sdkconfig.defaults`. ESP-IDF only reads the defaults when it generates a fresh

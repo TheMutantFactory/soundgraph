@@ -40,6 +40,8 @@ bool display_test_card() { return false; }
 #else
 
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "esp_heap_caps.h"
@@ -1238,6 +1240,50 @@ bool display_test_card() {
         display_rect(i * (w / 16), h / 2 + 70, w / 16, 30, display_rgb(v, v, v));
     }
     return display_present();
+}
+
+void display_dump(int columns) {
+    if (g_fb == nullptr) {
+        std::printf("FBDUMP none\n");
+        return;
+    }
+    int cw = columns > 0 ? columns : 96;
+    if (cw > SG_DISPLAY_WIDTH) cw = SG_DISPLAY_WIDTH;
+    if (cw < 8) cw = 8;
+    // Height follows from the physical aspect ratio. The dump samples the framebuffer in
+    // its physical orientation, which is the logical one on a board mounted upright
+    // (rotation 0); a rotated board would read back turned, which is a later concern.
+    const int ch = SG_DISPLAY_HEIGHT * cw / SG_DISPLAY_WIDTH;
+    std::printf("FBDUMP %d %d\n", cw, ch);
+    static const char kHex[] = "0123456789abcdef";
+    // One row assembled in a buffer and sent in a single write: a printf per pixel floods
+    // the console driver and drops characters, and a dropped character is a corrupt image.
+    char* line = static_cast<char*>(std::malloc(static_cast<std::size_t>(cw) * 6 + 2));
+    if (line == nullptr) {
+        std::printf("FBEND\n");
+        return;
+    }
+    for (int ry = 0; ry < ch; ++ry) {
+        const int py = ry * SG_DISPLAY_HEIGHT / ch;
+        char* o = line;
+        for (int rx = 0; rx < cw; ++rx) {
+            const int px = rx * SG_DISPLAY_WIDTH / cw;
+            const uint8_t* p =
+                g_fb + (static_cast<std::size_t>(py) * SG_DISPLAY_WIDTH + px) * kBytesPerPixel;
+            int r = 0, g = 0, b = 0;
+            load_rgb(p, &r, &g, &b);
+            *o++ = kHex[(r >> 4) & 0xF]; *o++ = kHex[r & 0xF];
+            *o++ = kHex[(g >> 4) & 0xF]; *o++ = kHex[g & 0xF];
+            *o++ = kHex[(b >> 4) & 0xF]; *o++ = kHex[b & 0xF];
+        }
+        *o++ = '\n';
+        *o = '\0';
+        std::fputs(line, stdout);
+        std::fflush(stdout);
+    }
+    std::free(line);
+    std::printf("FBEND\n");
+    std::fflush(stdout);
 }
 
 #endif  // SG_DISPLAY_PRESENT

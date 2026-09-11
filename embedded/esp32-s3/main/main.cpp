@@ -2062,6 +2062,10 @@ void console_task(void*) {
             } else {
                 std::printf("ERR gpio set <pin> <0|1> | gpio get <pin>\n");
             }
+        } else if (command == "fbdump") {
+            // Read the framebuffer back over the wire, so a screen can be verified when
+            // the backlight will not light. Host side reconstructs it (tools/esp32).
+            display_dump(tokens.size() >= 2 ? std::atoi(tokens[1]) : 96);
         } else if (command == "kiosk") {
             // Drive the event kiosk from the console: bring-up and camera verification
             // of the demo screens without the touch the 7-inch board does not yet have.

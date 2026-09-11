@@ -93,6 +93,12 @@ void display_clear_clip();
 bool display_set_brightness(int percent);
 bool display_test_card();
 
+// Print a downscaled copy of the framebuffer as hex RGB over the console: a line
+// "FBDUMP <w> <h>", then <h> rows of <w> six-hex-digit pixels, then "FBEND". So a screen
+// can be read back and reconstructed on the host when the backlight will not light — the
+// drawing is one question, the lamp behind it another, and this answers the first alone.
+void display_dump(int columns);
+
 // A colour scaled toward black. Correct against a true black ground, which an AMOLED
 // gives for free, and the basis of every halo and dim label in the interface.
 static inline uint32_t display_dim(uint32_t colour, int percent) {
