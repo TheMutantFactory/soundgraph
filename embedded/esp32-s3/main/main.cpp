@@ -57,6 +57,7 @@
 #include "board_config.h"
 #include "codec_init.h"
 #include "display.h"
+#include "kiosk.h"
 #include "speech.h"
 #include "touch.h"
 #include "soundgraph/patch_io.h"
@@ -2061,6 +2062,19 @@ void console_task(void*) {
             } else {
                 std::printf("ERR gpio set <pin> <0|1> | gpio get <pin>\n");
             }
+        } else if (command == "kiosk") {
+            // Drive the event kiosk from the console: bring-up and camera verification
+            // of the demo screens without the touch the 7-inch board does not yet have.
+            if (!kiosk_available()) {
+                std::printf("ERR this board has no display\n");
+            } else {
+                const char* shown = kiosk_show(tokens.size() >= 2 ? tokens[1] : "");
+                std::printf("OK kiosk %s — screens:", shown);
+                for (int i = 0; i < kiosk_screen_count(); ++i) {
+                    std::printf(" %s", kiosk_screen_name(i));
+                }
+                std::printf("\n");
+            }
         } else if (command == "i2c") {
             // Who is on the codec's bus. A NAK from a part that ought to be there is
             // either the part, the pins, or the bus, and a scan tells the three apart
@@ -2591,6 +2605,17 @@ extern "C" void app_main(void) {
 
     // The face, once there is a patch to have a face for.
     draw_face();
+
+    // The 7-inch board boots straight into the kiosk demo; the smaller boards keep the
+    // instrument face. A board-profile flag will replace this name test once a second
+    // kiosk board exists. The instrument still runs underneath — the kiosk is a surface
+    // drawn over it, and `screen face` returns to the knobs.
+#if SG_DISPLAY_PRESENT
+    if (kiosk_available() &&
+        std::strcmp(SG_BOARD_ID, "esp32-p4-wifi6-touch-lcd-7b") == 0) {
+        kiosk_show("attract");
+    }
+#endif
 
     // Audio gets its own core; the console shares core 0 with the system.
     xTaskCreatePinnedToCore(audio_task, "sg_audio", 8192, nullptr, configMAX_PRIORITIES - 2,
