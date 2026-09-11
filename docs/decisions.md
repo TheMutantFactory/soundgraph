@@ -2006,6 +2006,29 @@ the launch itself: a clean console on `tools/run-demo.sh`. Whether the show
 laptop printed the same error behind its minimised terminal is unknown; it
 is fixed there too.
 
+## 2026-09-11 — Named voices before numbered wirings, and the strip fits at its widest
+
+Decision:
+`_shelf_order` sorts a folder alphabetically with a numbered series —
+three or more names sharing a stem and a trailing number — last. The DX7
+shelf now reads bass, bell, ep and organ before algo-01 to -32, in the
+browser and in the hamburger alike, because both read `_examples`. The
+keyboard strip's range label reserves 100 rather than 132.
+
+Reason:
+"algo" sorts first and put thirty-two wirings between the reader and
+every voice with a name. Asked whether the octave "+" at the strip's right
+end is visible: measured, it is at fullscreen 4K (1588 in a 1600 canvas,
+143 to spare with the roll open) and it is not in a 1440x900 window at XL
+or 4K with the roll open — 1433 of buttons in a 1416 strip, and the strip
+clips its right end by design. 32 off the label's reservation is 43 at
+XL, which is the difference.
+
+Consequences:
+The suite opens the roll at XL and requires the strip's minimum to fit
+its holder. The FM bank's slap-bass-1/-2 pairs stay in place: a pair is
+not a series.
+
 ## 2026-09-11 — One example shelf: the banks are examples, and the hamburger reads the same list
 
 Decision:

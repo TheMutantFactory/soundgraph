@@ -736,6 +736,24 @@ func _initialize() -> void:
 	check(menu_groups == shelf_groups,
 		"and Open example… shows the same groups in the same order (%s)"
 			% ", ".join(PackedStringArray(menu_groups)))
+	# Within DX7, the voices with names before the thirty-two numbered wirings: "algo"
+	# sorts first alphabetically, and put the wirings between the reader and every voice.
+	var dx7_labels: Array = []
+	for label in main._examples:
+		if str(label).begins_with("DX7: "):
+			dx7_labels.append(str(label))
+	check(dx7_labels.size() > 40 and not str(dx7_labels[0]).begins_with("DX7: algo-")
+			and str(dx7_labels[-1]) == "DX7: algo-32"
+			and str(dx7_labels[-32]) == "DX7: algo-01",
+		"and the DX7 shelf reads its named voices before its numbered wirings (%s … %s)"
+			% [dx7_labels[0], dx7_labels[-1]])
+	# And a named voice is introduced as what it is. Reading every DX7 name as algo-NN
+	# called the bass bank "a voice on algorithm 0".
+	var bank_blurb := str(main.DeviceBlurbs.blurb("DX7: bass-bank"))
+	var voice_blurb := str(main.DeviceBlurbs.blurb("DX7: ep-felt"))
+	check(bank_blurb.contains("bass family") and not bank_blurb.contains("algorithm 0")
+			and voice_blurb.contains("electric piano") and voice_blurb.contains("felt"),
+		"and the named DX7 voices are introduced by family (%s)" % bank_blurb)
 	main.node_browser.select_category("All")
 	await process_frame
 
@@ -9832,6 +9850,25 @@ func _initialize() -> void:
 	main._show_octaves(start_width)
 	main.octave = start_octave
 	main._refresh_keyboard_range()
+
+	# The strip's last button is the octave "+", and at XL with the roll open it was
+	# the one thing past the right edge of a 1440-wide window: 1433 of buttons in a
+	# 1416 strip, clipped rather than scrolled by design. The strip has to fit at its
+	# widest, at the widest scale the dock takes.
+	var strip_scale := Design.ui_scale
+	var strip_roll: bool = main.roll_row.visible
+	main._use_ui_scale(Design.Scale.XL)
+	main._set_roll_open(true)
+	for i in 6:
+		await process_frame
+	var strip_holder: Control = main.keyboard_bar.get_parent()
+	check(main.keyboard_bar.get_combined_minimum_size().x <= strip_holder.size.x,
+		"the strip fits its row at XL with the roll open (%.0f of %.0f)"
+			% [main.keyboard_bar.get_combined_minimum_size().x, strip_holder.size.x])
+	main._set_roll_open(strip_roll)
+	main._use_ui_scale(strip_scale)
+	for i in 4:
+		await process_frame
 
 	main._shift_octave(1)
 	check(main.keyboard.first_note == (start_octave + 1) * 12 + 12,

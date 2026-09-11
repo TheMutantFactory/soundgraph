@@ -124,9 +124,31 @@ static func blurb(label: String) -> String:
 	return "A whole patch as one node, wired like anything else."
 
 
+## The four voice families on the DX7 shelf, and what to call them. A "-bank" is the
+## family in one voice with its eight patches as presets; anything else is one of
+## those patches on its own.
+const DX7_FAMILIES := {
+	"bass": "bass",
+	"bell": "bell",
+	"ep": "electric piano",
+	"organ": "organ",
+}
+
+
 ## The 32 wirings, introduced honestly: the number is the fact, the two ends of
-## the range are the story.
+## the range are the story. The named voices are introduced by their family — a
+## bass-bank is not "algorithm 0", which is what reading every DX7 name as algo-NN
+## said about it.
 static func _dx7(name: String) -> String:
+	if not name.begins_with("algo-"):
+		var family := name.get_slice("-", 0)
+		var voice := name.substr(family.length() + 1)
+		var kind := str(DX7_FAMILIES.get(family, "DX7"))
+		if voice == "bank":
+			return "The DX7 %s family in one voice: its eight patches as presets, and a " \
+				% kind + "knob for every operator."
+		return "A DX7 %s, %s: six sine operators on the family's wiring, one page " \
+			% [kind, voice] + "of the %s bank." % family
 	var number := int(name.trim_prefix("algo-"))
 	if number == 1:
 		return "A DX7 voice on algorithm 1: two stacks of three operators, the " \

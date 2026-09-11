@@ -8385,7 +8385,11 @@ func _build_keyboard_bar() -> Control:
 
 	var range_label := Label.new()
 	range_label.name = "KeyboardRange"
-	range_label.custom_minimum_size.x = Design.scale(132)
+	# Room for "C-1 – C1" and no more. It reserved 132, and at XL with the roll open
+	# the strip came to 1433 in a 1416 window: the octave "+" was the thing that fell
+	# off the right edge. The row's own redesign is still owed; this keeps its last
+	# button on screen until then.
+	range_label.custom_minimum_size.x = Design.scale(100)
 	range_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	range_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	range_label.add_theme_font_override("font", Design.numeric_font())
@@ -12399,8 +12403,7 @@ func _scan_examples() -> void:
 	_examples.clear()
 	for folder: String in EXAMPLE_GROUPS:
 		var prefix: String = EXAMPLE_GROUPS[folder]
-		var names := _example_file_names(folder)
-		names.sort()
+		var names := _shelf_order(_example_file_names(folder))
 		# Typed, because an untyped loop variable here is a parse error at load and a
 		# *hang* in the headless test rather than a message — see docs/current-phase.md.
 		for file_name: String in names:
@@ -12408,6 +12411,30 @@ func _scan_examples() -> void:
 			if prefix != "":
 				label = "%s: %s" % [prefix, file_name.get_basename()]
 			_examples[label] = folder.path_join(file_name) if folder != "" else file_name
+
+
+## A folder's files in shelf order: alphabetical, with a numbered series last. The DX7
+## folder is the case — thirty-two algo-NN wirings and thirty-six voices with names, and
+## "algo" sorting first put the wirings between the reader and every voice. A series is
+## three or more names sharing a stem and differing only in a trailing number, so the
+## FM bank's slap-bass-1 and -2 stay where they are, as a pair among names.
+static func _shelf_order(names: Array) -> Array:
+	var stems := {}
+	var stem_of := {}
+	var numbered := RegEx.create_from_string("^(.+)-\\d+\\.json$")
+	for file_name: String in names:
+		var found := numbered.search(file_name)
+		if found != null:
+			stem_of[file_name] = found.get_string(1)
+			stems[found.get_string(1)] = int(stems.get(found.get_string(1), 0)) + 1
+	var ordered := names.duplicate()
+	ordered.sort_custom(func(a: String, b: String) -> bool:
+		var a_series := stem_of.has(a) and int(stems[stem_of[a]]) >= 3
+		var b_series := stem_of.has(b) and int(stems[stem_of[b]]) >= 3
+		if a_series != b_series:
+			return b_series
+		return a < b)
+	return ordered
 
 
 func _example_file_names(folder: String) -> Array:
