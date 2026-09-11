@@ -1982,3 +1982,26 @@ Consequences:
 `git describe` on main now says `v0.2.0`, and the stamp with it. The
 Windows export is unsigned; SmartScreen will ask. The card image is a
 zip to unpack onto an SD card's root, the same files the flash writes.
+
+## 2026-09-11 — The demo launcher has a Mac twin, and a named case no longer overflows the rack
+
+Decision:
+tools/run-demo.sh is run-demo.bat for macOS and Linux: the same flags, the
+same refusal to build, the same best-effort minimise of the terminal it was
+typed into (Terminal and iTerm2 through AppleScript, xdotool under X11). The
+configured Godot may be the .app bundle or the binary inside it.
+
+Reason:
+The bench Mac is where the demo is rehearsed this week, and a rehearsal
+should start the way the show does. Its first run found that `--case=168`
+reaches fit_case from _ready, before the scroll container has a width;
+_relayout then took its own width as the span, and at a zoom below 1.0
+every pass through resized grew that width by the zoom's reciprocal until
+Godot refused a non-finite size, 58 frames deep. The fallback now asks the
+viewport and never the control being sized.
+
+Consequences:
+The headless suites do not see the rack — it needs pixels — so the check is
+the launch itself: a clean console on `tools/run-demo.sh`. Whether the show
+laptop printed the same error behind its minimised terminal is unknown; it
+is fixed there too.

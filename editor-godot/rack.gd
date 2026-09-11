@@ -717,8 +717,12 @@ func _relayout() -> void:
 		span = (host.get_parent() as Control).size.x
 	elif host != null:
 		span = host.size.x
+	# Before the first layout pass the scroll container has no width yet — a case named
+	# on the command line reaches here from _ready. Ask the viewport, never this
+	# control's own width: that is the value being computed, and at a zoom below 1.0
+	# each pass grew it by the zoom's reciprocal, through resized, until it overflowed.
 	if span <= 1.0:
-		span = maxf(size.x, get_viewport_rect().size.x if is_inside_tree() else 0.0)
+		span = get_viewport_rect().size.x if is_inside_tree() else size.x
 	var available := maxf(span / maxf(view_zoom, 0.01) - CASE_MARGIN * 2.0, 200.0)
 	if case_hp > 0:
 		available = case_hp * HP

@@ -136,10 +136,11 @@ Everything else stays reachable through search, not the front row.
 - Pick the two MIDI tunes and the two FM presets by ear.
 
 **Tuesday 2026-09-09**
-- On the show laptop, restart the editor with `tools\run-demo.bat`: no rebuild, and it
-  starts in 1:1 detail at the 4K interface size, whose work area draws its words and
-  cells at twice the chrome, whatever the last hand left behind. Add `--zoom=2` to the
-  launcher for twice that again, nodes and all; Fit (Ctrl+0) frames a whole patch.
+- On the show laptop, restart the editor with `tools\run-demo.bat` (`tools/run-demo.sh`
+  on a Mac): no rebuild, and it starts in 1:1 detail at the 4K interface size, whose
+  work area draws its words and cells at twice the chrome, whatever the last hand left
+  behind. Add `--zoom=2` to the launcher for twice that again, nodes and all; Fit
+  (Ctrl+0) frames a whole patch.
 - View → QR code → Medium, so the wordmark's QR scans from across the table. Keyboard →
   Play is the jukebox: Keys, Arpeggiate held keys, or Play the songs folder.
 - Full dry run of all five stations, in order, on the laptop that goes to the show.
