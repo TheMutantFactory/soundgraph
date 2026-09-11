@@ -311,3 +311,24 @@ Pinned by the suite: the toolbar's own signal opens it, the three columns exist,
 ways out work, and the patch underneath is left where it was. That last check first failed
 against a zoom that was still settling from an earlier check two frames after being asked
 to fit — the suite's own leftover, reported as the browser disturbing the patch.
+
+## The shelf is one shelf
+
+Landed 2026-09-11, between the steps, because the show found it: the DX7 and FM voices
+were reachable only as things to drop in. Their rail rows offered *Add node* and nothing
+else, and Examples did not list them — so a whole DX7 algorithm could be looked at only
+through the hamburger, whose *Open example…* menu was forty prefixed rows in folder-scan
+order followed by two "bank" submenus of its own.
+
+`BrowserItem.shelves` is the rows an item appears under. A bank voice lives in its bank
+and is also an example, so it is listed twice and is one object; the Node bank's demos
+are demonstrations of primitives and stay on their own row. `primary_under(row)` says
+which action leads: under Examples a bank voice is opened, under its bank it is added,
+and both buttons are always drawn. The Examples row reads synths, then the worked
+patches, then sfxr, then the banks, in the shelf's own order — `main.gd`'s
+`EXAMPLE_GROUPS` — with a stable tiebreak in the sort that had none.
+
+The hamburger's *Open example…* is built from the same structure,
+`BrowserCatalogue.shelf()`: a worked group is its rows under a labelled rule, the way the
+browser heads them; a bank is a submenu. The suite reads the browser's headings and the
+menu's rules and submenus and requires them to be the same list.

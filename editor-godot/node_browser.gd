@@ -331,7 +331,7 @@ func refresh_results() -> void:
 		if selected_category == "All":
 			if query == "" and item.kind != BrowserItem.Kind.NODE:
 				continue
-		elif item.category != selected_category:
+		elif not item.shelves.has(selected_category):
 			continue
 		if not item.matches(query, ranked):
 			continue
@@ -458,7 +458,7 @@ func item_by_id(id: String) -> BrowserItem:
 func activate_selected() -> void:
 	var item := item_by_id(selected_item)
 	if item != null:
-		item_activated.emit(item.id, item.primary_action)
+		item_activated.emit(item.id, item.primary_under(selected_category))
 
 
 ## Moves the lit result, and stops at the ends rather than wrapping.
@@ -560,8 +560,7 @@ func show_details(item: BrowserItem) -> void:
 		for line in section["lines"]:
 			_preview_body.add_child(_preview_line(str(line), false))
 
-	var taking: Array = [item.primary_action]
-	taking.append_array(item.secondary_actions)
+	var taking: Array = item.actions_under(selected_category)
 	for i in taking.size():
 		_preview_actions.add_child(_action_button(item, int(taking[i]), i == 0))
 

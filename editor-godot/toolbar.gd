@@ -56,8 +56,11 @@ const QUIT_ID := 1
 ## and a tall one occupy the same square and the column of them reads as a column.
 const DOOR_ICON := 20
 
-## Large example groups become submenus so the curated top level survives the banks.
-const EXAMPLE_SUBMENU_THRESHOLD := 16
+## An example group this big is a submenu; smaller ones are rows under a labelled rule.
+## Twelve: the synths, the worked patches and sfxr stay in the open, the 808's fourteen
+## voices and the two big banks fold, and a one-kit drum machine is one row under its
+## own rule rather than a submenu with nothing behind it.
+const EXAMPLE_SUBMENU_THRESHOLD := 12
 
 var toolbar_identity: VBoxContainer
 var toolbar_title: Label
@@ -251,42 +254,36 @@ func _build() -> void:
 	# only what is reached for constantly: the verb, undo, and the truth strip.
 	var examples_popup := PopupMenu.new()
 	examples_popup.name = "ExamplesMenu"
-	# Large groups become submenus so the curated top level survives the banks. Grouping
-	# is by the label prefix _scan_examples already assigns, and the submenu wiring is
-	# per-group so a second bank costs a table entry, not a copy of this code.
-	var grouped: Dictionary = {}
-	var top_names: Array = []
-	for label in examples.keys():
-		var text := str(label)
-		var split := text.find(": ")
-		var prefix := text.substr(0, split) if split > 0 else ""
-		if prefix != "":
-			if not grouped.has(prefix):
-				grouped[prefix] = []
-			grouped[prefix].append(label)
-		else:
-			top_names.append(label)
-	for prefix in grouped.keys():
-		if grouped[prefix].size() < EXAMPLE_SUBMENU_THRESHOLD:
-			top_names.append_array(grouped[prefix])
-			grouped.erase(prefix)
-	for index in top_names.size():
-		examples_popup.add_item(str(top_names[index]), index)
-	for prefix in grouped.keys():
-		var bank_names: Array = grouped[prefix]
-		bank_names.sort()
+	# The Add node browser's Examples shelf, as a menu: the same groups in the same
+	# order, read from the same structure (BrowserCatalogue.shelf), so the two doors to
+	# an example cannot show two shelves. It used to: forty rows of "808: clap" and
+	# "sfxr: jump" in the order the folders were scanned, then "FM bank" and "DX7 bank"
+	# submenus the browser did not list at all. A worked group — the synths, the
+	# patches, sfxr — is its rows under a labelled rule, the way the browser heads
+	# them; a big group is a submenu, because sixty-eight DX7 voices in the middle of a
+	# menu bury the six synths above them.
+	var top_labels: Array = []
+	for group: Dictionary in BrowserCatalogue.shelf(examples):
+		var name := str(group["name"])
+		var members: Array = group["items"]
+		if members.size() < EXAMPLE_SUBMENU_THRESHOLD:
+			examples_popup.add_separator(name.to_upper())
+			for item: BrowserItem in members:
+				examples_popup.add_item(item.display_name, top_labels.size())
+				top_labels.append(item.source_ref)
+			continue
 		var bank_popup := PopupMenu.new()
-		bank_popup.name = "%sExamples" % prefix
+		bank_popup.name = "%sExamples" % name.validate_node_name()
 		examples_popup.add_child(bank_popup)
-		examples_popup.add_submenu_item("%s bank" % prefix, bank_popup.name)
-		for index in bank_names.size():
-			bank_popup.add_item(
-				str(bank_names[index]).trim_prefix(prefix + ": ").capitalize(), index)
-		var chosen := bank_names
+		examples_popup.add_submenu_item(name, bank_popup.name)
+		var chosen: Array = []
+		for item: BrowserItem in members:
+			bank_popup.add_item(item.display_name, chosen.size())
+			chosen.append(item.source_ref)
 		bank_popup.id_pressed.connect(func(id: int) -> void:
 			example_chosen.emit(str(chosen[id])))
 	examples_popup.id_pressed.connect(func(id: int) -> void:
-		example_chosen.emit(str(top_names[id])))
+		example_chosen.emit(str(top_labels[id])))
 
 	# ---- graph: the core verb, and the two that tidy up after it -----------------
 	# Add node is what this application is for, so it is the one filled button in the

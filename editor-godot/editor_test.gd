@@ -694,6 +694,51 @@ func _initialize() -> void:
 		await process_frame
 	check(main.node_browser.selected_category == "All", "up comes back to All")
 
+	# ---- the shelf is one shelf ---------------------------------------------------------
+	# The DX7 and FM voices were only reachable as things to drop in: the bank rows
+	# offered Add node and nothing else, and Examples did not list them. Every bank voice
+	# is also an example now — Enter under Examples opens it, under its bank it is added —
+	# and the hamburger's Open example… menu is built from the same shelf, so the two
+	# doors show the same groups in the same order.
+	main.node_browser.select_category("Examples")
+	await process_frame
+	var shelf_groups: Array = []
+	for child in main.node_browser.results_list.get_children():
+		if child is MarginContainer:
+			shelf_groups.append((child.get_child(0) as Label).text)
+	check(shelf_groups.size() > 3 and shelf_groups[0] == "SYNTH"
+			and shelf_groups.has("FM") and shelf_groups.has("DX7")
+			and not shelf_groups.has("NODE"),
+		"Examples lists the synths first and the FM and DX7 banks too (%s)"
+			% ", ".join(PackedStringArray(shelf_groups)))
+	main.node_browser.select_item("device:DX7: algo-01")
+	await process_frame
+	var shelf_buttons := _pane_buttons(main)
+	check(shelf_buttons.size() > 1 and str(shelf_buttons[0]) == "Load example",
+		"and under Examples a DX7 voice leads with Load example (%s)"
+			% ", ".join(PackedStringArray(shelf_buttons)))
+	main.node_browser.select_category("DX7 bank")
+	await process_frame
+	main.node_browser.select_item("device:DX7: algo-01")
+	await process_frame
+	var bank_buttons := _pane_buttons(main)
+	check(bank_buttons.size() > 1 and str(bank_buttons[0]) == "Add node"
+			and bank_buttons.has("Load example"),
+		"and under DX7 bank it leads with Add node, Load example beside it (%s)"
+			% ", ".join(PackedStringArray(bank_buttons)))
+	var shelf_menu: PopupMenu = main.toolbar.find_child("ExamplesMenu", true, false)
+	var menu_groups: Array = []
+	for index in shelf_menu.item_count:
+		if shelf_menu.is_item_separator(index) and shelf_menu.get_item_text(index) != "":
+			menu_groups.append(shelf_menu.get_item_text(index))
+		elif shelf_menu.get_item_submenu(index) != "":
+			menu_groups.append(shelf_menu.get_item_text(index).to_upper())
+	check(menu_groups == shelf_groups,
+		"and Open example… shows the same groups in the same order (%s)"
+			% ", ".join(PackedStringArray(menu_groups)))
+	main.node_browser.select_category("All")
+	await process_frame
+
 	# ---- the middle column ------------------------------------------------------------
 	# Every node lands somewhere. This began as a list of three exceptions — Sampler,
 	# Speech and Plugin Instrument, sources that are not oscillators — and the rail's
@@ -988,9 +1033,11 @@ func _initialize() -> void:
 		"a bank voice says which bank, and what is in it (%s / %s)"
 			% [main.node_browser._preview_badge.text,
 				", ".join(PackedStringArray(_pane_headings(main)))])
-	check(pane_buttons == ["Add node", "Open in sandbox"]
+	# Three buttons since the shelf became one shelf: a bank voice is also an example, so
+	# Load example sits beside Add node here and leads under Examples.
+	check(pane_buttons == ["Add node", "Load example", "Open in sandbox"]
 			and _pane_disabled(main) == ["Open in sandbox"],
-		"with the action that exists live and the one that does not disabled (%s)"
+		"with the actions that exist live and the one that does not disabled (%s)"
 			% ", ".join(PackedStringArray(_pane_disabled(main))))
 
 	# Nothing found: a quiet empty state, not the last thing that was selected.

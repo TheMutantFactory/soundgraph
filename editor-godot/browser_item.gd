@@ -89,8 +89,12 @@ const DEVICE_ROWS := {
 var id := ""
 var display_name := ""
 var kind := Kind.NODE
-## The rail row this belongs under.
+## The rail row this belongs under: where the badge says it lives.
 var category := ""
+## Every rail row it appears under. A bank voice lives in its bank and is also an
+## example to open, so it is listed twice and is one object; the Node bank's demos are
+## demonstrations of primitives rather than music, and stay on their own row.
+var shelves: PackedStringArray = PackedStringArray()
 ## The landmark it sits under inside a list.
 var group := ""
 ## One sentence, for the preview pane that is coming.
@@ -119,6 +123,7 @@ static func from_node(type_name: String, descriptor: Dictionary) -> BrowserItem:
 	item.kind = Kind.NODE
 	var family := str(descriptor.get("category", ""))
 	item.category = str(NODE_ROWS.get(type_name, CORE_FAMILIES.get(family, "")))
+	item.shelves = PackedStringArray([item.category])
 	item.group = item.category if item.category != "" else "Other"
 	item.description = str(descriptor.get("summary", ""))
 	item.tags = PackedStringArray([family] if family != "" else [])
@@ -148,20 +153,43 @@ static func from_device(label: String, blurb: String) -> BrowserItem:
 	item.display_name = name
 	item.category = str(DEVICE_ROWS.get(family, "Examples"))
 	item.kind = Kind.BANK_ITEM if DEVICE_ROWS.has(family) else Kind.PATCH
+	item.shelves = PackedStringArray([item.category])
+	if item.category != "Examples" and family != "Node":
+		item.shelves.append("Examples")
 	item.group = family if family != "" else "Patches"
 	item.description = blurb
 	item.tags = PackedStringArray([family] if family != "" else [])
 	item.search_terms = PackedStringArray(name.split(" ", false))
 	# A patch is a thing to load, and a bank voice is a thing to drop in — which is what
-	# the two kinds are for. Neither is executed yet; step 7 is where the browser starts
-	# reading these, and until then Enter takes the palette's one route for everything.
+	# the two kinds are for. A bank voice can be opened too: a DX7 algorithm is a whole
+	# patch, and the only way to look inside one was the hamburger. Which comes first
+	# depends on the row it was found under — see primary_under.
 	if item.kind == Kind.PATCH:
 		item.primary_action = Action.LOAD_PATCH
 		item.secondary_actions = [Action.OPEN_IN_SANDBOX]
 	else:
 		item.primary_action = Action.ADD_NODE
-		item.secondary_actions = [Action.OPEN_IN_SANDBOX]
+		item.secondary_actions = [Action.LOAD_PATCH, Action.OPEN_IN_SANDBOX]
 	return item
+
+
+## What Enter does from a given rail row. Under Examples a bank voice is opened, because
+## Examples is the row of things to open; under its own bank it is dropped in, as it
+## always was. The item still owns its actions — the row only says which one leads.
+func primary_under(shelf: String) -> int:
+	if shelf == "Examples" and kind == Kind.BANK_ITEM:
+		return Action.LOAD_PATCH
+	return primary_action
+
+
+## Every action, the leading one first, for the row it was found under.
+func actions_under(shelf: String) -> Array:
+	var leading := primary_under(shelf)
+	var out: Array = [leading]
+	for action: int in [primary_action] + secondary_actions:
+		if action != leading:
+			out.append(action)
+	return out
 
 
 ## Whether a query finds this.

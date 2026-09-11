@@ -2006,6 +2006,30 @@ the launch itself: a clean console on `tools/run-demo.sh`. Whether the show
 laptop printed the same error behind its minimised terminal is unknown; it
 is fixed there too.
 
+## 2026-09-11 — One example shelf: the banks are examples, and the hamburger reads the same list
+
+Decision:
+`BrowserItem.shelves` lists every rail row an item appears under. FM, DX7
+and drum voices sit on their bank rows and on Examples; the Node bank's
+demos stay on their row. `primary_under(row)` decides what Enter does —
+open under Examples, add under the bank — and both buttons are drawn.
+`BrowserCatalogue.shelf()` is the Examples list as an ordered structure,
+and the hamburger's Open example… menu is built from it: worked groups
+under labelled rules, banks as submenus, the browser's order throughout.
+
+Reason:
+Asked how to get the DX7 and FM algorithms into the Add node example
+list. They were in the browser, as things to drop in, with no way to open
+one; the only door to opening was a menu of forty prefixed rows in the
+order the folders were scanned, with its own "FM bank" and "DX7 bank"
+submenus the browser never showed. Two lists of one shelf, in two orders.
+
+Consequences:
+The suite reads the browser's group headings and the menu's rules and
+submenus and requires the same list. The one-kit drum families (909, 606,
+SDS, Gated) are one-row submenus in the menu; honest, and the price of
+mirroring the browser's grouping rather than inventing a third.
+
 ## 2026-09-11 — The game sounds are the sfxr shelf, and the Add node browser is capped at XL
 
 Decision:

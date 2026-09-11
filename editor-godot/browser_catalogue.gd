@@ -26,3 +26,22 @@ static func build(registry: Dictionary, addable: PackedStringArray,
 		items.append(BrowserItem.from_device(str(label),
 			str(DeviceBlurbs.blurb(str(label)))))
 	return items
+
+
+## The Examples shelf as a reader meets it: every device that is an example, in the
+## shelf's own groups and order — the synths, the worked patches, sfxr, then the banks
+## the rail also names. One structure for the browser's Examples row and the
+## hamburger's Open example… menu, so the two doors cannot show different shelves.
+## Each entry is {"name": group, "items": [BrowserItem, ...]}.
+static func shelf(examples: Dictionary) -> Array:
+	var groups: Array = []
+	var by_name := {}
+	for label in examples:
+		var item := BrowserItem.from_device(str(label), str(DeviceBlurbs.blurb(str(label))))
+		if not item.shelves.has("Examples"):
+			continue
+		if not by_name.has(item.group):
+			by_name[item.group] = {"name": item.group, "items": []}
+			groups.append(by_name[item.group])
+		(by_name[item.group]["items"] as Array).append(item)
+	return groups

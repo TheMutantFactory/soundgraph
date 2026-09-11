@@ -177,6 +177,13 @@ func _stage(main, shot: Dictionary) -> void:
 		main._open_node_browser()
 		await process_frame
 		main.node_browser.select_category(str(shot["browser"]))
+		for i in 4:
+			await process_frame
+		# `pick` lights one result by its id — "device:DX7: algo-01" — so the preview
+		# pane and its buttons can be photographed for something other than the first
+		# row of the list.
+		if str(shot.get("pick", "")) != "":
+			main.node_browser.select_item(str(shot["pick"]))
 		for i in 8:
 			await process_frame
 	elif main.node_browser != null and main.node_browser.visible:
