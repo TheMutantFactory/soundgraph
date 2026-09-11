@@ -229,10 +229,13 @@ resting where the source patch drew it. The knobs are MidiCC nodes on CC
 1–8, what this MPK sends (a mk3 factory program says 70–77); K1's CC 1 is
 also the stick's up-down axis, so K1 *is* the pitch bend, two semitones
 up; the stick's bend axis is the volume, left quieter and right louder.
-Pads 1 and 2 are the bank's previous and next entry on every patch: the
-bank names them (`"navigation_notes": {"previous": 36, "next": 37}`), the
-board walks on their note-on and swallows both notes, so no patch plays a
-low note under a change of entry. On the instruments pads 3–7 (a
+Pads 1 and 2 are the bank's previous and next entry on every patch, on
+either of the MPK's pad banks: the bank names the notes
+(`"navigation_notes": {"previous": [36, 44], "next": [37, 45]}`), the
+board walks on their note-on and swallows them, so no patch plays a low
+note under a change of entry. The playing pads are drawn for pad bank A
+(notes 36–43; the BANK A/B button); on bank B they send 44–51 and reach
+nothing. On the instruments pads 3–7 (a
 NoteTriggers row at note 38) start an arpeggio pattern each at 120 bpm in
 sixteenths (major up, minor up, major up and down, minor seventh, a
 pentatonic run) and pad 8 stops. A one-voice instrument latches to the last

@@ -102,6 +102,19 @@ static volatile uint32_t sgaxo_midi_wr, sgaxo_midi_rd;
 extern "C" void LoadPatchIndexed(uint32_t index);
 #endif
 
+#if defined(SGAXO_BANK) && defined(SGAXO_NAV_PREVIOUS_NOTES)
+// The bank's previous and next as notes, each a short list: a controller's pads
+// send other numbers on their other bank, and the walk has to work from both.
+static const uint8_t sgaxo_nav_previous[] = SGAXO_NAV_PREVIOUS_NOTES;
+static const uint8_t sgaxo_nav_next[] = SGAXO_NAV_NEXT_NOTES;
+static int sgaxo_nav_has(const uint8_t *notes, unsigned count, uint8_t note) {
+  for (unsigned i = 0; i < count; ++i) {
+    if (notes[i] == note) return 1;
+  }
+  return 0;
+}
+#endif
+
 static void sgaxo_midi_in(midi_device_t dev, uint8_t port, uint8_t b0,
                           uint8_t b1, uint8_t b2) {
   (void)dev; (void)port;
@@ -149,17 +162,21 @@ static void sgaxo_midi_in(midi_device_t dev, uint8_t port, uint8_t b0,
   if (status == 0x90 && b2 > 0) on = 1;
   else if (status == 0x80 || (status == 0x90 && b2 == 0)) on = 0;
   else return;
-#if defined(SGAXO_BANK) && defined(SGAXO_NAV_PREVIOUS)
-  // Two notes are the bank's previous and next — two pads on a controller with no
+#if defined(SGAXO_BANK) && defined(SGAXO_NAV_PREVIOUS_NOTES)
+  // Some notes are the bank's previous and next — two pads on a controller with no
   // spare buttons — and the patch never hears them: a pad is a note like any other,
   // and the synth would have played a low one under every change of entry.
-  if (b1 == SGAXO_NAV_PREVIOUS || b1 == SGAXO_NAV_NEXT) {
-    if (on) {
-      LoadPatchIndexed(b1 == SGAXO_NAV_PREVIOUS
-                           ? (SGAXO_BANK_INDEX + SGAXO_BANK_COUNT - 1u) % SGAXO_BANK_COUNT
-                           : (SGAXO_BANK_INDEX + 1u) % SGAXO_BANK_COUNT);
+  {
+    const int previous = sgaxo_nav_has(sgaxo_nav_previous, sizeof sgaxo_nav_previous, b1);
+    const int next = sgaxo_nav_has(sgaxo_nav_next, sizeof sgaxo_nav_next, b1);
+    if (previous || next) {
+      if (on) {
+        LoadPatchIndexed(previous
+                             ? (SGAXO_BANK_INDEX + SGAXO_BANK_COUNT - 1u) % SGAXO_BANK_COUNT
+                             : (SGAXO_BANK_INDEX + 1u) % SGAXO_BANK_COUNT);
+      }
+      return;
     }
-    return;
   }
 #endif
   const uint32_t wr = sgaxo_midi_wr;

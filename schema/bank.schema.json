@@ -64,40 +64,37 @@
       ],
       "properties": {
         "previous": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 127
+          "$ref": "#/$defs/notes"
         },
         "next": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 127
+          "$ref": "#/$defs/notes"
         }
       },
       "additionalProperties": false,
-      "description": "Two MIDI notes that walk the bank on the board: note-on of `previous` loads the entry before this one, `next` the one after, wrapping at the ends. The patches never hear either note. For a controller whose pads are the only buttons."
-    },
-    "navigation_notes": {
-      "type": "object",
-      "required": [
-        "previous",
-        "next"
-      ],
-      "properties": {
-        "previous": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 127
-        },
-        "next": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 127
-        }
-      },
-      "additionalProperties": false,
-      "description": "Two MIDI notes that walk the bank on the board: note-on of `previous` loads the entry before this one, `next` the one after, wrapping at the ends. The patches never hear either note. For a controller whose pads are the only buttons."
+      "description": "MIDI notes that walk the bank on the board: note-on of a `previous` note loads the entry before this one, a `next` note the one after, wrapping at the ends. The patches never hear these notes. For a controller whose pads are the only buttons; a side lists several notes when the pads send other numbers on their other bank."
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "notes": {
+      "description": "A MIDI note, or a short list of them.",
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 127
+          }
+        }
+      ]
+    }
+  }
 }

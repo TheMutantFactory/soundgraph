@@ -1081,8 +1081,15 @@ def _emit(nodes, bindings, order, frames, patch_id, events, zero_input,
         if bank_nav:
             L.append("#define SGAXO_BANK_NAV 1")
         if navigation_notes:
-            L.append(f"#define SGAXO_NAV_PREVIOUS {int(navigation_notes['previous'])}u")
-            L.append(f"#define SGAXO_NAV_NEXT {int(navigation_notes['next'])}u")
+            # Each side is a note or a list of notes: a controller's pads send other
+            # numbers on their other bank, and the walk has to work from both.
+            for side in ("previous", "next"):
+                notes = navigation_notes[side]
+                notes = [notes] if isinstance(notes, (int, float)) else list(notes)
+                if not notes or any(not 0 <= int(n) <= 127 for n in notes):
+                    raise Unsupported(f"navigation_notes.{side}: one to a few MIDI notes, 0 to 127")
+                L.append(f"#define SGAXO_NAV_{side.upper()}_NOTES "
+                         f"{{{', '.join(str(int(n)) for n in notes)}}}")
         if buffer_files:
             L.append(f"#define SGAXO_SD_BUFFERS 1")
             L.append(f"#define SGAXO_SD_BUFFER_COUNT {len(buffer_files)}")

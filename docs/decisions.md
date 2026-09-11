@@ -1917,12 +1917,14 @@ call, duo-lead 72%, a DX7 voice about 60%, the kit 61%, the game sounds
 ## 2026-09-10 — Two pads walk the bank
 
 Decision:
-A bank may name two MIDI notes, `navigation_notes.previous` and `.next`;
-the board loads the entry before or after on their note-on, wrapping at
-the ends, and neither note reaches the patch. The MPK set names pads 1
-and 2. Program Change goes back to plain MIDI in that set, and the
-instruments' arpeggiator, the kit and the game sounds move to pads 3 to
-8: five patterns and the stop, six drums, five sounds.
+A bank may name MIDI notes, `navigation_notes.previous` and `.next`, each
+a note or a short list; the board loads the entry before or after on
+their note-on, wrapping at the ends, and none of those notes reaches the
+patch. The MPK set names pads 1 and 2 on both of the MPK's pad banks (36
+and 37 on bank A, 44 and 45 on bank B). Program Change goes back to plain
+MIDI in that set, and the instruments' arpeggiator, the kit and the game
+sounds move to pads 3 to 8: five patterns and the stop, six drums, five
+sounds, drawn for bank A.
 
 Reason:
 Walking the set was PROG CHANGE held plus a pad, and at a demo that is
@@ -1939,7 +1941,12 @@ that turns past thresholds): a knob is not a button. Program Change in
 nothing else.
 
 Consequences:
-Pads 1 and 2 play nothing anywhere in the set, on the board. On the
-desktop nothing swallows them; the editor does not walk a bank, and the
-keys-only gate keeps them out of the instruments. A keyboard shifted two
-octaves down reaches notes 36 and 37 and walks the bank from the keys.
+Pads 1 and 2 play nothing anywhere in the set, on the board, on either
+bank. On the desktop nothing swallows them; the editor does not walk a
+bank, and the keys-only gate keeps them out of the instruments. A
+keyboard shifted two octaves down reaches notes 36 and 37 and walks the
+bank from the keys. The first flash of this went out for bank A alone,
+and the bench's MPK turned out to be on bank B: its pads 1 and 2 sent 44
+and 45, which the board's own tally showed once asked. The playing pads
+still want bank A; a set drawn for both would double every trigger row
+and put the pads under the keyboard's lowest keys.

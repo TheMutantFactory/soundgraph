@@ -119,7 +119,8 @@ def main():
                         help="program 0 = previous entry, 1 = next, 2 = first; "
                              "the rest as MIDI has them")
     parser.add_argument("--nav-notes", default=None, metavar="PREV,NEXT",
-                        help="two MIDI notes that walk the bank and never reach the patch")
+                        help="MIDI notes that walk the bank and never reach the patch; "
+                             "each side one note or several joined with +, e.g. 36+44,37+45")
     args = parser.parse_args()
     if args.names:
         names = [sanitize(n) for n in args.names.split(",")]
@@ -131,8 +132,9 @@ def main():
         raise SystemExit(f"duplicate bank names: {names}")
     notes = None
     if args.nav_notes:
-        previous, following = (int(n) for n in args.nav_notes.split(","))
-        notes = {"previous": previous, "next": following}
+        previous, following = args.nav_notes.split(",")
+        notes = {"previous": [int(n) for n in previous.split("+")],
+                 "next": [int(n) for n in following.split("+")]}
     bake(args.out_dir, args.patches, names, args.board, nav=args.nav, navigation_notes=notes)
 
 

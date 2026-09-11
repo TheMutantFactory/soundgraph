@@ -15,10 +15,12 @@ has one (Poly Five, the three synths) and a VCA around the instrument where it d
 (the DX7 and FM voices, the kit, the game sounds); at rest every knob sits where the
 source patch drew it, so an untouched entry is the example as written.
 
-The pads are eight notes from 36. Pads 1 and 2 are the bank's previous and next entry
-on every patch — the board swallows those two notes, the patches never hear them. On
-the instruments pads 3 to 7 each start an arpeggio pattern and pad 8 stops it. On the
-kit entry pads 3 to 8 are six drums and on the game entry pads 3 to 7 the five sounds.
+The pads are eight notes from 36 on the MPK's pad bank A, and from 44 on bank B (the
+BANK A/B button). Pads 1 and 2 are the bank's previous and next entry on every patch,
+on either pad bank — the board swallows those notes, the patches never hear them. The
+playing pads are drawn for bank A: on the instruments pads 3 to 7 each start an
+arpeggio pattern and pad 8 stops it; on the kit entry pads 3 to 8 are six drums and
+on the game entry pads 3 to 7 the five sounds.
 
 The set is generated rather than drawn because the same wiring is repeated across two
 hundred presets, and a change to the knob map has to reach all of them at once.
@@ -50,6 +52,7 @@ CONTROLLER = {
     # to 77 instead; change this line and run the script again.
     "knobs": [1, 2, 3, 4, 5, 6, 7, 8],  # K1..K8
     "pads_base": 36,                             # bank A: pads 1..8 are notes 36..43
+    "pads_base_b": 44,                           # bank B: the same pads, notes 44..51
     "navigation_pads": 2,                        # pads 1 and 2: previous and next entry
     # The joystick, read off the same tally: one axis is the pitch bend (the
     # wire's 14 bits, centre at rest), the other is CC 1 (0 at rest, up to 127).
@@ -808,8 +811,8 @@ def main():
         "name": "Axoloti + Akai MPK mini",
         "target": "axoloti",
         "controller": CONTROLLER["name"],
-        "navigation_notes": {"previous": CONTROLLER["pads_base"],
-                             "next": CONTROLLER["pads_base"] + 1},
+        "navigation_notes": {"previous": [CONTROLLER["pads_base"], CONTROLLER["pads_base_b"]],
+                             "next": [CONTROLLER["pads_base"] + 1, CONTROLLER["pads_base_b"] + 1]},
         "entries": entries,
     }
     BANK.write_text(json.dumps(bank, indent=2) + "\n", encoding="utf-8")

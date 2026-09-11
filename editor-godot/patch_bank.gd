@@ -24,8 +24,9 @@ var controller := ""
 ## "prev-next" makes program 0 the previous entry, 1 the next and 2 the first, for a
 ## controller with eight program pads and a bank of two hundred.
 var program_change := "midi"
-## Two MIDI notes that walk the bank on the board ({"previous": n, "next": n}), or
-## empty: the patches never hear them. Two pads on a controller with no spare buttons.
+## The MIDI notes that walk the bank on the board ({"previous": n, "next": n}, each a
+## note or a list of them), or empty: the patches never hear them. Two pads on a
+## controller with no spare buttons, on whichever pad bank it is switched to.
 var navigation_notes := {}
 var entries: Array[Dictionary] = []
 
@@ -69,7 +70,7 @@ func load_file(from: String) -> String:
 	navigation_notes = {}
 	var notes: Variant = data.get("navigation_notes", null)
 	if notes is Dictionary and notes.has("previous") and notes.has("next"):
-		navigation_notes = {"previous": int(notes["previous"]), "next": int(notes["next"])}
+		navigation_notes = {"previous": _notes_of(notes["previous"]), "next": _notes_of(notes["next"])}
 	entries.clear()
 	for entry in data.get("entries", []):
 		if entry is Dictionary and entry.has("patch"):
@@ -78,6 +79,16 @@ func load_file(from: String) -> String:
 				"patch": str(entry["patch"]),
 			})
 	return ""
+
+
+## A note stays a number; a list of notes stays a list of numbers.
+static func _notes_of(value: Variant) -> Variant:
+	if value is Array:
+		var notes: Array = []
+		for n in value:
+			notes.append(int(n))
+		return notes
+	return int(value)
 
 
 func to_json() -> String:

@@ -4,8 +4,14 @@
   "target": "axoloti",
   "controller": "Akai MPK mini, knobs on CC 1-8, pads from note 36",
   "navigation_notes": {
-    "previous": 36,
-    "next": 37
+    "previous": [
+      36,
+      44
+    ],
+    "next": [
+      37,
+      45
+    ]
   },
   "entries": [
     {
