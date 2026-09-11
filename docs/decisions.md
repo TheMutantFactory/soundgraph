@@ -1951,11 +1951,11 @@ and 45, which the board's own tally showed once asked. The playing pads
 still want bank A; a set drawn for both would double every trigger row
 and put the pads under the keyboard's lowest keys.
 
-## 2026-09-10 — The first numbered release
+## 2026-09-10 — The first release with files
 
 Decision:
-`v0.1.0`, an annotated tag on main, with a GitHub release carrying three
-files: the Windows editor (`tools/export-desktop.mjs`, a new "Windows
+`v0.2.0`, an annotated tag on main (`v0.1.0` and `v0.1.1` were tags
+alone, in August), with a GitHub release carrying three files: the Windows editor (`tools/export-desktop.mjs`, a new "Windows
 Desktop" preset with the pack embedded and the extension DLL beside the
 executable), the web editor (`tools/export-web.mjs`), and the Axoloti
 card image of the MPK mini set (what `hw.py flash` bakes). The order is
@@ -1979,6 +1979,6 @@ surface was the promise made for the show. A CI job: later, once the
 gate itself runs somewhere other than the bench.
 
 Consequences:
-`git describe` on main now says `v0.1.0`, and the stamp with it. The
+`git describe` on main now says `v0.2.0`, and the stamp with it. The
 Windows export is unsigned; SmartScreen will ask. The card image is a
 zip to unpack onto an SD card's root, the same files the flash writes.
