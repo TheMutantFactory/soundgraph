@@ -11,6 +11,18 @@ Open problems, ordered by how much they threaten the Knobcon demo.
   `--port ch340`; installing WCH's DriverKit extension by hand would give every tool a
   normal port back. The board's other USB-C is the P4's own USB-Serial-JTAG and needs no
   driver, but the console is on the UART and that port is untested.
+- **The 7-inch P4's I2C devices are silent, and it is not the display's problem.**
+  The EK79007 panel is verified working — `screen test` photographs as the right test
+  card, colours and orientation correct, on `dd/ESP32-s3-touch-lcd-7` — but nothing on
+  the codec I2C bus (GPIO 7/8) ever answers: not the ES8311 (0x18), the ES7210 (0x40),
+  nor the GT911 touch (0x5D), so audio, microphone and touch are all down. This is not a
+  pull-up or a bring-up-order problem the firmware can fix from where it stands: a probe
+  with internal pull-ups off times out (the lines are not being pulled up), and the
+  vendor's own BSP reaches the same three parts with the same pins and the same internal
+  pull-ups. The panel came alive on its own power rail while the I2C parts stayed dark,
+  so the two are separate domains and the I2C side wants a power enable or a physical
+  look that has not been found yet. `i2c` scans the bus and `gpio`/`i2c pullup` poke at
+  it from the console. Touch on this board is blocked here until it is understood.
 - **The S3 build directory's sdkconfig has drifted from the defaults.**
   `CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1` is `y` in `embedded/esp32-s3/sdkconfig` and
   `n` in `sdkconfig.defaults`. ESP-IDF only reads the defaults when it generates a fresh
