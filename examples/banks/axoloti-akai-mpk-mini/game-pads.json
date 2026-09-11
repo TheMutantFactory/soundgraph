@@ -396,7 +396,7 @@
         "y": 600.0
       },
       "parameters": {
-        "base": 72,
+        "base": 74,
         "shift": 0
       }
     },
@@ -408,7 +408,7 @@
         "y": 400.0
       },
       "parameters": {
-        "base": 60,
+        "base": 62,
         "shift": 0
       }
     },
@@ -420,7 +420,7 @@
         "y": 200.0
       },
       "parameters": {
-        "base": 48,
+        "base": 50,
         "shift": 0
       }
     },
@@ -432,7 +432,7 @@
         "y": 0.0
       },
       "parameters": {
-        "base": 36,
+        "base": 38,
         "shift": 0
       }
     },

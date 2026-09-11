@@ -24,6 +24,9 @@ var controller := ""
 ## "prev-next" makes program 0 the previous entry, 1 the next and 2 the first, for a
 ## controller with eight program pads and a bank of two hundred.
 var program_change := "midi"
+## Two MIDI notes that walk the bank on the board ({"previous": n, "next": n}), or
+## empty: the patches never hear them. Two pads on a controller with no spare buttons.
+var navigation_notes := {}
 var entries: Array[Dictionary] = []
 
 
@@ -63,6 +66,10 @@ func load_file(from: String) -> String:
 	target = str(data.get("target", "axoloti"))
 	controller = str(data.get("controller", ""))
 	program_change = str(data.get("program_change", "midi"))
+	navigation_notes = {}
+	var notes: Variant = data.get("navigation_notes", null)
+	if notes is Dictionary and notes.has("previous") and notes.has("next"):
+		navigation_notes = {"previous": int(notes["previous"]), "next": int(notes["next"])}
 	entries.clear()
 	for entry in data.get("entries", []):
 		if entry is Dictionary and entry.has("patch"):
@@ -83,6 +90,8 @@ func to_json() -> String:
 		data["controller"] = controller
 	if program_change != "midi":
 		data["program_change"] = program_change
+	if not navigation_notes.is_empty():
+		data["navigation_notes"] = navigation_notes
 	data["entries"] = entries
 	return JSON.stringify(data, "  ") + "\n"
 

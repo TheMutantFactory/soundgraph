@@ -149,6 +149,19 @@ static void sgaxo_midi_in(midi_device_t dev, uint8_t port, uint8_t b0,
   if (status == 0x90 && b2 > 0) on = 1;
   else if (status == 0x80 || (status == 0x90 && b2 == 0)) on = 0;
   else return;
+#if defined(SGAXO_BANK) && defined(SGAXO_NAV_PREVIOUS)
+  // Two notes are the bank's previous and next — two pads on a controller with no
+  // spare buttons — and the patch never hears them: a pad is a note like any other,
+  // and the synth would have played a low one under every change of entry.
+  if (b1 == SGAXO_NAV_PREVIOUS || b1 == SGAXO_NAV_NEXT) {
+    if (on) {
+      LoadPatchIndexed(b1 == SGAXO_NAV_PREVIOUS
+                           ? (SGAXO_BANK_INDEX + SGAXO_BANK_COUNT - 1u) % SGAXO_BANK_COUNT
+                           : (SGAXO_BANK_INDEX + 1u) % SGAXO_BANK_COUNT);
+    }
+    return;
+  }
+#endif
   const uint32_t wr = sgaxo_midi_wr;
   if (wr - sgaxo_midi_rd >= 16) return;  // full: drop rather than block
   sgaxo_midi_ring[wr & 15].on = on;

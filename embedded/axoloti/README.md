@@ -229,10 +229,13 @@ resting where the source patch drew it. The knobs are MidiCC nodes on CC
 1–8, what this MPK sends (a mk3 factory program says 70–77); K1's CC 1 is
 also the stick's up-down axis, so K1 *is* the pitch bend, two semitones
 up; the stick's bend axis is the volume, left quieter and right louder.
-On the instruments the pads (a NoteTriggers row at note 36) are an
-arpeggiator: pads 1–7 start a pattern each at 120 bpm in sixteenths (major
-up, minor up, major up and down, minor seventh, fifths, octave pulse, a
-pentatonic run), pad 8 stops. A one-voice instrument latches to the last
+Pads 1 and 2 are the bank's previous and next entry on every patch: the
+bank names them (`"navigation_notes": {"previous": 36, "next": 37}`), the
+board walks on their note-on and swallows both notes, so no patch plays a
+low note under a change of entry. On the instruments pads 3–7 (a
+NoteTriggers row at note 38) start an arpeggio pattern each at 120 bpm in
+sixteenths (major up, minor up, major up and down, minor seventh, a
+pentatonic run) and pad 8 stops. A one-voice instrument latches to the last
 key and keeps going after it is let go; Poly Five and duo-lead arpeggiate
 every held key in lockstep, so a held chord is a chord arpeggio. The brain
 is Clock, StepSequencer, SampleHold and Compare hung off the row's bus
@@ -249,13 +252,13 @@ into one TriggerBus — and their pitched voices follow the key through a
 note input, so an octave up plays an octave up: a kit whose only triggers
 sat at one low octave was silent from the keys anywhere else, which read
 at the bench as a dead patch. Five octaves for the kit, four for the game
-sounds: the kit 61%, the game sounds 68%. The bank asks for
-`"program_change": "prev-next"`: on the board program 0 is the previous
-entry, 1 the next, 2 the first, and every other number the entry it names,
-so the MPK's PROG CHANGE pads walk a bank of two hundred: a program number
-is seven bits, so entries past 127 are reached by walking, and the walk was
-checked on the board entry by entry. A mk2 or a re-programmed mini sends
-other numbers: change `CONTROLLER` in the script and run it again.
+sounds: the kit 61%, the game sounds 68%. Program Change (PROG CHANGE plus
+a pad) loads the entry its number names, as MIDI has it; a bank can ask
+instead for `"program_change": "prev-next"`, where program 0 is the
+previous entry, 1 the next and 2 the first, which is what this set used
+before its pads took the job: a program number is seven bits, and entries
+past 127 are reached by walking. A mk2 or a re-programmed mini sends other
+numbers: change `CONTROLLER` in the script and run it again.
 
 ## Shipping standalone: the SD bank
 

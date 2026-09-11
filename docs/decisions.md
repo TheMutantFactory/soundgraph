@@ -1913,3 +1913,33 @@ shifted two octaves down plays the pads. 202 entries, every one rendered
 on the board and matched to the native render: Poly Five 81% of a codec
 call, duo-lead 72%, a DX7 voice about 60%, the kit 61%, the game sounds
 68%. The arpeggio's tempo is fixed at 120 bpm in sixteenths.
+
+## 2026-09-10 — Two pads walk the bank
+
+Decision:
+A bank may name two MIDI notes, `navigation_notes.previous` and `.next`;
+the board loads the entry before or after on their note-on, wrapping at
+the ends, and neither note reaches the patch. The MPK set names pads 1
+and 2. Program Change goes back to plain MIDI in that set, and the
+instruments' arpeggiator, the kit and the game sounds move to pads 3 to
+8: five patterns and the stop, six drums, five sounds.
+
+Reason:
+Walking the set was PROG CHANGE held plus a pad, and at a demo that is
+one hand off the keys and a mode to explain. Two pads that always mean
+previous and next need no explaining. The notes are swallowed on the
+board because a pad is a note: a synth with the gate open would have
+played a low note under every change of entry, and even with the gate
+shut it would have taken a voice.
+
+Alternatives:
+Keeping the pads as they were and putting previous/next on K1 (a knob
+that turns past thresholds): a knob is not a button. Program Change in
+"prev-next" mode stays available for a controller with program pads and
+nothing else.
+
+Consequences:
+Pads 1 and 2 play nothing anywhere in the set, on the board. On the
+desktop nothing swallows them; the editor does not walk a bank, and the
+keys-only gate keeps them out of the instruments. A keyboard shifted two
+octaves down reaches notes 36 and 37 and walks the bank from the keys.

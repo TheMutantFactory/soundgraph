@@ -308,7 +308,7 @@
         "y": 3200.0
       },
       "parameters": {
-        "base": 36,
+        "base": 38,
         "shift": 0
       }
     },
@@ -350,7 +350,7 @@
         "y": 3400.0
       },
       "parameters": {
-        "value": 100.0
+        "value": 24.0
       }
     },
     {
@@ -591,13 +591,13 @@
       "parameters": {
         "length": 8,
         "step1": 0.0,
-        "step2": 0.3333333333333333,
-        "step3": 0.4166666666666667,
-        "step4": 0.75,
-        "step5": 0.0,
-        "step6": -0.25,
-        "step7": -0.5833333333333334,
-        "step8": 0.3333333333333333
+        "step2": 0.0,
+        "step3": -0.16666666666666666,
+        "step4": -0.25,
+        "step5": -0.16666666666666666,
+        "step6": 0.16666666666666666,
+        "step7": 0.6666666666666666,
+        "step8": 1.3333333333333333
       }
     },
     {
@@ -628,104 +628,6 @@
       "position": {
         "x": 2700.0,
         "y": 4700.0
-      }
-    },
-    {
-      "id": "a_dlane5",
-      "type": "StepSequencer",
-      "position": {
-        "x": 1800.0,
-        "y": 4900.0
-      },
-      "parameters": {
-        "length": 8,
-        "step1": 0.0,
-        "step2": -0.5833333333333334,
-        "step3": 0.0,
-        "step4": -1.5833333333333333,
-        "step5": -1.0,
-        "step6": 0.4166666666666667,
-        "step7": 0.0,
-        "step8": 0.4166666666666667
-      }
-    },
-    {
-      "id": "a_sel5",
-      "type": "Compare",
-      "position": {
-        "x": 2100.0,
-        "y": 4900.0
-      },
-      "parameters": {
-        "threshold": 24.0
-      }
-    },
-    {
-      "id": "a_pick5",
-      "type": "Multiply",
-      "position": {
-        "x": 2400.0,
-        "y": 4900.0
-      },
-      "parameters": {
-        "factor": 1.0
-      }
-    },
-    {
-      "id": "a_pat5",
-      "type": "Add",
-      "position": {
-        "x": 2700.0,
-        "y": 4900.0
-      }
-    },
-    {
-      "id": "a_dlane6",
-      "type": "StepSequencer",
-      "position": {
-        "x": 1800.0,
-        "y": 5100.0
-      },
-      "parameters": {
-        "length": 8,
-        "step1": 0.0,
-        "step2": 0.25,
-        "step3": -0.5833333333333334,
-        "step4": 0.5833333333333334,
-        "step5": 0.8333333333333334,
-        "step6": 0.0,
-        "step7": 1.25,
-        "step8": 0.5833333333333334
-      }
-    },
-    {
-      "id": "a_sel6",
-      "type": "Compare",
-      "position": {
-        "x": 2100.0,
-        "y": 5100.0
-      },
-      "parameters": {
-        "threshold": 48.0
-      }
-    },
-    {
-      "id": "a_pick6",
-      "type": "Multiply",
-      "position": {
-        "x": 2400.0,
-        "y": 5100.0
-      },
-      "parameters": {
-        "factor": 1.0
-      }
-    },
-    {
-      "id": "a_pat6",
-      "type": "Add",
-      "position": {
-        "x": 2700.0,
-        "y": 5100.0
       }
     },
     {
@@ -1597,147 +1499,7 @@
     },
     {
       "from": {
-        "node": "a_clock",
-        "port": "gate"
-      },
-      "to": {
-        "node": "a_dlane5",
-        "port": "clock"
-      }
-    },
-    {
-      "from": {
-        "node": "a_clock",
-        "port": "bar"
-      },
-      "to": {
-        "node": "a_dlane5",
-        "port": "reset"
-      }
-    },
-    {
-      "from": {
-        "node": "a_last",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_sel5",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "a_dlane5",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pick5",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "a_sel5",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pick5",
-        "port": "b"
-      }
-    },
-    {
-      "from": {
         "node": "a_pat4",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pat5",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "a_pick5",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pat5",
-        "port": "b"
-      }
-    },
-    {
-      "from": {
-        "node": "a_clock",
-        "port": "gate"
-      },
-      "to": {
-        "node": "a_dlane6",
-        "port": "clock"
-      }
-    },
-    {
-      "from": {
-        "node": "a_clock",
-        "port": "bar"
-      },
-      "to": {
-        "node": "a_dlane6",
-        "port": "reset"
-      }
-    },
-    {
-      "from": {
-        "node": "a_last",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_sel6",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "a_dlane6",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pick6",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "a_sel6",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pick6",
-        "port": "b"
-      }
-    },
-    {
-      "from": {
-        "node": "a_pat5",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pat6",
-        "port": "a"
-      }
-    },
-    {
-      "from": {
-        "node": "a_pick6",
-        "port": "out"
-      },
-      "to": {
-        "node": "a_pat6",
-        "port": "b"
-      }
-    },
-    {
-      "from": {
-        "node": "a_pat6",
         "port": "out"
       },
       "to": {

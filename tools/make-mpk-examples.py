@@ -15,9 +15,10 @@ has one (Poly Five, the three synths) and a VCA around the instrument where it d
 (the DX7 and FM voices, the kit, the game sounds); at rest every knob sits where the
 source patch drew it, so an untouched entry is the example as written.
 
-The pads are eight notes from 36. On the instruments they are an arpeggiator: pads 1
-to 7 each start a different pattern on the last key played, harder for faster, and pad
-8 stops it. On the kit entry they are the drums and on the game entry the six sounds.
+The pads are eight notes from 36. Pads 1 and 2 are the bank's previous and next entry
+on every patch — the board swallows those two notes, the patches never hear them. On
+the instruments pads 3 to 7 each start an arpeggio pattern and pad 8 stops it. On the
+kit entry pads 3 to 8 are six drums and on the game entry pads 3 to 7 the five sounds.
 
 The set is generated rather than drawn because the same wiring is repeated across two
 hundred presets, and a change to the knob map has to reach all of them at once.
@@ -27,11 +28,10 @@ tally): knobs K1 to K8 on CC 1 to 8, the pads' bank A on notes 36 to 43, the joy
 up-down axis on CC 1 too and its left-right axis on the pitch-bend wire. A mk3 on its
 factory program sends CC 70 to 77 from the knobs; change CONTROLLER and run this again.
 
-Program Change is the MPK's PROG CHANGE button plus a pad, which sends program 0 to 7
-(bank B: 8 to 15). The bank asks for "prev-next" navigation, so on the board pad 1 is
-the previous entry, pad 2 the next, pad 3 the first, and pads 4 to 8 are entries 3 to 7
-as MIDI would have them. PROG SELECT changes the MPK's own internal program (which
-numbers the knobs and pads send) and sends nothing by itself.
+Program Change (the MPK's PROG CHANGE button plus a pad, program 0 to 7) still loads
+the entry it names, as MIDI has it; the pads are the way to walk the set. PROG SELECT
+changes the MPK's own internal program (which numbers the knobs and pads send) and
+sends nothing by itself.
 """
 
 import json
@@ -50,6 +50,7 @@ CONTROLLER = {
     # to 77 instead; change this line and run the script again.
     "knobs": [1, 2, 3, 4, 5, 6, 7, 8],  # K1..K8
     "pads_base": 36,                             # bank A: pads 1..8 are notes 36..43
+    "navigation_pads": 2,                        # pads 1 and 2: previous and next entry
     # The joystick, read off the same tally: one axis is the pitch bend (the
     # wire's 14 bits, centre at rest), the other is CC 1 (0 at rest, up to 127).
     # Wired here as asked: the CC axis bends the pitch, the bend axis is the
@@ -60,6 +61,10 @@ CONTROLLER = {
 }
 
 PITCH_RANGE_OCTAVES = 2.0 / 12.0  # the stick bends up two semitones
+
+# The first pad a patch hears: the navigation pads sit under it and the board
+# swallows them.
+PLAY_BASE = CONTROLLER["pads_base"] + CONTROLLER["navigation_pads"]
 
 # The knob rows. K1 is the stick's CC, wired as the pitch bend wherever the stick is.
 KNOB_CUTOFF, KNOB_RESONANCE, KNOB_EFFECT = 2, 3, 4
@@ -238,7 +243,7 @@ def drum_kit(prefix="d", base=None, lanes=8, octaves=1):
     plays an octave up."""
     kit = Part(load("drums/kit.json"), prefix)
     kit.drop("bus")     # the trigger-bus input another card would feed
-    base = base if base is not None else CONTROLLER["pads_base"]
+    base = base if base is not None else PLAY_BASE
     pads = kit.find("pads")
     pads["parameters"] = {"base": base, "shift": 0}
     if octaves > 1:
@@ -379,18 +384,18 @@ def echo(prefix, source, x=2000):
 KEY_FLOOR_HZ = 130.0        # C3 and up are keys; under it are the pads (and a keyboard
                             # shifted two octaves down, which then plays the pads)
 
-# Semitones over the root, eight steps, one pattern per pad 1..7. In octaves on the
-# oscillator's fm input, which stays within a block, so it costs the oscillator nothing
-# per sample.
+# Semitones over the root, eight steps, one pattern per playing pad (pads 3..7); the
+# last playing pad, pad 8, is the stop. In octaves on the oscillator's fm input, which
+# stays within a block, so it costs the oscillator nothing per sample.
 ARP_PATTERNS = [
     ("major up",          [0, 4, 7, 12, 0, 4, 7, 12]),
     ("minor up",          [0, 3, 7, 12, 0, 3, 7, 12]),
     ("major up and down", [0, 4, 7, 12, 16, 12, 7, 4]),
     ("minor seventh",     [0, 3, 7, 10, 12, 10, 7, 3]),
-    ("fifths",            [0, 7, 12, 19, 12, 7, 0, 7]),
-    ("octave pulse",      [0, 0, 12, 0, 0, 12, 0, 12]),
     ("pentatonic run",    [0, 3, 5, 7, 10, 12, 15, 19]),
 ]
+PLAYING_PADS = 8 - CONTROLLER["navigation_pads"]   # six: five patterns and the stop
+STOP_LANE = PLAYING_PADS                             # the stop pad's lane, from 1
 
 
 def lane(id, semitones, x, y):
@@ -404,10 +409,12 @@ def pad_machine(prefix, patterns, run_gate=None, x=0.0, y=3000.0):
     A NoteTriggers row on the pads is the only thing here that hears notes, and it is
     not a NoteInput, so nothing of this is copied per voice: the engine replicates a
     NoteInput's whole downstream cone as many times as the patch has voices, and a
-    machine hung off one saw only its own voice's share of the pads. The row's bus is
-    a bitmask of the pads firing, so held at the hit it names the pad as a power of
-    two: pad 1 is 1, pad 7 is 64, the stop pad 128. Pads 1 to 7 start a pattern each
-    (at 120 bpm in sixteenths); pad 8 stops. Feedback-free, since the engine's rule
+    machine hung off one saw only its own voice's share of the pads. The row starts at
+    the first playing pad (the two under it walk the bank, and the board swallows
+    them). Its bus is a bitmask of the lanes firing, so held at the hit it names the
+    pad as a power of two: the first playing pad is 1, the stop pad (the last) 32.
+    The pads before the stop start a pattern each (at 120 bpm in sixteenths); the
+    stop pad stops. Feedback-free, since the engine's rule
     is that a loop holds a delay. The pattern is picked by summing the first lane
     with the differences to the next, each switched in by a compare on the held pad;
     the lanes step in lockstep, so the sum is exactly the chosen pattern.
@@ -416,11 +423,12 @@ def pad_machine(prefix, patterns, run_gate=None, x=0.0, y=3000.0):
     signal that must also be high for the clock to run."""
     p = lambda i: f"{prefix}_{i}"  # noqa: E731
     nodes = [
-        node(p("pads"), "NoteTriggers", {"base": CONTROLLER["pads_base"], "shift": 0}, x=x, y=y + 200),
+        node(p("pads"), "NoteTriggers", {"base": PLAY_BASE, "shift": 0}, x=x, y=y + 200),
         node(p("any"), "Compare", {"threshold": 0.5}, x=x + 300, y=y + 200),
         node(p("last"), "SampleHold", x=x + 600, y=y + 200),
         node(p("above"), "Compare", {"threshold": 0.5}, x=x + 900, y=y + 100),
-        node(p("ceiling"), "Constant", {"value": 100.0}, x=x + 600, y=y + 400),
+        # Between the last pattern pad's bit and the stop pad's.
+        node(p("ceiling"), "Constant", {"value": 1.5 * 2 ** (STOP_LANE - 2)}, x=x + 600, y=y + 400),
         node(p("below"), "Compare", {"threshold": 0.0}, x=x + 900, y=y + 300),
         node(p("run"), "Multiply", {"factor": 1.0}, x=x + 1200, y=y + 200),
         node(p("clock"), "Clock", {"bpm": 120.0, "division": 4, "swing": 0.0, "width": 70.0,
@@ -555,7 +563,7 @@ def voices_of(part, note_input):
 # ---- the patches -------------------------------------------------------------------
 
 def poly5_pads(patterns):
-    """Poly Five on the keys, the arpeggiator on the pads: hold a chord, hit a pad.
+    """Poly Five on the keys, the arpeggiator on pads 3 to 8: hold a chord, hit a pad.
     K1 pitch bend  K2 cutoff  K3 resonance  K4 wobble rate
     K5 attack  K6 decay  K7 sustain  K8 release (the voices' own envelope)
     Stick up: pitch bend, two semitones. Stick left/right: volume, quieter to louder.
@@ -671,14 +679,14 @@ GAME_PADS = [
 
 
 def game_pads():
-    """Five game sounds on the first five pads and on every octave of the keys, pitched to the key.
+    """Five game sounds on pads 3 to 7 and on every octave of the keys, pitched to the key.
     K1 pitch bend  K2 cutoff  K3 resonance  K4 drive
     K5 attack  K6 decay  K7 sustain  K8 release (a VCA around the sounds)"""
     parts, extra, wires = [], [], []
     # Every octave of the keys fires the same six sounds, and each sound's pitch
     # follows the key, so the entry plays from wherever the keyboard sits.
     # Four octaves, not five: five rows put this entry at 91% of a codec call.
-    rows, row_wires, bus = octave_rows("pads", CONTROLLER["pads_base"], 4)
+    rows, row_wires, bus = octave_rows("pads", PLAY_BASE, 4)
     extra += rows + [node("split", "TriggerBus", {"shift": 0}, y=1200),
                      node("key", "Input", host="note", y=-300),
                      stick_pitch("g_pitch_ratio", x=0, y=-500),
@@ -722,10 +730,11 @@ def game_pads():
 
 
 def kit_alone():
-    """The kit on the pads and on every octave of the keys, pitched to the key.
+    """Six drums on pads 3 to 8 (kick, snare, closed and open hat, clap, rim) and on
+    every octave of the keys, pitched to the key.
     K1 pitch bend  K2 cutoff  K3 resonance  K4 echo level
     K5 attack  K6 decay  K7 sustain  K8 release (a VCA around the kit)"""
-    kit = drum_kit("d", octaves=5)
+    kit = drum_kit("d", lanes=PLAYING_PADS, octaves=5)
     extra, wires = [], []
     # The pitched drums follow the key through their own Multiplies; the bend goes in
     # between the key and them.
@@ -759,6 +768,8 @@ def main():
                         help="how many of the arpeggiator's patterns to wire (fewer for a size probe)")
     args = parser.parse_args()
     patterns = ARP_PATTERNS[:args.patterns]
+    if len(patterns) > PLAYING_PADS - 1:
+        raise SystemExit(f"{len(patterns)} patterns, but only {PLAYING_PADS - 1} pads before the stop")
 
     OUT.mkdir(parents=True, exist_ok=True)
     entries = []
@@ -797,7 +808,8 @@ def main():
         "name": "Axoloti + Akai MPK mini",
         "target": "axoloti",
         "controller": CONTROLLER["name"],
-        "program_change": "prev-next",
+        "navigation_notes": {"previous": CONTROLLER["pads_base"],
+                             "next": CONTROLLER["pads_base"] + 1},
         "entries": entries,
     }
     BANK.write_text(json.dumps(bank, indent=2) + "\n", encoding="utf-8")

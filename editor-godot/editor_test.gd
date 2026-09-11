@@ -1098,12 +1098,16 @@ func _initialize() -> void:
 	# bank writes neither: the file stays what the schema's defaults say it is.
 	reread.program_change = "prev-next"
 	reread.controller = "Akai MPK mini mk3"
+	reread.navigation_notes = {"previous": 36, "next": 37}
 	check(reread.save() == "" and reread.load_file(bank_file) == ""
 			and reread.program_change == "prev-next" and reread.controller == "Akai MPK mini mk3"
-			and not test_bank.to_json().contains("program_change"),
-		"a bank keeps how it answers Program Change, and says nothing when it is plain MIDI")
+			and reread.navigation_notes == {"previous": 36, "next": 37}
+			and not test_bank.to_json().contains("program_change")
+			and not test_bank.to_json().contains("navigation_notes"),
+		"a bank keeps how it answers Program Change and which notes walk it, and says nothing when it is plain MIDI")
 	reread.program_change = "midi"
 	reread.controller = ""
+	reread.navigation_notes = {}
 	reread.save()
 	main._use_bank(bank_file)
 	check(str(Settings.fetch("hardware_bank", "")) == bank_file and main.bank != null

@@ -55,6 +55,48 @@
       ],
       "default": "midi",
       "description": "How the board answers a MIDI Program Change. midi: the entry the program number names. prev-next: program 0 is the previous entry, 1 the next, 2 the first, and every other number the entry it names, for a controller with eight program pads and a bank longer than that."
+    },
+    "navigation_notes": {
+      "type": "object",
+      "required": [
+        "previous",
+        "next"
+      ],
+      "properties": {
+        "previous": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "next": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        }
+      },
+      "additionalProperties": false,
+      "description": "Two MIDI notes that walk the bank on the board: note-on of `previous` loads the entry before this one, `next` the one after, wrapping at the ends. The patches never hear either note. For a controller whose pads are the only buttons."
+    },
+    "navigation_notes": {
+      "type": "object",
+      "required": [
+        "previous",
+        "next"
+      ],
+      "properties": {
+        "previous": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "next": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        }
+      },
+      "additionalProperties": false,
+      "description": "Two MIDI notes that walk the bank on the board: note-on of `previous` loads the entry before this one, `next` the one after, wrapping at the ends. The patches never hear either note. For a controller whose pads are the only buttons."
     }
   },
   "additionalProperties": false

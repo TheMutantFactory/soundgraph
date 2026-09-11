@@ -3,7 +3,10 @@
   "name": "Axoloti + Akai MPK mini",
   "target": "axoloti",
   "controller": "Akai MPK mini, knobs on CC 1-8, pads from note 36",
-  "program_change": "prev-next",
+  "navigation_notes": {
+    "previous": 36,
+    "next": 37
+  },
   "entries": [
     {
       "name": "poly5-pads",
