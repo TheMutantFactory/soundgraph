@@ -1,0 +1,414 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "author": "Mutant Factory",
+    "created": "2026-09-18",
+    "description": "Plays on its own: a clock walks a sequencer through four chords, Am, F, C and G, one rising arpeggio each, into a pair of detuned saws, a plucked lowpass and a dotted-eighth echo. Nothing here waits for a key: press Start and it is already playing. Turn Swing up for a shuffle, or Decay down until it clicks.",
+    "name": "Chord Arpeggio",
+    "tags": [
+      "demo",
+      "sequencer",
+      "arpeggio",
+      "self-playing"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "clock",
+      "type": "Clock",
+      "name": "Clock",
+      "parameters": {
+        "bpm": 112,
+        "division": 3,
+        "swing": 0,
+        "width": 5,
+        "beats_per_bar": 8
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "arp",
+      "type": "StepSequencer",
+      "name": "Arpeggio",
+      "parameters": {
+        "length": 16,
+        "step1": 0,
+        "step2": 0.25,
+        "step3": 0.5833,
+        "step4": 1,
+        "step5": -0.3333,
+        "step6": 0,
+        "step7": 0.25,
+        "step8": 0.6667,
+        "step9": 0.25,
+        "step10": 0.5833,
+        "step11": 0.8333,
+        "step12": 1.25,
+        "step13": -0.1667,
+        "step14": 0.1667,
+        "step15": 0.4167,
+        "step16": 0.8333
+      },
+      "position": {
+        "x": 440,
+        "y": 0
+      }
+    },
+    {
+      "id": "env",
+      "type": "AhdEnvelope",
+      "name": "Pluck",
+      "parameters": {
+        "attack": 0.003,
+        "hold": 0.04,
+        "decay": 0.32,
+        "punch": 0.1
+      },
+      "position": {
+        "x": 440,
+        "y": 400
+      }
+    },
+    {
+      "id": "osc",
+      "type": "SawOscillator",
+      "name": "Saw",
+      "parameters": {
+        "frequency": 220
+      },
+      "position": {
+        "x": 880,
+        "y": 0
+      }
+    },
+    {
+      "id": "osc2",
+      "type": "SawOscillator",
+      "name": "Detuned Saw",
+      "parameters": {
+        "frequency": 221.3
+      },
+      "position": {
+        "x": 880,
+        "y": 400
+      }
+    },
+    {
+      "id": "mix",
+      "type": "Mixer",
+      "name": "Mix",
+      "parameters": {
+        "level1": 0.6,
+        "level2": 0.6
+      },
+      "position": {
+        "x": 1320,
+        "y": 0
+      }
+    },
+    {
+      "id": "filter",
+      "type": "StateVariableFilter",
+      "name": "Lowpass",
+      "parameters": {
+        "cutoff": 1200,
+        "mode": 0,
+        "resonance": 0.35
+      },
+      "position": {
+        "x": 1760,
+        "y": 0
+      }
+    },
+    {
+      "id": "amp",
+      "type": "Gain",
+      "name": "Amplifier",
+      "parameters": {
+        "gain": 0.7
+      },
+      "position": {
+        "x": 2200,
+        "y": 0
+      }
+    },
+    {
+      "id": "echo",
+      "type": "Delay",
+      "name": "Echo",
+      "parameters": {
+        "time": 0.4018,
+        "feedback": 0.3,
+        "mix": 0.25
+      },
+      "position": {
+        "x": 2640,
+        "y": 0
+      }
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "host": "stereo",
+      "name": "Output",
+      "parameters": {
+        "level": 0.8,
+        "safety_limit": 1
+      },
+      "position": {
+        "x": 3080,
+        "y": 0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "clock",
+        "port": "gate"
+      },
+      "to": {
+        "node": "arp",
+        "port": "clock"
+      }
+    },
+    {
+      "from": {
+        "node": "clock",
+        "port": "bar"
+      },
+      "to": {
+        "node": "arp",
+        "port": "reset"
+      }
+    },
+    {
+      "from": {
+        "node": "clock",
+        "port": "gate"
+      },
+      "to": {
+        "node": "env",
+        "port": "gate"
+      }
+    },
+    {
+      "from": {
+        "node": "arp",
+        "port": "out"
+      },
+      "to": {
+        "node": "osc",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
+        "node": "arp",
+        "port": "out"
+      },
+      "to": {
+        "node": "osc2",
+        "port": "fm"
+      }
+    },
+    {
+      "from": {
+        "node": "osc",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix",
+        "port": "in1"
+      }
+    },
+    {
+      "from": {
+        "node": "osc2",
+        "port": "out"
+      },
+      "to": {
+        "node": "mix",
+        "port": "in2"
+      }
+    },
+    {
+      "from": {
+        "node": "mix",
+        "port": "out"
+      },
+      "to": {
+        "node": "filter",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "env",
+        "port": "out"
+      },
+      "to": {
+        "node": "filter",
+        "port": "cutoff_mod"
+      }
+    },
+    {
+      "from": {
+        "node": "filter",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "env",
+        "port": "out"
+      },
+      "to": {
+        "node": "amp",
+        "port": "gain"
+      }
+    },
+    {
+      "from": {
+        "node": "amp",
+        "port": "out"
+      },
+      "to": {
+        "node": "echo",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "echo",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "left"
+      }
+    },
+    {
+      "from": {
+        "node": "echo",
+        "port": "out"
+      },
+      "to": {
+        "node": "out",
+        "port": "right"
+      }
+    }
+  ],
+  "controls": [
+    {
+      "id": "cutoff",
+      "label": "Cutoff",
+      "kind": "knob",
+      "target": {
+        "node": "filter",
+        "parameter": "cutoff"
+      },
+      "min": 40,
+      "max": 12000,
+      "default": 1200,
+      "scaling": "exponential",
+      "binding": {
+        "midi_cc": 74,
+        "midi_channel": 1
+      }
+    },
+    {
+      "id": "resonance",
+      "label": "Resonance",
+      "kind": "knob",
+      "target": {
+        "node": "filter",
+        "parameter": "resonance"
+      },
+      "min": 0,
+      "max": 1,
+      "default": 0.35,
+      "scaling": "linear",
+      "binding": {
+        "midi_cc": 71,
+        "midi_channel": 1
+      }
+    },
+    {
+      "id": "tempo",
+      "label": "Tempo",
+      "kind": "knob",
+      "target": {
+        "node": "clock",
+        "parameter": "bpm"
+      },
+      "min": 60,
+      "max": 180,
+      "default": 112,
+      "scaling": "linear"
+    },
+    {
+      "id": "swing",
+      "label": "Swing",
+      "kind": "knob",
+      "target": {
+        "node": "clock",
+        "parameter": "swing"
+      },
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "scaling": "linear"
+    },
+    {
+      "id": "decay",
+      "label": "Decay",
+      "kind": "slider",
+      "target": {
+        "node": "env",
+        "parameter": "decay"
+      },
+      "min": 0.05,
+      "max": 2,
+      "default": 0.32,
+      "scaling": "exponential"
+    },
+    {
+      "id": "echo",
+      "label": "Echo",
+      "kind": "slider",
+      "target": {
+        "node": "echo",
+        "parameter": "mix"
+      },
+      "min": 0,
+      "max": 0.8,
+      "default": 0.25,
+      "scaling": "linear"
+    },
+    {
+      "id": "master",
+      "label": "Master",
+      "kind": "knob",
+      "target": {
+        "node": "out",
+        "parameter": "level"
+      },
+      "min": 0,
+      "max": 1.2,
+      "default": 0.8,
+      "scaling": "logarithmic",
+      "binding": {
+        "midi_cc": 7,
+        "midi_channel": 1
+      }
+    }
+  ]
+}

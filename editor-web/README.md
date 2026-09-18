@@ -46,6 +46,7 @@ assets/                    the desktop's typeface, and the view cards (webp)
 graph-view.js              the patch, drawn: nodes and cables  main thread
 onboarding.js / .css       the first two minutes               main thread
 local-store.js             the four things this page remembers main thread
+patches.js                 the patches this page names by path main thread
 reporting.js               the only code here that posts       main thread
 soundgraph.js              AudioContext + worklet + tooling    main thread
 soundgraph-worklet.js      instantiates the module, renders    audio thread
@@ -74,10 +75,19 @@ control one, and says so by drawing them all the same.
 ## The introduction
 
 A first-time visitor gets `examples/patches/first-synth.json` and a six-step tour: hear the
-patch (the tour holds a note for them), read it left to right, drag the filter cutoff, hear
-the difference, decide what to keep. Only the first screen is a modal — the rest are coach marks over a page that stays
+patch (the tour plays a repeating chord arpeggio through it — `TOUR_ARPEGGIO` in
+`patches.js`, the same four chords the self-playing default walks), read it left to right,
+drag the filter cutoff, hear the difference, decide what to keep. The arpeggio outlives
+the tour: it stops when the visitor plays a key, by mouse, keyboard or MIDI, or loads
+another patch, and not before. Only the first screen is a modal — the rest are coach marks over a page that stays
 usable. Progress lives in localStorage, **Help → Restart introduction** runs it again, and
 the mailing-list panel cannot appear before the golden moment.
+
+A returning visitor gets no tour. They open into the patch they saved here or, with
+nothing saved, into `examples/patches/chord-arpeggio.json`, which plays by itself. The
+tutorial patch sounds only while something plays it, and the tour is what did: somebody
+who came back, pressed Start and heard nothing had no way to tell a working page from a
+broken one. `patches.js` is the one place both paths, the menu and the tour's arpeggio live.
 
 `node editor-web/verify-onboarding.mjs` holds the tour, the patch it teaches and the
 measurement plan's ten event names against each other. It runs in the main ctest suite as

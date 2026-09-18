@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "web-editor",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["tools/serve.py", "8177"],
       "port": 8177
     }

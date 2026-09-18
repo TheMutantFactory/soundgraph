@@ -2140,3 +2140,48 @@ until it is rebuilt. Found on the way, and left for the shelf writer:
 `sfxr/explosion.json` and `sfxr/powerup.json` open with their vibrato
 node over the repeat node, so the suite's clear-layout sample reads
 pickup-coin and jump instead (docs/known-issues.md).
+
+## 2026-09-18 — A return opens into a patch that plays by itself
+
+Decision:
+The web page's default for a returning visitor with nothing saved is
+`examples/patches/chord-arpeggio.json`: a Clock walking a StepSequencer through
+four chords into two detuned saws, a plucked lowpass and an echo. The tutorial
+patch stays `first-synth.json`. Both paths and the menu now live in
+`editor-web/patches.js`, which `verify-onboarding.mjs` imports; given
+`sg-render` it renders the default with no notes played and fails unless the
+result is audible through its last second.
+
+Reason:
+First Synth sounds only while a key is held, and the tour is what held one. A
+returning visitor gets no tour, so pressing Start produced silence, and silence
+after Start reads as a broken page rather than an instrument waiting to be
+played. The complaint was literally that: returns heard nothing unless they
+played it.
+
+Alternatives:
+Make the tutorial patch self-playing: the tour is built around holding a note
+and dragging the cutoff over a sound that is otherwise steady, and an
+arpeggio under the golden moment would muddle what the knob is changing.
+Auto-hold a note for returns: a held saw that never stops is not a demo
+anyone would leave running. Autoplay before Start: browsers refuse it.
+
+Consequences:
+A return without a saved patch hears sixteen eighths at 112 BPM the moment
+Start is pressed. The menu has one more entry, and the Godot mirror carries
+the new file.
+
+Addendum, same day: the first version left the tour holding its single middle
+C, and that is what was heard as "only a single note". The tour now plays
+the same four chords through First Synth from the main thread
+(`TOUR_ARPEGGIO` in `editor-web/patches.js`, `startPlaying`/`stopPlaying`
+on the tour host), so the page has one default sound whichever way it is
+entered. The patch itself is unchanged: First Synth is the Knobcon demo and
+sits under golden vectors, the transcriber's ground truth and the Godot
+layout baselines, and a host-side arpeggio costs none of that. Timing is
+setInterval, a demo's tolerance; anything that needs the sequencer's timing
+is a Clock node in a graph.
+The arpeggio outlives the tour: it stops when the visitor plays a note by
+any of the three ways in (mouse, keyboard, MIDI) or loads another patch,
+never because the tour ended — a hand-over that went from sound to silence
+read as a page that had stopped working.

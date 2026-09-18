@@ -19,6 +19,7 @@ import {
     savedPatch,
 } from './local-store.js';
 import { SURFACES, isReachable, surface } from './surfaces.js';
+import { DEFAULT_PATCH, EXAMPLES, TOUR_ARPEGGIO, TUTORIAL_PATCH } from './patches.js';
 
 const engine = new SoundGraph();
 
@@ -54,21 +55,8 @@ const ui = {
     helpSheet: document.getElementById('help-sheet'),
 };
 
-// The patch the introduction teaches. Named here rather than in the tour, because the page
-// also offers it in the menu and a second spelling of the path is a second thing to keep
-// in step.
-const TUTORIAL_PATCH = '../examples/patches/first-synth.json';
-
-// A short, curated menu rather than all 280. The Godot editor scans the corpus, which is
-// the right answer for an editor; a first visit wants five good ones and a way out.
-const EXAMPLES = [
-    { label: 'First Synth', path: TUTORIAL_PATCH },
-    { label: 'Plucked String', path: '../examples/patches/plucked-string.json' },
-    { label: 'Poly Five', path: '../examples/patches/synths/poly-five.json' },
-    { label: 'Acid Bass', path: '../examples/patches/synths/acid-bass.json' },
-    { label: 'Warehouse', path: '../examples/patches/warehouse.json' },
-    { label: '808 Kit', path: '../examples/patches/drums/kit.json' },
-];
+// The patches this page names by path — the one the tour teaches, the one a return opens
+// into, and the menu — live in patches.js, where the verifier can import them too.
 
 // What "New patch" means: the smallest thing that is still a patch and still makes a
 // sound. An empty canvas is a worse starting point than one cable.
@@ -383,6 +371,48 @@ function noteOff(note) {
     keyElements.get(note)?.classList.remove('held');
 }
 
+// What the tour plays. The tutorial patch is played, not self-playing, and the single
+// held note the tour used to hold was enough for the cutoff to have something to change
+// and not enough for anybody to call it a demo. So the page plays the way a keyboard
+// player would: from the main thread, one note at a time, through the same noteOn the
+// keys use — which is also why the keys light up as it goes. setInterval jitters by a few
+// milliseconds, a demo's tolerance and not an instrument's; timing that has to be right
+// belongs in the graph, where the Clock node lives.
+let arpeggioTimer = null;
+let arpeggioWanted = false;   // the tour asked for it, and a stop/resume of audio keeps that
+let arpeggioIndex = 0;
+
+function startArpeggio() {
+    if (arpeggioTimer !== null) return;
+    const stepMs = 60000 / TOUR_ARPEGGIO.bpm / 2;   // eighth notes
+    const tick = () => {
+        const note = TOUR_ARPEGGIO.notes[arpeggioIndex % TOUR_ARPEGGIO.notes.length];
+        arpeggioIndex += 1;
+        noteOn(note);
+        // noteOff is idempotent, so a gate that lands after the arpeggio stopped is nothing.
+        setTimeout(() => noteOff(note), stepMs * TOUR_ARPEGGIO.gate);
+    };
+    arpeggioIndex = 0;
+    tick();
+    arpeggioTimer = setInterval(tick, stepMs);
+}
+
+function stopArpeggio() {
+    if (arpeggioTimer === null) return;
+    clearInterval(arpeggioTimer);
+    arpeggioTimer = null;
+    for (const note of TOUR_ARPEGGIO.notes) noteOff(note);
+}
+
+// What ends it is the visitor taking over: a note of their own by any of the three ways
+// in, or a different patch. Not the tour ending — the arpeggio outlives the tour on
+// purpose, so the page never goes from sound to silence by itself. The keys answering
+// is what the hand-over promised, and they do; they just also stop the accompaniment.
+function visitorTookOver() {
+    arpeggioWanted = false;
+    stopArpeggio();
+}
+
 function noteName(note) {
     return `${NOTE_NAMES[note % 12]}${Math.floor(note / 12) - 1}`;
 }
@@ -444,6 +474,7 @@ ui.keyboard.addEventListener('pointerdown', (event) => {
     const note = pointerNote(event);
     if (note === null) return;
     event.target.setPointerCapture?.(event.pointerId);
+    visitorTookOver();
     noteOn(note);
 });
 ui.keyboard.addEventListener('pointerup', (event) => {
@@ -467,7 +498,9 @@ window.addEventListener('keydown', (event) => {
     if (event.key === 'z') { octave = Math.max(0, octave - 1); buildKeyboard(); return; }
     if (event.key === 'x') { octave = Math.min(7, octave + 1); buildKeyboard(); return; }
     const offset = KEY_MAP[event.key];
-    if (offset !== undefined) noteOn(octave * 12 + 12 + offset);
+    if (offset === undefined) return;
+    visitorTookOver();
+    noteOn(octave * 12 + 12 + offset);
 });
 window.addEventListener('keyup', (event) => {
     const offset = KEY_MAP[event.key];
@@ -488,6 +521,7 @@ async function connectMidi() {
                 input.onmidimessage = ({ data }) => {
                     const command = data[0] & 0xf0;
                     if (command === 0x90 && data[2] > 0) {
+                        visitorTookOver();
                         engine.noteOn(data[1], data[2] / 127);
                         keyElements.get(data[1])?.classList.add('held');
                     } else if (command === 0x80 || (command === 0x90 && data[2] === 0)) {
@@ -552,8 +586,15 @@ function setPatchText(text) {
 }
 
 async function loadExample(path) {
+    // A different patch is the visitor's choice too; the tour loads its own patch before
+    // it starts playing, so this never cuts the tour off.
+    visitorTookOver();
     const response = await fetch(path);
     setPatchText(await response.text());
+    // The menu names what is loaded. It used to keep saying "First Synth" over whatever
+    // boot had actually opened, which was harmless while boot only ever opened First
+    // Synth. A path that is not on the menu leaves it showing nothing, which is true.
+    ui.examples.value = path;
 }
 
 ui.apply.addEventListener('click', applyPatch);
@@ -572,6 +613,7 @@ ui.save.addEventListener('click', () => {
 ui.open.addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    visitorTookOver();
     setPatchText(await file.text());
     event.target.value = '';
 });
@@ -589,6 +631,7 @@ ui.examples.addEventListener('change', () => {
 });
 
 ui.newPatch.addEventListener('click', () => {
+    visitorTookOver();
     setPatchText(JSON.stringify(NEW_PATCH, null, 2));
     ui.newPatch.blur();
 });
@@ -921,19 +964,26 @@ const tour = new Onboarding({
     // The worklet stops posting meter readings while the context is suspended, so the bar
     // holds whatever it last said — a frozen level reads as signal. Zero it on the way out.
     stopAudio: async () => {
+        // The arpeggio pauses with the audio, or the keys would keep lighting over silence.
+        stopArpeggio();
         await engine.suspend();
         ui.meterFill.style.width = '0%';
         ui.meterFill.classList.remove('hot');
     },
     // Through start() rather than context.resume(), so resuming gets the same refusal
     // timeout as starting. A resume that never settles hangs just as silently.
-    resumeAudio: () => engine.start(),
+    resumeAudio: async () => {
+        await engine.start();
+        if (arpeggioWanted) startArpeggio();
+    },
     loadTutorialPatch: () => loadExample(TUTORIAL_PATCH),
-    // The tutorial patch is played, not self-playing: the tour holds middle C for the
-    // visitor so there is something to hear and something for the cutoff to change,
-    // and lets go when it hands the instrument over.
-    holdNote: () => noteOn(60),
-    releaseNote: () => noteOff(60),
+    // The tutorial patch is played, not self-playing: the tour plays a chord arpeggio for
+    // the visitor so there is something to hear and something for the cutoff to change.
+    // It does not stop when the tour ends — see visitorTookOver for what stops it.
+    startPlaying: () => {
+        arpeggioWanted = true;
+        startArpeggio();
+    },
     controlElement: (id) => controlSurfaces.get(id)?.slider ?? null,
     controlValue: (id) => controlSurfaces.get(id)?.value ?? null,
     setControlValue: (id, value) => controlSurfaces.get(id)?.set(value),
@@ -1195,11 +1245,15 @@ async function boot() {
         ui.start.disabled = true;
     }
 
-    // A returning visitor opens into their own patch, or a sensible default. A first-time
-    // visitor opens into the one the introduction teaches.
+    // A returning visitor opens into their own patch, or failing that into one that plays
+    // by itself. The tutorial patch sounds only while a key is held, and the tour is what
+    // held one; a return gets no tour, so Start followed by silence read as a page that
+    // did not work. A first-time visitor opens into the one the introduction teaches.
     if (returning && stored) {
         setPatchText(stored.text);
         ui.graphName.textContent = `${stored.name} (saved here)`;
+    } else if (returning) {
+        await loadExample(DEFAULT_PATCH);
     } else {
         await loadExample(TUTORIAL_PATCH);
     }

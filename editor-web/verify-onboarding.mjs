@@ -22,7 +22,9 @@
 // Dependency-free, and it imports the real modules rather than a copy of their constants —
 // a check that restates the thing it is checking is a check that passes forever.
 
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,6 +36,11 @@ const { MILESTONES, browserFamily, funnelText, isDevelopmentOrigin, looksLikeAdd
     await import('./reporting.js');
 const { GraphView } = await import('./graph-view.js');
 const { SURFACES, isReachable } = await import('./surfaces.js');
+const { DEFAULT_PATCH, EXAMPLES, TOUR_ARPEGGIO, TUTORIAL_PATCH } = await import('./patches.js');
+
+// With --render <sg-render>, the patch a return opens into is actually played.
+const renderFlag = process.argv.indexOf('--render');
+const renderTool = renderFlag >= 0 ? process.argv[renderFlag + 1] : null;
 
 const patch = JSON.parse(readFileSync(join(root, 'examples', 'patches', 'first-synth.json'), 'utf8'));
 
@@ -71,6 +78,17 @@ check('the tour tells the story in four sentences', COPY.read.lines.length === 4
 const filter = patch.nodes.find((node) => node.id === 'filter');
 check('the node the tour calls the filter is a filter',
     filter?.type === 'StateVariableFilter', `it is a ${filter?.type}`);
+
+// The tour plays the patch, so the patch has to be playable: a note input for the
+// arpeggio to arrive through, and an arpeggio that is more than one note repeating.
+const noteInput = patch.nodes.find((node) => node.type === 'Input' && node.host === 'note');
+check('the tutorial patch has a note input for the tour to play through', noteInput !== undefined);
+check('the tour plays an arpeggio, not a held note',
+    new Set(TOUR_ARPEGGIO.notes).size >= 3, `${TOUR_ARPEGGIO.notes.length} notes`);
+check('every note of it is a MIDI note number',
+    TOUR_ARPEGGIO.notes.every((note) => Number.isInteger(note) && note >= 0 && note <= 127));
+check('it has a tempo and a gate that make sense',
+    TOUR_ARPEGGIO.bpm >= 40 && TOUR_ARPEGGIO.bpm <= 240 && TOUR_ARPEGGIO.gate > 0 && TOUR_ARPEGGIO.gate <= 1);
 
 // ---------------------------------------------------------------------------------
 // The golden moment is reachable
@@ -235,6 +253,71 @@ for (const entry of SURFACES) {
         !entry.url.startsWith('/') && !entry.url.split('/').includes('..');
     check(`${entry.id} is hosted below this page`, contained,
         `${entry.url} — a service worker there could take over this page`);
+}
+
+// ---------------------------------------------------------------------------------
+// The patch a return opens into plays on its own
+//
+// The tutorial patch sounds only while a key is held, and the tour holds one. A returning
+// visitor gets no tour: they pressed Start, heard nothing, and had no way to tell a working
+// page from a broken one. So the default a return opens into must keep its own time, and
+// given sg-render it is played with no notes at all and has to come out audible — through
+// its last second, so a one-shot that fades does not pass as a patch that repeats.
+// ---------------------------------------------------------------------------------
+
+console.log('');
+console.log('the patch a return opens into');
+
+check('the tour teaches the patch the verifier reads',
+    TUTORIAL_PATCH.endsWith('/first-synth.json'), TUTORIAL_PATCH);
+check('a return opens into a different patch from the tutorial', DEFAULT_PATCH !== TUTORIAL_PATCH);
+check('both are on the menu',
+    [DEFAULT_PATCH, TUTORIAL_PATCH].every((path) => EXAMPLES.some((example) => example.path === path)));
+for (const example of EXAMPLES) {
+    check(`${example.label} is a file`, existsSync(join(here, example.path)), example.path);
+}
+
+const defaultPath = join(here, DEFAULT_PATCH);
+let defaultPatch = null;
+try {
+    defaultPatch = JSON.parse(readFileSync(defaultPath, 'utf8'));
+} catch {
+    defaultPatch = null;
+}
+check('the default patch parses', defaultPatch !== null);
+const clocks = (defaultPatch?.nodes ?? []).filter((node) => node.type === 'Clock');
+check('something in it keeps time without a key', clocks.length > 0, 'no Clock node');
+check('and that clock is wired to something',
+    (defaultPatch?.connections ?? []).some((c) => clocks.some((clock) => clock.id === c.from.node)));
+
+if (renderTool && defaultPatch) {
+    // A stereo 16-bit render; the left channel is enough to ask whether it is audible.
+    const readWav = (path) => {
+        const bytes = readFileSync(path);
+        let offset = 12;
+        while (bytes.toString('ascii', offset, offset + 4) !== 'data') {
+            offset += 8 + bytes.readUInt32LE(offset + 4);
+        }
+        const start = offset + 8;
+        const frames = Math.floor((bytes.length - start) / 4);
+        const samples = new Float64Array(frames);
+        for (let i = 0; i < frames; i++) samples[i] = bytes.readInt16LE(start + i * 4) / 32768;
+        return samples;
+    };
+    const rms = (samples) => Math.sqrt(
+        samples.reduce((total, s) => total + s * s, 0) / Math.max(1, samples.length));
+
+    const RATE = 48000;
+    const wav = join(mkdtempSync(join(tmpdir(), 'sg-onboarding-')), 'default.wav');
+    execFileSync(renderTool, [defaultPath, wav, '--seconds', '4', '--sample-rate', String(RATE),
+        '--silent', '--quiet'], { stdio: 'pipe' });
+    const samples = readWav(wav);
+    const whole = rms(samples);
+    const last = rms(samples.subarray(Math.max(0, samples.length - RATE)));
+    check(`played with no notes, it is audible (${whole.toFixed(3)} rms)`, whole > 0.02);
+    check(`and still audible in its last second (${last.toFixed(3)} rms), so it repeats`, last > 0.02);
+} else {
+    console.log('  skip the render: pass --render <sg-render> to play it');
 }
 
 // ---------------------------------------------------------------------------------

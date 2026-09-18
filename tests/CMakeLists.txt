@@ -171,11 +171,14 @@ endif()
 # The web editor's introduction names nodes and a control that live in a patch file, and
 # nothing about renaming one of them would fail anywhere: the tour would highlight an empty
 # set and tell a first-time visitor to look at something that is not there. This holds the
-# tour, examples/patches/start-here.json and the measurement plan's ten event names against
-# each other. No browser needed — it imports the real modules.
+# tour, examples/patches/first-synth.json and the measurement plan's ten event names against
+# each other. No browser needed — it imports the real modules. Given sg-render it also
+# plays the patch a returning visitor opens into with no key pressed, because that patch
+# has to sound on its own: the tour is what held a note, and a return gets no tour.
 if(SOUNDGRAPH_NODE)
     add_test(NAME web_onboarding_matches_its_patch
-        COMMAND ${SOUNDGRAPH_NODE} ${CMAKE_SOURCE_DIR}/editor-web/verify-onboarding.mjs)
+        COMMAND ${SOUNDGRAPH_NODE} ${CMAKE_SOURCE_DIR}/editor-web/verify-onboarding.mjs
+                --render $<TARGET_FILE:sg-render>)
 
     # The web page's colours are generated from the desktop's own token export, because a
     # second implementation re-typing them by eye is exactly how the page came to draw its

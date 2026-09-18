@@ -83,8 +83,8 @@ export const COPY = {
     },
     hear: {
         title: 'This is the complete patch.',
-        body: 'A note is being held for you, and it is moving through these connected ' +
-            'parts. Listen once before changing anything.',
+        body: 'A chord arpeggio is being played for you, and every note is moving through ' +
+            'these connected parts. Listen once before changing anything.',
         bodySilent: 'These connected parts are the whole patch. There is no sound ' +
             'yet — the rest of the tour still works, and you can start audio at any time.',
         next: 'I hear it',
@@ -267,6 +267,10 @@ function button(label, className, onClick) {
 //   audioRunning()                  boolean
 //   stopAudio() / resumeAudio()
 //   loadTutorialPatch()             resolves once the tutorial patch is applied
+//   startPlaying()                  the tour's own playing: a repeating arpeggio through
+//                                   the tutorial patch, which sounds only when played.
+//                                   The page, not the tour, decides when it stops: when
+//                                   the visitor plays a key or loads another patch
 //   controlElement(id)              the <input type=range> for a control id
 //   controlDescriptor(id)           the patch's own control entry
 //   controlValue(id) / setControlValue(id, value)
@@ -370,7 +374,6 @@ export class Onboarding {
         this.step = null;
         document.body.removeAttribute('data-tour');
         this.host.focusNodes(null);
-        this.host.releaseNote?.();
     }
 
     // -------------------------------------------------------------------------------
@@ -542,9 +545,10 @@ export class Onboarding {
         this.step = 'hear';
         rememberProgress({ step: 'hear' });
         this.host.focusNodes(null);
-        // Nothing sounds until a key is pressed, so the tour presses one and keeps it
-        // pressed through the reading and the golden moment.
-        if (!this.silent) this.host.holdNote?.();
+        // Nothing sounds until something plays the patch, so the tour plays it — a
+        // repeating chord arpeggio — and keeps playing through the reading and the
+        // golden moment.
+        if (!this.silent) this.host.startPlaying?.();
 
         this.showCard(this.host.graphElement(), () => {
             const panel = make('div', 'tour-panel');
@@ -772,8 +776,9 @@ export class Onboarding {
     showAgency() {
         this.step = 'agency';
         this.host.focusNodes(null);
-        // The instrument is theirs from here: the held note lets go so the keys answer.
-        this.host.releaseNote?.();
+        // The instrument is theirs from here. The arpeggio keeps going — a page that went
+        // from sound to silence at the hand-over read as a page that had stopped working —
+        // and the first key they press is what takes it over.
         rememberProgress({ completed: true, step: 'agency' });
 
         this.showCard(null, () => {
