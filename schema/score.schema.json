@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soundgraph.dev/schema/score.schema.json",
+  "title": "SoundGraph score",
+  "description": "A dynamic score: a playlist of songs, each a multitrack MIDI file whose tracks are given acceptable instruments (SoundGraph patches) and the bounds within which playback may vary them. A score sits above the graph: it names patches by path and their controls by id, and needs nothing of the patch format beyond that. Bars count from 1 and may be fractional. docs/scores.md explains how each field plays.",
+  "type": "object",
+  "required": ["schema_version", "songs"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "seed": {
+      "description": "Every random choice comes from this, the song's id and the track's index: the same seed plays the same take.",
+      "type": "integer"
+    },
+    "patch_root": {
+      "description": "Where instrument patch paths start, relative to this file. Empty or absent: the repository's examples/patches.",
+      "type": "string"
+    },
+    "songs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/song" }
+    }
+  },
+  "$defs": {
+    "song": {
+      "type": "object",
+      "required": ["id", "midi"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Unique within the score." },
+        "title": { "type": "string" },
+        "midi": { "type": "string", "description": "A Standard MIDI File (format 0 or 1), relative to this file." },
+        "loop": {
+          "description": "Play forever. Tracks with loopStart/loopEnd markers loop between them, each on its own; otherwise the whole song loops at its end, rounded up to a bar. Absent means true.",
+          "type": "boolean"
+        },
+        "parts": {
+          "description": "Named sections. A part runs from its from_bar to the next part's from_bar.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "from_bar"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "from_bar": { "type": "number", "minimum": 1 }
+            }
+          }
+        },
+        "tracks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/track" }
+        }
+      }
+    },
+    "track_fields": {
+      "type": "object",
+      "properties": {
+        "instruments": {
+          "description": "The acceptable instruments, picked at random by weight.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/instrument" }
+        },
+        "change": {
+          "description": "Change instrument mid-song: after a hold of min_bars to max_bars (drawn at random), at the track's next rest. Absent: the instrument picked at the start plays on (unless a part's list leaves it out).",
+          "type": "object",
+          "required": ["min_bars"],
+          "properties": {
+            "min_bars": { "type": "number", "minimum": 1 },
+            "max_bars": { "type": "number", "minimum": 1 }
+          }
+        },
+        "vary": {
+          "description": "Bounds that apply whichever instrument plays: a control id every candidate shares, or gain_db (the track's level, as an offset in dB).",
+          "$ref": "#/$defs/vary"
+        },
+        "phrase": { "$ref": "#/$defs/phrase" },
+        "ramps": {
+          "description": "Authored automation, keyed like vary (a control id, node:parameter, or gain_db). A ramp wins over a vary on the same key.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/ramp" }
+        }
+      }
+    },
+    "track": {
+      "allOf": [{ "$ref": "#/$defs/track_fields" }],
+      "type": "object",
+      "required": ["track"],
+      "properties": {
+        "track": { "type": "integer", "minimum": 0, "description": "The MIDI track: its chunk index in the file (0 is the first chunk, often a format 1 file's conductor track)." },
+        "name": { "type": "string" },
+        "gain_db": { "type": "number" },
+        "transpose": { "type": "integer", "description": "Semitones." },
+        "parts": {
+          "description": "Per part, fields that replace the track's own while that part plays.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/track_fields" }
+        }
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "required": ["patch"],
+      "properties": {
+        "patch": { "type": "string", "description": "A patch file, relative to patch_root." },
+        "preset": { "type": "string", "description": "One of the patch's presets, applied when it loads." },
+        "weight": { "type": "number", "minimum": 0, "description": "How often it is picked against the others. Absent means 1." },
+        "gain_db": { "type": "number" },
+        "transpose": { "type": "integer" },
+        "vary": { "$ref": "#/$defs/vary" }
+      }
+    },
+    "vary": {
+      "description": "Keyed by one of the patch's control ids, or node:parameter for a patch without controls. Each value glides between random targets in [min, max] at a random speed in [rate_min, rate_max].",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["min", "max"],
+        "properties": {
+          "min": { "type": "number", "description": "In the control's units, inside its declared range." },
+          "max": { "type": "number" },
+          "rate_min": { "type": "number", "minimum": 0, "description": "Fraction of [min, max] per bar. 0 lets it rest." },
+          "rate_max": { "type": "number", "minimum": 0, "description": "Both absent or 0: picked once when the instrument starts, then held." }
+        }
+      }
+    },
+    "phrase": {
+      "description": "Drops the track out and brings it back on a repeating pattern, the way house and techno do. A step is on (A) or off (B).",
+      "type": "object",
+      "required": ["pattern"],
+      "properties": {
+        "unit": { "enum": ["beat", "half", "bar"], "description": "One step: a quarter-note beat, half a bar, or a bar. Absent means bar." },
+        "pattern": { "type": "string", "description": "A, x, 1 are on; B, -, ., 0 are off; spaces and bar lines are only for the eye. Repeats." },
+        "in": { "enum": ["cut", "ramp"], "description": "How the track comes back. Absent means cut." },
+        "out": { "enum": ["cut", "ramp"], "description": "How it drops out. Absent means cut." },
+        "ramp": { "type": "number", "minimum": 0, "description": "Ramp length, in steps. Absent means 1." },
+        "from_bar": { "type": "number", "minimum": 1, "description": "Where the pattern starts. Absent: the start of the part it belongs to, or bar 1." }
+      }
+    },
+    "ramp": {
+      "oneOf": [
+        { "$ref": "#/$defs/points" },
+        {
+          "type": "object",
+          "required": ["points"],
+          "properties": {
+            "points": { "$ref": "#/$defs/points" },
+            "curve": { "enum": ["linear", "smooth", "step"] },
+            "repeat_bars": { "type": "number", "minimum": 0, "description": "Start over this many bars after the first point. 0: hold the last value." }
+          }
+        }
+      ]
+    },
+    "points": {
+      "description": "[bar, value] pairs. Held before the first and after the last.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "array",
+        "prefixItems": [{ "type": "number" }, { "type": "number" }],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    }
+  }
+}

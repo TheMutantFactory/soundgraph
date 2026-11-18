@@ -2185,3 +2185,32 @@ The arpeggio outlives the tour: it stops when the visitor plays a note by
 any of the three ways in (mouse, keyboard, MIDI) or loads another patch,
 never because the tour ended — a hand-over that went from sound to silence
 read as a page that had stopped working.
+
+## 2026-11-18 — Dynamic scores: multitrack MIDI, acceptable instruments, bounded drift
+
+Decision:
+A new document, the score (`schema/score.schema.json`, `*.score.json`), and a window to
+play and edit it (`editor-godot/score/`, File > Open score…, `tools/score.sh`). A score is
+a playlist of songs from multitrack MIDI; each track lists acceptable instruments by
+weight, may change instrument mid-song after a random hold of min..max bars (at its next
+rest), varies controls inside authored [min, max] at a rate drawn from [rate_min,
+rate_max], drops out and back in on an A/B phrase pattern (beat, half bar or bar steps;
+cut or ramp each way), and follows authored ramps. Parts override any of a track's fields.
+One seed makes a take reproducible. The full rules are docs/scores.md.
+
+Reason:
+Backported from FFFF's music box, which proved the playlist / per-channel patch idea for
+one game's three channels, and asked for as a general tool for dynamic music.
+
+Alternatives:
+C++ shared with sg-render and the web editor first: roughly twice the work before anything
+plays, and the rules were not settled. Rates per second: tempo-dependent, and meaningless
+across controls with different ranges; a fraction of the band per bar is neither.
+Instrument changes only at loop or part boundaries: asked for anywhere mid-song instead.
+
+Consequences:
+Nothing below the score changed: no node, no patch schema field, nothing in dsp-core. The
+player is GDScript with no UI, so a Godot game can play a score directly; a second runtime
+should implement docs/scores.md rather than re-derive it. A dropped-out track keeps
+playing underneath (a fader, not a mute of the notes), which is how the house drop works
+and why it comes back mid-phrase. `score_test` joins the gate's Godot suites.

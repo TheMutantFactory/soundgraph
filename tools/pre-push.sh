@@ -129,7 +129,7 @@ trap 'gate_exit $?' EXIT
 #   cd editor-godot && godot --headless --path . --script legalize_test.gd
 #   cd editor-godot && godot --headless --path . --script geometry_contract_test.gd
 #
-suites="editor_test design_test layout_test panel_style_test tidy_test routes_test crossing_semantics hit_geometry design_tokens"
+suites="editor_test score_test design_test layout_test panel_style_test tidy_test routes_test crossing_semantics hit_geometry design_tokens"
 planned="extension"
 [ -d "$build" ] && planned="$planned build ctest"
 if [ -n "$godot" ] && [ -x "$godot" ]; then

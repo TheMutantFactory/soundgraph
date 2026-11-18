@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "name": "Demo score",
+  "description": "Two of the MIDI examples as dynamic scores. The Bach changes instruments every few bars and drifts its filters; The Entertainer drops its left hand out on a house-style pattern in its second part, ramps back in, and sweeps a cutoff by hand.",
+  "seed": 1987,
+  "patch_root": "../patches",
+  "songs": [
+    {
+      "id": "invention-8",
+      "title": "Invention No. 8",
+      "midi": "../midi/bach-invention-08.mid",
+      "loop": true,
+      "parts": [
+        { "name": "A", "from_bar": 1 },
+        { "name": "B", "from_bar": 13 }
+      ],
+      "tracks": [
+        {
+          "track": 1,
+          "name": "Right hand",
+          "gain_db": -3,
+          "change": { "min_bars": 4, "max_bars": 8 },
+          "instruments": [
+            {
+              "patch": "synths/duo-lead.json",
+              "weight": 2,
+              "vary": {
+                "cutoff": { "min": 900, "max": 4000, "rate_min": 0.1, "rate_max": 0.5 },
+                "vibrato": { "min": 0, "max": 0.08 }
+              }
+            },
+            {
+              "patch": "synths/poly-five.json",
+              "weight": 1,
+              "vary": {
+                "cutoff": { "min": 700, "max": 3000, "rate_min": 0.05, "rate_max": 0.3 }
+              }
+            },
+            { "patch": "plucked-string.json", "weight": 1 }
+          ]
+        },
+        {
+          "track": 2,
+          "name": "Left hand",
+          "gain_db": -2,
+          "transpose": -12,
+          "instruments": [
+            {
+              "patch": "synths/acid-bass.json",
+              "preset": "Stock",
+              "vary": {
+                "cutoff": { "min": 200, "max": 1400, "rate_min": 0.1, "rate_max": 0.4 },
+                "resonance": { "min": 0.4, "max": 0.8, "rate_min": 0.05, "rate_max": 0.2 }
+              }
+            }
+          ],
+          "parts": {
+            "B": {
+              "instruments": [ { "patch": "synths/mallard.json" } ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "entertainer",
+      "title": "The Entertainer",
+      "midi": "../midi/entertainer.mid",
+      "loop": true,
+      "parts": [
+        { "name": "Intro", "from_bar": 1 },
+        { "name": "Drop", "from_bar": 9 },
+        { "name": "Full", "from_bar": 25 }
+      ],
+      "tracks": [
+        {
+          "track": 1,
+          "name": "Right hand",
+          "gain_db": -3,
+          "instruments": [ { "patch": "synths/poly-five.json" } ],
+          "ramps": {
+            "cutoff": { "points": [[1, 600], [9, 4000], [17, 900], [25, 4000]], "curve": "smooth" }
+          }
+        },
+        {
+          "track": 2,
+          "name": "Left hand",
+          "gain_db": -2,
+          "instruments": [ { "patch": "synths/acid-bass.json" } ],
+          "vary": {
+            "gain_db": { "min": -3, "max": 0, "rate_min": 0.1, "rate_max": 0.3 }
+          },
+          "parts": {
+            "Drop": {
+              "phrase": { "unit": "bar", "pattern": "AAAB AABB", "in": "ramp", "out": "cut", "ramp": 1 }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
