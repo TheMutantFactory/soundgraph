@@ -2432,6 +2432,12 @@ func _zoom_button(label: String, tip: String, direction: int) -> Button:
 
 
 func _on_file_menu(id: int) -> void:
+	if id == 7:
+		if _on_web():
+			_say("scores are desktop-only for now")
+			return
+		_open_score_window()
+		return
 	if id == 4:
 		_new_file()
 		return
@@ -2467,6 +2473,33 @@ func _on_file_menu(id: int) -> void:
 		file_dialog.title = "Add a patch as a module" if id == 1 else (
 			"Add a patch as a module definition" if id == 3 else "Open patch")
 	file_dialog.popup_centered_ratio(0.6)
+
+
+## The score window (score/score_window.gd), in a window of its own over the editor, opened
+## on the demo score. The editor's own sound is quietened first: the two would otherwise
+## play over each other with nothing to say which is which.
+var _score_window: Window
+
+func _open_score_window() -> void:
+	_all_notes_off()
+	if _score_window != null and is_instance_valid(_score_window):
+		_score_window.popup_centered_ratio(0.85)
+		return
+	_score_window = Window.new()
+	_score_window.title = "Score"
+	_score_window.close_requested.connect(func() -> void:
+		var w := _score_window.get_child(0)
+		if w != null and w.get("player") != null:
+			w.pause()
+		_score_window.hide())
+	var ScoreWindow := load("res://score/score_window.gd")
+	var view: Control = ScoreWindow.new()
+	_score_window.add_child(view)
+	add_child(_score_window)
+	var demo := ProjectSettings.globalize_path("res://").path_join("../examples/scores/demo.score.json").simplify_path()
+	if FileAccess.file_exists(demo):
+		view.open_score(demo)
+	_score_window.popup_centered_ratio(0.85)
 
 
 func _on_view_menu(id: int) -> void:
@@ -4194,6 +4227,11 @@ func shutdown_audio() -> void:
 	# and a teardown that only remembered the editor's own was half a teardown.
 	if sandbox != null and sandbox.sounds != null:
 		sandbox.sounds.shutdown()
+	# And the score window's: an engine per instrument, the same race again.
+	if _score_window != null and is_instance_valid(_score_window) and _score_window.get_child_count() > 0:
+		var view := _score_window.get_child(0)
+		if view.get("player") != null:
+			view.player.teardown()
 	if engine != null:
 		engine.all_notes_off()
 	if player != null:

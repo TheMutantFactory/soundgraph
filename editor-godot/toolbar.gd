@@ -433,6 +433,10 @@ func _build() -> void:
 	file_popup.add_separator()
 	file_popup.add_item("Import MIDI…", 5)
 	file_popup.add_item("Transcribe audio…", 6)
+	# A score: songs from multitrack MIDI, each track given acceptable instruments and
+	# the bounds they drift in (score/score_window.gd). Its own window, because it plays
+	# many patches at once and this editor is about one.
+	file_popup.add_item("Open score…", 7)
 	file_popup.add_separator()
 	file_popup.add_item("Save as…", 2)
 	# By index, via the id. set_item_tooltip takes a position and these were being handed
